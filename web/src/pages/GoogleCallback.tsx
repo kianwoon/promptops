@@ -15,30 +15,42 @@ export function GoogleCallback() {
   useEffect(() => {
     const handleCallback = async () => {
       try {
+        console.log('GoogleCallback: Starting callback handling')
         const urlParams = new URLSearchParams(window.location.search)
         const code = urlParams.get('code')
+        const error = urlParams.get('error')
+        
+        console.log('GoogleCallback: URL params:', { code: code ? 'present' : 'missing', error })
+        
+        if (error) {
+          throw new Error(`Google OAuth error: ${error}`)
+        }
         
         if (!code) {
-          throw new Error('No authorization code received')
+          throw new Error('No authorization code received from Google')
         }
 
+        console.log('GoogleCallback: Got code, calling handleGoogleCallback')
         setStatusMessage('Authenticating with Google...')
-        await handleGoogleCallback(code)
+        const result = await handleGoogleCallback(code)
+        console.log('GoogleCallback: handleGoogleCallback result:', result)
         
         setStatus('success')
         setStatusMessage('Successfully authenticated!')
+        console.log('GoogleCallback: Authentication successful')
         
-        // Redirect to dashboard after successful authentication
+        // Redirect to landing page after successful authentication to show user profile
         setTimeout(() => {
-          navigate('/dashboard')
+          navigate('/')
         }, 2000)
       } catch (error) {
+        console.error('GoogleCallback: Authentication error:', error)
         setStatus('error')
         setStatusMessage(error instanceof Error ? error.message : 'Authentication failed')
         
-        // Redirect to login page after error
+        // Keep user on landing page after error instead of redirecting to login
         setTimeout(() => {
-          navigate('/login')
+          navigate('/')
         }, 3000)
       }
     }

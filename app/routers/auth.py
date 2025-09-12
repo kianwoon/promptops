@@ -85,28 +85,32 @@ async def get_current_user(
         )
 
 # Endpoints
-@router.post("/google/callback", response_model=AuthResponse)
+@router.get("/google/callback")
 async def google_oauth_callback(
-    request: GoogleAuthRequest,
+    code: str,
+    state: str = None,
     db: Session = Depends(get_db)
 ):
-    """Handle Google OAuth callback"""
+    """Handle Google OAuth callback and redirect to frontend"""
+    from fastapi.responses import RedirectResponse
+    
     try:
         auth_service = AuthService()
-        result = await auth_service.authenticate_with_google(request.code, db)
+        result = await auth_service.authenticate_with_google(code, db)
         
         logger.info("Google OAuth authentication successful", email=result["user"]["email"])
         
-        return result
+        # Redirect to frontend with tokens in URL parameters
+        frontend_url = "http://localhost:3000/auth/success"
+        redirect_params = f"?access_token={result['access_token']}&refresh_token={result['refresh_token']}"
         
-    except HTTPException:
-        raise
+        return RedirectResponse(url=f"{frontend_url}{redirect_params}")
+        
     except Exception as e:
         logger.error("Google OAuth callback failed", error=str(e))
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        # Redirect to frontend with error
+        error_url = f"http://localhost:3000/auth/error?error={str(e)}"
+        return RedirectResponse(url=error_url)
 
 @router.post("/refresh", response_model=RefreshTokenResponse)
 async def refresh_access_token(

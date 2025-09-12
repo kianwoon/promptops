@@ -70,27 +70,34 @@ class GoogleOAuthService:
     async def verify_id_token(self, id_token: str) -> Dict[str, Any]:
         """Verify Google ID token and extract user information"""
         try:
-            # For production, you should verify the token with Google's public keys
-            # For now, we'll decode and validate the basic structure
+            # For development, we'll decode the token without signature verification
+            # In production, you should verify with Google's public keys
             payload = jwt.decode(
                 id_token,
-                options={"verify_signature": False}  # TODO: Add proper verification
+                "",  # Empty key since we're not verifying signature
+                options={
+                    "verify_signature": False,
+                    "verify_aud": False,
+                    "verify_iss": False,
+                    "verify_at_hash": False
+                }
             )
             
-            # Validate required fields
-            required_fields = ["sub", "email", "name"]
-            for field in required_fields:
-                if field not in payload:
-                    raise Exception(f"Missing required field in ID token: {field}")
+            # Basic validation
+            if 'sub' not in payload:
+                raise Exception('Missing subject in ID token')
+            
+            if 'email' not in payload:
+                raise Exception('Missing email in ID token')
+            
+            # Log for debugging
+            logger.info("ID token payload received", email=payload.get('email'), sub=payload.get('sub'))
             
             return payload
             
-        except JWTError as e:
-            logger.error("JWT verification error", error=str(e))
-            raise Exception("Invalid ID token")
         except Exception as e:
-            logger.error("Error verifying ID token", error=str(e))
-            raise Exception("Invalid ID token")
+            logger.error("ID token verification failed", error=str(e))
+            raise Exception(f"Invalid ID token: {str(e)}")
 
 class AuthService:
     def __init__(self):

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Integer, Boolean, JSON, ForeignKey, Enum
+from sqlalchemy import Column, String, DateTime, Integer, Boolean, JSON, ForeignKey, Enum, ForeignKeyConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -66,6 +66,11 @@ class Alias(Base):
     etag = Column(String)
     updated_by = Column(String, nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Foreign key constraint
+    __table_args__ = (
+        ForeignKeyConstraint(['template_id', 'target_version'], ['templates.id', 'templates.version']),
+    )
     
     # Relationships
     template = relationship("Template", back_populates="aliases")

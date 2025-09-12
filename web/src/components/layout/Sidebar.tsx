@@ -54,12 +54,14 @@ export function Sidebar({ className }: SidebarProps) {
       <div className="flex h-full flex-col">
         {/* Logo and toggle */}
         <div className="flex h-16 items-center justify-between px-4 border-b border-border">
-          {sidebarOpen && (
+          {sidebarOpen ? (
             <div className="flex items-center">
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold">P</span>
-              </div>
-              <span className="ml-2 text-lg font-semibold">PromptOps</span>
+              <img src="/src/assets/logo-nav.svg" alt="PromptOps Logo" className="h-10 w-10" />
+              <span className="ml-2 text-xl font-semibold">PromptOps</span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center w-full">
+              <img src="/src/assets/logo-nav.svg" alt="PromptOps Logo" className="h-10 w-10" />
             </div>
           )}
           <Button

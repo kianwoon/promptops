@@ -225,8 +225,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const loginWithGoogle = (): void => {
     try {
       const authUrl = generateGoogleAuthUrl()
-      window.location.href = authUrl
+      // Open in new tab to avoid redirect issues
+      window.open(authUrl, '_blank')
     } catch (error) {
+      console.error('AuthContext: Google login error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to initiate Google login'
       dispatch({ type: 'LOGIN_ERROR', payload: errorMessage })
     }

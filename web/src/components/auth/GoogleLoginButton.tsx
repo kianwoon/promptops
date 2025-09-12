@@ -2,6 +2,7 @@ import React from 'react'
 import { Chrome } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
+import { generateGoogleAuthUrl } from '@/lib/googleAuth'
 
 interface GoogleLoginButtonProps {
   className?: string
@@ -31,6 +32,7 @@ export function GoogleLoginButton({
       onClick={handleGoogleLogin}
       disabled={isLoading}
       className={className}
+      style={{ cursor: 'pointer', zIndex: 100 }}
     >
       <Chrome className="mr-2 h-4 w-4" />
       {isLoading ? 'Connecting...' : 'Continue with Google'}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { MonacoTemplateEditor } from '@/components/MonacoTemplateEditor'
+import { VersionManagement, AliasManagement, EvaluationResults } from '@/components/templates'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -8,109 +9,116 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Save, Play, Copy, Plus, X } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { 
+  ArrowLeft, 
+  Save, 
+  Play, 
+  Copy, 
+  Plus, 
+  X,
+  AlertCircle,
+  Loader2,
+  Settings,
+  GitBranch,
+  BarChart3,
+  Activity
+} from 'lucide-react'
+import { 
+  useTemplate, 
+  useTemplateVersions, 
+  useAliases, 
+  useEvaluations,
+  useCreateTemplate,
+  useRenderTemplate 
+} from '@/hooks/api'
+import { Template, TemplateVersion, Alias, EvaluationRun } from '@/types/api'
 
-interface Template {
-  id?: string
-  name: string
-  description: string
-  version: string
-  content: string
-  status: 'draft' | 'active' | 'deprecated'
-  tags: string[]
-  category: string
-  author: string
-  created?: string
-  updated?: string
-}
-
-const sampleTemplate = `name: customer-support-response
+const defaultTemplate = `name: prompt-template
 version: "1.0.0"
-description: "Customer support response template for handling common inquiries"
+description: "A prompt template for AI interactions"
 
 # Template configuration
 template: |
-  You are a helpful customer support agent for {{company}}.
+  You are a helpful AI assistant. Please respond to the following:
   
-  Customer Inquiry: {{inquiry}}
-  
-  Please provide a professional and helpful response that:
-  - Addresses the customer's specific concern
-  - Maintains a friendly and professional tone
-  - Includes next steps if applicable
+  {{input}}
   
   Response:
 
 # Variables used in the template
 variables:
-  company:
+  input:
     type: string
-    description: "Company name"
-    required: true
-    default: "our company"
-  
-  inquiry:
-    type: string
-    description: "Customer's inquiry or question"
+    description: "User input or question"
     required: true
 
 # Module composition
-modules:
-  - name: tone-governance
-    version: "1.0.0"
-    config:
-      tone: "professional"
-      style: "helpful"
+modules: []
 
 # Validation rules
 validation:
-  max_tokens: 500
-  required_variables: ["company", "inquiry"]
-  
+  max_tokens: 1000
+  required_variables: ["input"]
+
 # Deployment settings
 deployment:
   auto_deploy: false
-  review_required: true
-  test_suite: "customer-support-tests"`
+  review_required: true`
 
 export function TemplateEditor() {
   const { id, version } = useParams()
   const navigate = useNavigate()
-  const [template, setTemplate] = useState<Template>({
-    name: '',
-    description: '',
-    version: '1.0.0',
-    content: sampleTemplate,
-    status: 'draft',
-    tags: [],
-    category: 'general',
-    author: 'current-user'
-  })
-  const [newTag, setNewTag] = useState('')
+  const [activeTab, setActiveTab] = useState('editor')
+  const [yamlContent, setYamlContent] = useState(defaultTemplate)
   const [isLoading, setIsLoading] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
+  const [testInput, setTestInput] = useState('')
+
+  const { data: template, isLoading: templateLoading, error: templateError } = useTemplate(id || '', version || '')
+  const { data: versions, isLoading: versionsLoading } = useTemplateVersions(id || '')
+  const { data: aliases, isLoading: aliasesLoading } = useAliases()
+  const { data: evaluations, isLoading: evaluationsLoading } = useEvaluations(id)
+  const createTemplate = useCreateTemplate()
+  const renderTemplate = useRenderTemplate()
+
+  const templateAliases = aliases?.filter(alias => alias.template_id === id) || []
+  const templateEvaluations = evaluations?.items?.filter(evaluation => evaluation.template_id === id) || []
 
   useEffect(() => {
-    // Load template data if editing existing template
-    if (id && version) {
-      // TODO: Load template from API
-      console.log(`Loading template ${id} version ${version}`)
+    if (template && template.metadata?.template_yaml) {
+      setYamlContent(template.metadata.template_yaml)
     }
-  }, [id, version])
+  }, [template])
+
+  useEffect(() => {
+    if (!id) {
+      setYamlContent(defaultTemplate)
+    }
+  }, [id])
 
   const handleSave = async (content: string) => {
     setIsLoading(true)
     try {
-      const updatedTemplate = { ...template, content }
+      const yamlLines = content.split('\n')
+      const name = yamlLines.find(line => line.startsWith('name:'))?.replace('name:', '').trim() || 'untitled'
+      const version = yamlLines.find(line => line.startsWith('version:'))?.replace('version:', '').trim() || '1.0.0'
+      const description = yamlLines.find(line => line.startsWith('description:'))?.replace('description:', '').trim() || ''
+
+      const templateData = {
+        id: id || name,
+        version: version,
+        owner: 'current-user',
+        template_yaml: content,
+        metadata: {
+          description: description,
+          template_yaml: content
+        }
+      }
+
+      await createTemplate.mutateAsync(templateData)
       
-      // TODO: Save template via API
-      console.log('Saving template:', updatedTemplate)
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      setTemplate(updatedTemplate)
-      
-      // Navigate back to templates list if creating new template
       if (!id) {
         navigate('/templates')
       }
@@ -122,49 +130,104 @@ export function TemplateEditor() {
   }
 
   const handleTest = async (content: string) => {
-    setIsLoading(true)
+    if (!testInput.trim()) {
+      alert('Please provide test input')
+      return
+    }
+
+    setIsTesting(true)
     try {
-      // TODO: Test template via API
-      console.log('Testing template:', content)
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      await renderTemplate.mutateAsync({
+        id: id || 'test',
+        alias: 'test',
+        inputs: { input: testInput }
+      })
       
       alert('Template test completed successfully!')
     } catch (error) {
       console.error('Failed to test template:', error)
       alert('Template test failed. Please check the template configuration.')
     } finally {
-      setIsLoading(false)
+      setIsTesting(false)
     }
   }
 
-  const handleAddTag = () => {
-    if (newTag.trim() && !template.tags.includes(newTag.trim())) {
-      setTemplate(prev => ({
-        ...prev,
-        tags: [...prev.tags, newTag.trim()]
-      }))
-      setNewTag('')
+  const handleViewVersion = (version: string) => {
+    navigate(`/templates/${id}/versions/${version}`)
+  }
+
+  const handleCompareVersions = (version1: string, version2: string) => {
+    // TODO: Implement version comparison
+    console.log('Compare versions:', version1, version2)
+  }
+
+  const handlePromoteVersion = (version: string) => {
+    // TODO: Implement version promotion
+    console.log('Promote version:', version)
+  }
+
+  const handleDeleteVersion = (version: string) => {
+    if (confirm('Are you sure you want to delete this version?')) {
+      // TODO: Implement version deletion
+      console.log('Delete version:', version)
     }
   }
 
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTemplate(prev => ({
-      ...prev,
-      tags: prev.tags.filter(tag => tag !== tagToRemove)
-    }))
+  const handleDownloadVersion = (version: string) => {
+    // TODO: Implement version download
+    console.log('Download version:', version)
   }
 
-  const handleDuplicate = () => {
-    const duplicated = {
-      ...template,
-      name: `${template.name} (Copy)`,
-      id: undefined,
-      created: undefined,
-      updated: undefined
+  const handleCreateAlias = async (alias: Omit<Alias, 'updated_at'>) => {
+    // TODO: Implement alias creation
+    console.log('Create alias:', alias)
+  }
+
+  const handleUpdateAlias = (alias: string, updates: Partial<Alias>) => {
+    // TODO: Implement alias update
+    console.log('Update alias:', alias, updates)
+  }
+
+  const handleDeleteAlias = (alias: string) => {
+    if (confirm('Are you sure you want to delete this alias?')) {
+      // TODO: Implement alias deletion
+      console.log('Delete alias:', alias)
     }
-    setTemplate(duplicated)
+  }
+
+  const handleTestAlias = (alias: string) => {
+    // TODO: Implement alias testing
+    console.log('Test alias:', alias)
+  }
+
+  const handleRunEvaluation = (suiteId: string) => {
+    // TODO: Implement evaluation run
+    console.log('Run evaluation:', suiteId)
+  }
+
+  const handleViewEvaluationDetails = (evaluationId: string) => {
+    // TODO: Navigate to evaluation details
+    console.log('View evaluation details:', evaluationId)
+  }
+
+  if (templateLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin mr-2" />
+        <span>Loading template...</span>
+      </div>
+    )
+  }
+
+  if (templateError) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Failed to load template. Please try again later.
+        </AlertDescription>
+      </Alert>
+    )
   }
 
   return (
@@ -178,133 +241,131 @@ export function TemplateEditor() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">
-              {version ? `Edit ${template.name}` : 'Create Template'}
+              {id ? (template?.metadata?.description || id) : 'Create Template'}
             </h1>
             <p className="text-muted-foreground">
-              {version ? 'Edit template configuration and YAML' : 'Create a new prompt template'}
+              {id ? 'Edit template configuration and YAML' : 'Create a new prompt template'}
             </p>
           </div>
         </div>
         
         <div className="flex items-center gap-2">
-          <Badge variant={template.status === 'active' ? 'default' : template.status === 'deprecated' ? 'destructive' : 'secondary'}>
-            {template.status}
+          <Badge variant="outline">
+            {version || 'latest'}
           </Badge>
-          <Button variant="outline" size="sm" onClick={handleDuplicate}>
-            <Copy className="w-4 h-4 mr-2" />
-            Duplicate
-          </Button>
         </div>
       </div>
 
-      {/* Template Metadata */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Template Information</CardTitle>
-          <CardDescription>
-            Basic information and metadata for your template
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Template Name</Label>
-              <Input
-                id="name"
-                value={template.name}
-                onChange={(e) => setTemplate(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Enter template name"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="version">Version</Label>
-              <Input
-                id="version"
-                value={template.version}
-                onChange={(e) => setTemplate(prev => ({ ...prev, version: e.target.value }))}
-                placeholder="1.0.0"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select value={template.category} onValueChange={(value) => setTemplate(prev => ({ ...prev, category: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="general">General</SelectItem>
-                  <SelectItem value="customer-support">Customer Support</SelectItem>
-                  <SelectItem value="content-creation">Content Creation</SelectItem>
-                  <SelectItem value="code-generation">Code Generation</SelectItem>
-                  <SelectItem value="data-analysis">Data Analysis</SelectItem>
-                  <SelectItem value="documentation">Documentation</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select value={template.status} onValueChange={(value: any) => setTemplate(prev => ({ ...prev, status: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="deprecated">Deprecated</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={template.description}
-                onChange={(e) => setTemplate(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Enter template description"
-                rows={3}
-              />
-            </div>
-            
-            <div className="md:col-span-2 space-y-2">
-              <Label>Tags</Label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {template.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="flex items-center gap-1">
-                    {tag}
-                    <X 
-                      className="w-3 h-3 cursor-pointer" 
-                      onClick={() => handleRemoveTag(tag)}
-                    />
-                  </Badge>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  value={newTag}
-                  onChange={(e) => setNewTag(e.target.value)}
-                  placeholder="Add tag"
-                  onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
-                />
-                <Button variant="outline" size="sm" onClick={handleAddTag}>
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="editor">
+            <Settings className="w-4 h-4 mr-2" />
+            Editor
+          </TabsTrigger>
+          {id && (
+            <>
+              <TabsTrigger value="versions">
+                <GitBranch className="w-4 h-4 mr-2" />
+                Versions
+              </TabsTrigger>
+              <TabsTrigger value="aliases">
+                <Activity className="w-4 h-4 mr-2" />
+                Aliases
+              </TabsTrigger>
+              <TabsTrigger value="evaluations">
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Evaluations
+              </TabsTrigger>
+            </>
+          )}
+        </TabsList>
 
-      {/* Monaco Editor */}
-      <MonacoTemplateEditor
-        initialContent={template.content}
-        onSave={handleSave}
-        onTest={handleTest}
-        height="800px"
-      />
+        <TabsContent value="editor" className="space-y-6">
+          {/* Test Input */}
+          {id && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Test Template</CardTitle>
+                <CardDescription>
+                  Test your template with sample input
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <Label htmlFor="test-input">Test Input</Label>
+                    <Textarea
+                      id="test-input"
+                      value={testInput}
+                      onChange={(e) => setTestInput(e.target.value)}
+                      placeholder="Enter test input for the template..."
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button 
+                      onClick={() => handleTest(yamlContent)}
+                      disabled={isTesting || !testInput.trim()}
+                    >
+                      {isTesting ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Play className="w-4 h-4 mr-2" />
+                      )}
+                      Test
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Monaco Editor */}
+          <MonacoTemplateEditor
+            initialContent={yamlContent}
+            onSave={handleSave}
+            onTest={handleTest}
+            height="800px"
+          />
+        </TabsContent>
+
+        {id && (
+          <>
+            <TabsContent value="versions">
+              <VersionManagement
+                templateId={id}
+                versions={versions || []}
+                currentVersion={version}
+                onViewVersion={handleViewVersion}
+                onCompareVersions={handleCompareVersions}
+                onPromoteVersion={handlePromoteVersion}
+                onDeleteVersion={handleDeleteVersion}
+                onDownloadVersion={handleDownloadVersion}
+              />
+            </TabsContent>
+
+            <TabsContent value="aliases">
+              <AliasManagement
+                templateId={id}
+                aliases={templateAliases}
+                onCreateAlias={handleCreateAlias}
+                onUpdateAlias={handleUpdateAlias}
+                onDeleteAlias={handleDeleteAlias}
+                onTestAlias={handleTestAlias}
+              />
+            </TabsContent>
+
+            <TabsContent value="evaluations">
+              <EvaluationResults
+                templateId={id}
+                evaluations={templateEvaluations}
+                onRunEvaluation={handleRunEvaluation}
+                onViewDetails={handleViewEvaluationDetails}
+              />
+            </TabsContent>
+          </>
+        )}
+      </Tabs>
     </div>
   )
 }

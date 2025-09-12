@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import { 
   Mail, 
   Lock, 
@@ -34,6 +35,7 @@ interface User {
 
 export function Login() {
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -43,6 +45,13 @@ export function Login() {
     password: '',
     rememberMe: false
   })
+
+  // Redirect authenticated users to landing page
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/')
+    }
+  }, [isAuthenticated, navigate])
 
   const mockUsers: User[] = [
     {

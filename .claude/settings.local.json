@@ -25,9 +25,100 @@
       "Bash(npm run build:*)",
       "Bash(npm start)",
       "Bash(npm run)",
-      "Read(//Users/kianwoonwong/Downloads/raas/**)"
+      "Read(//Users/kianwoonwong/Downloads/raas/**)",
+      "Bash(DATABASE_URL=postgresql://promptops:promptops@localhost:5432/promptops_dev alembic:*)",
+      "Bash(find:*)",
+      "Read(//Users/kianwoonwong/Downloads/**)",
+      "Bash(PORT=3000 npm run dev)",
+      "Bash(PORT=3001 npm run dev)"
     ],
     "deny": [],
     "ask": []
+  },
+   "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "say 'Claude needs your input' && osascript -e 'display notification \"Claude waiting for response\" with title \"Claude Code\"'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "say 'Task completed' && osascript -e 'display notification \"Task completed\" with title \"Claude Code\" sound name \"Submarine\"'"
+          },
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 /Users/kianwoonwong/claude_cleanup.py"
+          },
+          {
+            "type": "command",
+            "command": "echo 'Reminder: Read CLAUDE.local.md if present' && if [ -f CLAUDE.local.md ]; then echo 'CLAUDE.local.md found in current directory'; fi"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "say 'Subtask complete' "
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "say 'Agent starting task'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "say 'Agent task complete'"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Claude Code ready' && say 'Claude ready'"
+          },
+          {
+            "type": "command",
+            "command": "echo 'Reminder: Project memory ./CLAUDE.md  if present' && if [ -f ./CLAUDE.md  ]; then echo 'CLAUDE.md found in current directory'; fi"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Reminder: Project memory ./CLAUDE.md  if present' && if [ -f ./CLAUDE.md  ]; then echo 'CLAUDE.md found in current directory'; fi"
+          }
+        ]
+      }
+    ]
   }
 }

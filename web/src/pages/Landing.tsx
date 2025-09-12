@@ -12,15 +12,19 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Chrome
+  Chrome,
+  FileText,
+  Rocket
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton'
+import { useAuth } from '@/contexts/AuthContext'
 
 export function Landing() {
+  const { isAuthenticated, user } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [loginForm, setLoginForm] = useState({
     email: '',
@@ -30,119 +34,127 @@ export function Landing() {
   const features = [
     {
       icon: BarChart3,
-      title: "Advanced Analytics",
-      description: "Real-time metrics and performance monitoring for your AI prompts"
+      title: "Prompt as Source Code",
+      description: "Git-level discipline for prompts with versioning, branching, and audit trails"
     },
     {
       icon: Shield,
-      title: "Enterprise Security",
-      description: "Role-based access control and comprehensive audit trails"
+      title: "Enterprise Prompt Governance",
+      description: "Multi-model prompt management with validation, testing, and compliance controls"
     },
     {
       icon: Zap,
-      title: "Lightning Fast",
-      description: "Sub-50ms template rendering with intelligent caching"
+      title: "Prompt-Dense Workflows",
+      description: "Scale AI operations with template reuse, variants, and performance monitoring"
     },
     {
       icon: Users,
-      title: "Team Collaboration",
-      description: "Version control and real-time collaboration features"
+      title: "Professional Prompt Engineering",
+      description: "Collaborative prompt development with review cycles and approval workflows"
     }
   ]
 
   const useCases = [
-    "Customer Support Teams",
-    "Content Creation Workflows",
-    "Code Generation Teams",
-    "Data Analysis Pipelines",
-    "Documentation Automation",
-    "Multi-language Support"
+    "Enterprise AI Development Teams",
+    "Prompt Engineering Departments",
+    "AI Product Management",
+    "Machine Learning Operations",
+    "Enterprise AI Governance",
+    "Multi-Model Deployment Teams"
   ]
 
   const stats = [
-    { label: "Template Render Speed", value: "< 50ms", description: "Average render time" },
-    { label: "API Uptime", value: "99.95%", description: "Monthly availability" },
-    { label: "Concurrent Users", value: "10,000+", description: "Active sessions" },
-    { label: "Enterprise Ready", value: "SOC 2", description: "Compliance certified" }
+    { label: "Prompt Version Control", value: "Git-Level", description: "Branching, merging, and audit trails" },
+    { label: "Multi-Model Support", value: "12+ Models", description: "GPT, Claude, Gemini, Llama & more" },
+    { label: "Prompt Performance", value: "< 25ms", description: "Edge-cached prompt delivery" },
+    { label: "Enterprise Ready", value: "SOC 2", description: "Governance & compliance built-in" }
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* Navigation */}
-      <nav className="flex items-center justify-between p-6 max-w-7xl mx-auto">
-        <div className="flex items-center space-x-2">
-          <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
-            <span className="text-white font-bold">P</span>
-          </div>
-          <span className="text-xl font-bold text-gray-900">PromptOps</span>
-        </div>
-        
-        <div className="hidden md:flex items-center space-x-8">
-          <a href="#features" className="text-gray-600 hover:text-gray-900 transition-colors">Features</a>
-          <a href="#use-cases" className="text-gray-600 hover:text-gray-900 transition-colors">Use Cases</a>
-          <a href="#pricing" className="text-gray-600 hover:text-gray-900 transition-colors">Pricing</a>
-          <a href="#about" className="text-gray-600 hover:text-gray-900 transition-colors">About</a>
-        </div>
-        
-        <div className="flex items-center space-x-4">
-          <Link to="/login">
-            <Button variant="ghost">Sign In</Button>
-          </Link>
-          <Link to="/register">
-            <Button>Get Started</Button>
-          </Link>
-        </div>
-      </nav>
+    <div className="flex-1">
 
       {/* Hero Section */}
-      <section className="px-6 py-20 max-w-7xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-12 items-center">
+      <section className="px-6 py-8 relative">
+        <div className={`grid md:grid-cols-2 gap-6 items-center max-w-7xl mx-auto ${isAuthenticated ? 'gap-4' : 'gap-6'}`}>
           <div>
-            <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-sm font-medium mb-6">
+            <div className={`inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-sm font-medium ${isAuthenticated ? 'mb-2' : 'mb-4'}`}>
               <Zap className="w-4 h-4 mr-2" />
-              Enterprise-Grade AI Prompt Management
+              Git-Level Discipline for AI Prompts
             </div>
             
-            <h1 className="text-5xl font-bold text-gray-900 mb-6 leading-tight">
-              Scale Your AI Operations with
-              <span className="text-blue-600"> Confidence</span>
+            <h1 className={`text-5xl font-bold text-gray-900 leading-tight ${isAuthenticated ? 'mb-2' : 'mb-4'}`}>
+              Bring Git-Level Discipline to
+              <span className="text-blue-600"> Enterprise AI Prompts</span>
             </h1>
             
-            <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-              The enterprise platform for managing, testing, and deploying LLM prompts at scale. 
-              Built for teams that demand security, performance, and governance.
+            <p className={`text-xl text-gray-600 leading-relaxed ${isAuthenticated ? 'mb-4' : 'mb-6'}`}>
+              PromptOps treats prompts as the new source code of enterprise AI. 
+              Built for professional prompt engineers managing complex, prompt-dense workflows across multiple models.
             </p>
             
-            <div className="flex flex-col sm:flex-row gap-4 mb-12">
-              <Link to="/register">
-                <Button size="lg" className="w-full sm:w-auto">
-                  Start Free Trial
-                  <ArrowRight className="ml-2 w-5 h-5" />
-                </Button>
-              </Link>
-              <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                <Github className="mr-2 w-5 h-5" />
-                View on GitHub
-              </Button>
+            <div className={`flex flex-col sm:flex-row gap-4 ${isAuthenticated ? 'mb-4' : 'mb-8'}`}>
+              {isAuthenticated ? (
+                <>
+                  <Link to="/dashboard">
+                    <Button size="lg" className="w-full sm:w-auto">
+                      Go to Dashboard
+                      <ArrowRight className="ml-2 w-5 h-5" />
+                    </Button>
+                  </Link>
+                  <Button variant="outline" size="lg" className="w-full sm:w-auto">
+                    <Github className="mr-2 w-5 h-5" />
+                    View on GitHub
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Link to="/register">
+                    <Button size="lg" className="w-full sm:w-auto">
+                      Start Free Trial
+                      <ArrowRight className="ml-2 w-5 h-5" />
+                    </Button>
+                  </Link>
+                  <Button variant="outline" size="lg" className="w-full sm:w-auto">
+                    <Github className="mr-2 w-5 h-5" />
+                    View on GitHub
+                  </Button>
+                </>
+              )}
             </div>
             
-            <div className="flex items-center space-x-8 text-sm text-gray-500">
-              <div className="flex items-center">
-                <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-                No credit card required
-              </div>
-              <div className="flex items-center">
-                <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-                14-day free trial
-              </div>
-              <div className="flex items-center">
-                <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-                Cancel anytime
-              </div>
+            <div className={`flex items-center text-sm text-gray-500 ${isAuthenticated ? 'space-x-4' : 'space-x-8'}`}>
+              {isAuthenticated ? (
+                <>
+                  <div className="flex items-center">
+                    <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
+                    <span className="text-xs">14-day trial</span>
+                  </div>
+                  <div className="flex items-center">
+                    <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
+                    <span className="text-xs">Cancel anytime</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center">
+                    <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
+                    No credit card required
+                  </div>
+                  <div className="flex items-center">
+                    <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
+                    14-day free trial
+                  </div>
+                  <div className="flex items-center">
+                    <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
+                    Cancel anytime
+                  </div>
+                </>
+              )}
             </div>
           </div>
           
-          <div className="hidden md:block">
+          {!isAuthenticated ? (
+          <div className="block">
             <Card className="shadow-2xl">
               <CardHeader>
                 <CardTitle className="text-xl">Quick Login</CardTitle>
@@ -226,22 +238,179 @@ export function Landing() {
               </CardContent>
             </Card>
           </div>
+        ) : (
+          <div className="block">
+            <Card className="shadow-2xl">
+              <CardHeader>
+                <CardTitle className="text-xl">Welcome to PromptOps</CardTitle>
+                <CardDescription>
+                  You're signed in as {user?.email}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {/* Animated dashboard preview */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg p-6">
+                    <div className="animate-pulse space-y-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="h-3 w-3 bg-green-500 rounded-full animate-bounce"></div>
+                        <div className="text-sm font-medium text-gray-700">PromptOps Dashboard Active</div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white rounded-lg p-3 shadow-sm">
+                          <div className="text-xs text-gray-500 mb-1">Active Templates</div>
+                          <div className="text-xl font-bold text-blue-600">24</div>
+                        </div>
+                        <div className="bg-white rounded-lg p-3 shadow-sm">
+                          <div className="text-xs text-gray-500 mb-1">Deployments</div>
+                          <div className="text-xl font-bold text-green-600">8</div>
+                        </div>
+                      </div>
+
+                      {/* Real-time activity feed */}
+                      <div className="bg-white rounded-lg p-3 shadow-sm">
+                        <div className="text-xs text-gray-500 mb-2">Recent Activity</div>
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
+                            <span className="text-xs text-gray-600">Template updated: enterprise_chat_v2</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span className="text-xs text-gray-600">Deployment successful: production</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <div className="h-2 w-2 bg-purple-500 rounded-full animate-pulse"></div>
+                            <span className="text-xs text-gray-600">New evaluation: model_comparison</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">System Performance</span>
+                          <div className="flex items-center space-x-1">
+                            <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span className="text-xs text-green-600">Optimal</span>
+                          </div>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full w-3/4 animate-pulse"></div>
+                        </div>
+                      </div>
+
+                      {/* Model status indicators */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="text-center">
+                          <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-1">
+                            <div className="text-xs font-bold text-blue-600">GPT</div>
+                          </div>
+                          <div className="text-xs text-gray-600">Active</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-1">
+                            <div className="text-xs font-bold text-green-600">Claude</div>
+                          </div>
+                          <div className="text-xs text-gray-600">Active</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="h-8 w-8 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-1">
+                            <div className="text-xs font-bold text-purple-600">Gemini</div>
+                          </div>
+                          <div className="text-xs text-gray-600">Active</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <Link to="/dashboard" className="w-full">
+                    <Button className="w-full">
+                      <ArrowRight className="mr-2 w-4 h-4" />
+                      Go to Dashboard
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
         </div>
       </section>
 
+      {/* Content Section above Stats Ticker */}
+      <section className="py-2 bg-gray-50">
+        <div className="px-6 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-8 h-8 text-blue-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Template Library</h3>
+              <p className="text-gray-600">Access your professionally crafted prompt templates optimized for different use cases and models.</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Rocket className="w-8 h-8 text-green-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Deployment Hub</h3>
+              <p className="text-gray-600">Deploy your prompts across multiple environments with version control and rollback capabilities.</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <BarChart3 className="w-8 h-8 text-purple-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Performance Analytics</h3>
+              <p className="text-gray-600">Track prompt performance, user satisfaction, and optimization opportunities across all models.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Animated Stats Ticker */}
+      {isAuthenticated && (
+        <section className="py-8 bg-gradient-to-r from-blue-600 to-indigo-600">
+          <div className="px-6 max-w-6xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-white">
+              <div className="text-center">
+                <div className="text-3xl font-bold mb-2 animate-pulse">24</div>
+                <div className="text-sm opacity-90">Active Templates</div>
+                <div className="text-xs opacity-75 mt-1">+2 today</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold mb-2 animate-pulse">8</div>
+                <div className="text-sm opacity-90">Deployments</div>
+                <div className="text-xs opacity-75 mt-1">All active</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold mb-2 animate-pulse">156</div>
+                <div className="text-sm opacity-90">Prompt Versions</div>
+                <div className="text-xs opacity-75 mt-1">Across all models</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold mb-2 animate-pulse">99.9%</div>
+                <div className="text-sm opacity-90">Uptime</div>
+                <div className="text-xs opacity-75 mt-1">This month</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Features Section */}
-      <section id="features" className="py-20 bg-white">
-        <div className="px-6 max-w-7xl mx-auto">
+      <section id="features" className="py-16 bg-white">
+        <div className="px-6 max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Everything You Need to Scale AI Operations
+              The Professional Prompt Engineering Platform
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Built for enterprises that need to manage hundreds of AI prompts with security, governance, and performance in mind.
+              Where prompt engineering meets software engineering discipline. 
+              Manage system prompts, model variations, and enterprise AI workflows with Git-level control.
             </p>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((feature, index) => {
               const Icon = feature.icon
               return (
@@ -261,9 +430,9 @@ export function Landing() {
       </section>
 
       {/* Stats Section */}
-      <section className="py-20 bg-blue-600">
-        <div className="px-6 max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+      <section className="py-16 bg-blue-600">
+        <div className="px-6 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {stats.map((stat, index) => (
               <div key={index} className="text-center text-white">
                 <div className="text-4xl font-bold mb-2">{stat.value}</div>
@@ -276,18 +445,18 @@ export function Landing() {
       </section>
 
       {/* Use Cases Section */}
-      <section id="use-cases" className="py-20 bg-gray-50">
-        <div className="px-6 max-w-7xl mx-auto">
+      <section id="use-cases" className="py-16 bg-gray-50">
+        <div className="px-6 max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Trusted by Teams Across Industries
+              Where Professional Prompt Engineers Thrive
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              From startups to Fortune 500 companies, teams rely on PromptOps to manage their AI operations.
+              For teams who understand that writing prompts is different from writing code — and need enterprise-grade tools to match.
             </p>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {useCases.map((useCase, index) => (
               <Card key={index} className="border-0 shadow-md">
                 <CardContent className="p-6">
@@ -303,80 +472,39 @@ export function Landing() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-blue-600 to-blue-700">
-        <div className="px-6 max-w-4xl mx-auto text-center">
+      <section className="py-16 bg-gradient-to-r from-blue-600 to-blue-700">
+        <div className="px-6 max-w-6xl mx-auto text-center">
           <h2 className="text-4xl font-bold text-white mb-4">
-            Ready to Transform Your AI Operations?
+            Ready to Professionalize Your AI Prompts?
           </h2>
           <p className="text-xl text-blue-100 mb-8">
-            Join thousands of teams using PromptOps to scale their AI initiatives with confidence.
+            Join enterprise teams treating prompts as source code — with the discipline, governance, and scale your AI initiatives demand.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/register">
-              <Button size="lg" variant="secondary" className="w-full sm:w-auto">
-                Start Free Trial
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-            </Link>
-            <Button size="lg" variant="outline" className="w-full sm:w-auto border-white text-white hover:bg-white hover:text-blue-600">
-              Schedule Demo
-            </Button>
+            {isAuthenticated ? (
+              <Link to="/dashboard">
+                <Button size="lg" variant="secondary" className="w-full sm:w-auto">
+                  Go to Dashboard
+                  <ArrowRight className="ml-2 w-5 h-5" />
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link to="/register">
+                  <Button size="lg" variant="secondary" className="w-full sm:w-auto">
+                    Start Free Trial
+                    <ArrowRight className="ml-2 w-5 h-5" />
+                  </Button>
+                </Link>
+                <Button size="lg" variant="outline" className="w-full sm:w-auto border-white text-white hover:bg-white hover:text-blue-600">
+                  Schedule Demo
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="px-6 max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center space-x-2 mb-4">
-                <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                  <span className="text-white font-bold">P</span>
-                </div>
-                <span className="text-xl font-bold">PromptOps</span>
-              </div>
-              <p className="text-gray-400">
-                Enterprise-grade AI prompt management platform.
-              </p>
-            </div>
-            
-            <div>
-              <h4 className="font-semibold mb-4">Product</h4>
-              <div className="space-y-2 text-gray-400">
-                <a href="#" className="block hover:text-white transition-colors">Features</a>
-                <a href="#" className="block hover:text-white transition-colors">Pricing</a>
-                <a href="#" className="block hover:text-white transition-colors">Documentation</a>
-                <a href="#" className="block hover:text-white transition-colors">API</a>
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="font-semibold mb-4">Company</h4>
-              <div className="space-y-2 text-gray-400">
-                <a href="#" className="block hover:text-white transition-colors">About</a>
-                <a href="#" className="block hover:text-white transition-colors">Blog</a>
-                <a href="#" className="block hover:text-white transition-colors">Careers</a>
-                <a href="#" className="block hover:text-white transition-colors">Contact</a>
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="font-semibold mb-4">Legal</h4>
-              <div className="space-y-2 text-gray-400">
-                <a href="#" className="block hover:text-white transition-colors">Privacy Policy</a>
-                <a href="#" className="block hover:text-white transition-colors">Terms of Service</a>
-                <a href="#" className="block hover:text-white transition-colors">Security</a>
-                <a href="#" className="block hover:text-white transition-colors">Compliance</a>
-              </div>
-            </div>
-          </div>
-          
-          <div className="border-t border-gray-800 pt-8 text-center text-gray-400">
-            <p>&copy; 2024 PromptOps. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
-    </div>
+      </div>
   )
 }
