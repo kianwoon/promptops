@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(timeout:*)",
+      "Bash(chmod:*)",
+      "Bash(brew:*)",
+      "Bash(createuser:*)",
+      "Bash(createdb:*)",
+      "Bash(alembic init:*)",
+      "Bash(alembic revision:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(psql:*)",
+      "Bash(DATABASE_URL=postgresql://promptops@localhost:5432/promptops_dev alembic:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(npm install:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

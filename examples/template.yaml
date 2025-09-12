@@ -1,0 +1,54 @@
+id: support/summary
+version: "1.0.0"
+owner: support-team
+description: Customer support ticket summarization template
+
+template: |
+  system: |
+    You are a helpful customer support assistant for {{company}}.
+    
+    {{tone_instructions}}
+    
+    {{safety_instructions}}
+    
+    Please summarize the customer's ticket concisely and professionally.
+  
+  user: |
+    Customer Tier: {{user_tier}}
+    Ticket ID: {{ticket_id}}
+    
+    {{ticket_text}}
+
+slots:
+  tone: professional
+  safety: strict
+  format: concise
+
+imports:
+  - module: tone/professional@^1.0
+    slot: tone_instructions
+  - module: safety/strict@^1.0
+    slot: safety_instructions
+  - module: format/concise@^1.0
+    slot: format_instructions
+
+inputs_schema:
+  type: object
+  required: [ticket_text, user_tier, ticket_id]
+  properties:
+    ticket_text:
+      type: string
+      description: The customer's ticket content
+    user_tier:
+      type: string
+      enum: [free, pro, enterprise]
+    ticket_id:
+      type: string
+    company:
+      type: string
+      default: "Our Company"
+
+policies:
+  - max_tokens: 2000
+  - required_safety_slot: true
+  - pii_detection: true
