@@ -17,7 +17,15 @@
       "Bash(DATABASE_URL=postgresql://promptops@localhost:5432/promptops_dev alembic:*)",
       "Bash(lsof:*)",
       "Bash(kill:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(node:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm start)",
+      "Bash(npm run)",
+      "Read(//Users/kianwoonwong/Downloads/raas/**)"
     ],
     "deny": [],
     "ask": []

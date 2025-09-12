@@ -1,7 +1,46 @@
-from sqlalchemy import Column, String, DateTime, Integer, Boolean, JSON, ForeignKey
+from sqlalchemy import Column, String, DateTime, Integer, Boolean, JSON, ForeignKey, Enum
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
+import enum
+
+class UserRole(enum.Enum):
+    ADMIN = "admin"
+    USER = "user"
+    VIEWER = "viewer"
+
+class AuthProvider(enum.Enum):
+    LOCAL = "local"
+    GOOGLE = "google"
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(String, primary_key=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
+    organization = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    company_size = Column(String, nullable=True)
+    avatar = Column(String, nullable=True)
+    
+    # OAuth fields
+    provider = Column(Enum(AuthProvider), default=AuthProvider.LOCAL, nullable=True)
+    provider_id = Column(String, nullable=True, index=True)
+    is_verified = Column(Boolean, default=False, nullable=False)
+    
+    # Authentication
+    hashed_password = Column(String, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    last_login = Column(DateTime(timezone=True), nullable=True)
+    
+    # Relationships (will be updated as needed)
+    # templates = relationship("Template", foreign_keys="Template.created_by")
+    # audit_logs = relationship("AuditLog", foreign_keys="AuditLog.actor")
 
 class Template(Base):
     __tablename__ = "templates"

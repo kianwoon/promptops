@@ -7,19 +7,29 @@ import {
   BarChart3, 
   Shield, 
   Settings,
+  Users,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useAuth, usePermission } from '@/contexts/AuthContext'
 
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Templates', href: '/templates', icon: FileText },
-  { name: 'Deployments', href: '/deployments', icon: Rocket },
-  { name: 'Evaluations', href: '/evaluations', icon: BarChart3 },
-  { name: 'Governance', href: '/governance', icon: Shield },
-  { name: 'Settings', href: '/settings', icon: Settings },
+interface NavigationItem {
+  name: string
+  href: string
+  icon: React.ComponentType<any>
+  permission?: string
+}
+
+const navigation: NavigationItem[] = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Templates', href: '/templates', icon: FileText, permission: 'templates:read' },
+  { name: 'Deployments', href: '/deployments', icon: Rocket, permission: 'deployments:read' },
+  { name: 'Evaluations', href: '/evaluations', icon: BarChart3, permission: 'evaluations:read' },
+  { name: 'Governance', href: '/governance', icon: Shield, permission: 'audits:read' },
+  { name: 'User Management', href: '/users', icon: Users, permission: 'users:read' },
+  { name: 'Settings', href: '/settings', icon: Settings, permission: 'settings:manage' },
 ]
 
 interface SidebarProps {
@@ -28,6 +38,12 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
+  const { user, logout } = useAuth()
+
+  const visibleNavigation = navigation.filter(item => {
+    if (!item.permission) return true
+    return usePermission(item.permission)
+  })
 
   return (
     <div className={cn(
@@ -62,7 +78,7 @@ export function Sidebar({ className }: SidebarProps) {
 
         {/* Navigation */}
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const Icon = item.icon
             return (
               <NavLink
@@ -92,12 +108,14 @@ export function Sidebar({ className }: SidebarProps) {
             !sidebarOpen && "justify-center"
           )}>
             <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-              <span className="text-sm font-medium">JD</span>
+              <span className="text-sm font-medium">
+                {user?.name.split(' ').map(n => n[0]).join('') || 'U'}
+              </span>
             </div>
             {sidebarOpen && (
-              <div className="ml-3">
-                <p className="text-sm font-medium">John Doe</p>
-                <p className="text-xs text-muted-foreground">Admin</p>
+              <div className="ml-3 flex-1">
+                <p className="text-sm font-medium truncate">{user?.name}</p>
+                <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
               </div>
             )}
           </div>

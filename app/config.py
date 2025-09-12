@@ -14,7 +14,12 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     
-    # OIDC Configuration
+    # Google OAuth Configuration
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:3000/auth/google/callback"
+    
+    # OIDC Configuration (legacy)
     oidc_client_id: str = ""
     oidc_client_secret: str = ""
     oidc_discovery_url: str = ""

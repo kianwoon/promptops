@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import engine
 from app.models import Base
-from app.routers import templates, render, aliases, evals, policies
+from app.routers import templates, render, aliases, evals, policies, auth
 
 # Configure structured logging
 structlog.configure(
@@ -68,6 +68,7 @@ app.include_router(render.router, prefix="/v1", tags=["render"])
 app.include_router(aliases.router, prefix="/v1/aliases", tags=["aliases"])
 app.include_router(evals.router, prefix="/v1/evals", tags=["evaluations"])
 app.include_router(policies.router, prefix="/v1/policies", tags=["policies"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
 
 @app.get("/")
 async def root():

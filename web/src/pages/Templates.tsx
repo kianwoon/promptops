@@ -11,7 +11,8 @@ import {
   Play,
   BarChart3,
   Clock,
-  User
+  User,
+  FileText
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,7 +24,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useTemplates } from '@/hooks/api'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
 
 interface TemplateItem {
@@ -77,7 +77,6 @@ const mockTemplates: TemplateItem[] = [
 export function Templates() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
 
   const filteredTemplates = mockTemplates.filter(template => {
     const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

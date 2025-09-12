@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Save, Play, Eye, EyeOff } from 'lucide-react'
+import { validateYaml, getMonacoYamlLanguageConfiguration, getYamlCompletionItems } from './YamlValidation'
 
 interface MonacoTemplateEditorProps {
   initialContent?: string
@@ -27,15 +28,48 @@ export function MonacoTemplateEditor({
   const [content, setContent] = useState(initialContent)
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
   const [isValidYaml, setIsValidYaml] = useState(true)
+  const [validationErrors, setValidationErrors] = useState<any[]>([])
   const editorRef = useRef<any>(null)
 
   useEffect(() => {
     setContent(initialContent)
   }, [initialContent])
 
-  const handleEditorDidMount = (editor: any) => {
+  const handleEditorDidMount = (editor: any, monaco: any) => {
     editorRef.current = editor
     
+    // Configure YAML language support
+    monaco.languages.register({ id: 'yaml' })
+    monaco.languages.setLanguageConfiguration('yaml', getMonacoYamlLanguageConfiguration())
+    
+    // Configure completion provider
+    monaco.languages.registerCompletionItemProvider('yaml', {
+      provideCompletionItems: (model, position) => {
+        return {
+          suggestions: getYamlCompletionItems(model, position)
+        }
+      }
+    })
+
+    // Configure hover provider
+    monaco.languages.registerHoverProvider('yaml', {
+      provideHover: (model, position) => {
+        const word = model.getWordAtPosition(position)
+        if (word) {
+          return {
+            range: new monaco.Range(
+              position.lineNumber,
+              word.startColumn,
+              position.lineNumber,
+              word.endColumn
+            ),
+            contents: [{ value: `**${word.word}**\nYAML property or value` }]
+          }
+        }
+        return null
+      }
+    })
+
     // Configure editor options
     editor.updateOptions({
       fontSize: 14,
@@ -50,40 +84,51 @@ export function MonacoTemplateEditor({
       matchBrackets: 'always',
       autoIndent: 'advanced',
       formatOnPaste: true,
-      formatOnType: true
+      formatOnType: true,
+      quickSuggestions: true,
+      suggestOnTriggerCharacters: true,
+      acceptSuggestionOnEnter: 'on',
+      tabCompletion: 'on',
+      wordBasedSuggestions: true,
+      parameterHints: { enabled: true }
     })
 
-    // Add YAML validation
+    // Add validation markers
     editor.onDidChangeModelContent(() => {
-      validateYaml(editor.getValue())
+      validateYamlContent(editor.getValue())
     })
   }
 
-  const validateYaml = (yamlContent: string) => {
+  const validateYamlContent = (yamlContent: string) => {
     try {
-      // Basic YAML validation - check for proper structure
-      const lines = yamlContent.split('\n')
-      let hasErrors = false
+      const errors = validateYaml(yamlContent)
+      setValidationErrors(errors)
       
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i]
-        const trimmed = line.trim()
-        
-        if (trimmed && !trimmed.startsWith('#')) {
-          // Check for proper key-value pairs
-          if (trimmed.includes(':')) {
-            const parts = trimmed.split(':')
-            if (parts.length > 1 && parts[0].trim() === '') {
-              hasErrors = true
-              break
-            }
+      const hasErrors = errors.some(error => error.severity === 'error')
+      setIsValidYaml(!hasErrors)
+      
+      // Add markers to editor
+      if (editorRef.current) {
+        const monaco = (window as any).monaco
+        if (monaco) {
+          const model = editorRef.current.getModel()
+          if (model) {
+            monaco.editor.setModelMarkers(model, 'yaml-validator', errors.map(error => ({
+              startLineNumber: error.line,
+              endLineNumber: error.line,
+              startColumn: error.column,
+              endColumn: error.column + 1,
+              message: error.message,
+              severity: error.severity === 'error' ? monaco.MarkerSeverity.Error : 
+                         error.severity === 'warning' ? monaco.MarkerSeverity.Warning : 
+                         monaco.MarkerSeverity.Info
+            })))
           }
         }
       }
-      
-      setIsValidYaml(!hasErrors)
     } catch (error) {
       setIsValidYaml(false)
+      setValidationErrors([{ line: 1, column: 1, message: 'Validation error', severity: 'error' }])
     }
   }
 
@@ -102,7 +147,7 @@ export function MonacoTemplateEditor({
   const handleEditorChange = (value: string | undefined) => {
     const newContent = value || ''
     setContent(newContent)
-    validateYaml(newContent)
+    validateYamlContent(newContent)
   }
 
   const formatYaml = () => {
@@ -167,6 +212,11 @@ export function MonacoTemplateEditor({
             <Badge variant={isValidYaml ? "default" : "destructive"}>
               {isValidYaml ? "Valid YAML" : "Invalid YAML"}
             </Badge>
+            {validationErrors.length > 0 && (
+              <Badge variant="outline" className="text-xs">
+                {validationErrors.length} issue{validationErrors.length !== 1 ? 's' : ''}
+              </Badge>
+            )}
           </CardTitle>
           
           <div className="flex items-center gap-2">
@@ -248,6 +298,35 @@ export function MonacoTemplateEditor({
               }}
             />
           </div>
+          
+          {validationErrors.length > 0 && (
+            <div className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Validation Issues</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {validationErrors.map((error, index) => (
+                      <div 
+                        key={index} 
+                        className={`text-sm p-2 rounded border ${
+                          error.severity === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
+                          error.severity === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-800' :
+                          'bg-blue-50 border-blue-200 text-blue-800'
+                        }`}
+                      >
+                        <div className="font-medium">
+                          Line {error.line}, Column {error.column}
+                        </div>
+                        <div>{error.message}</div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
           
           {isPreviewVisible && (
             <div className="mt-4">

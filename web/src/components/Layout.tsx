@@ -4,7 +4,11 @@ import { Sidebar } from './layout/Sidebar'
 import { Header } from './layout/Header'
 import { Toaster } from 'react-hot-toast'
 
-export function Layout() {
+interface LayoutProps {
+  children?: React.ReactNode
+}
+
+export function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-background">
       <div className="flex h-screen">

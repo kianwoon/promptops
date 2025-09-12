@@ -1,19 +1,38 @@
 import { Routes, Route } from 'react-router-dom'
+import { Landing } from './pages/Landing'
+import { Login } from './pages/Login'
+import { Register } from './pages/Register'
+import { GoogleCallback } from './pages/GoogleCallback'
 import { Dashboard } from './pages/Dashboard'
 import { Templates } from './pages/Templates'
 import { TemplateEditor } from './pages/TemplateEditor'
 import { Deployments } from './pages/Deployments'
 import { Evaluations } from './pages/Evaluations'
 import { Governance } from './pages/Governance'
-import { Settings } from './pages/Settings'
+import { SettingsPage as Settings } from './pages/Settings'
+import { UserManagement } from './pages/UserManagement'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 
 function App() {
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
+    <Routes>
+      {/* Public Routes */}
+      <Route path="/" element={<Landing />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/auth/google/callback" element={<GoogleCallback />} />
+      
+      {/* Protected Routes */}
+      <Route element={<Layout />}>
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/templates"
           element={
@@ -63,6 +82,14 @@ function App() {
           }
         />
         <Route
+          path="/users"
+          element={
+            <ProtectedRoute requiredRoles={['admin']}>
+              <UserManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/settings"
           element={
             <ProtectedRoute>
@@ -70,8 +97,8 @@ function App() {
             </ProtectedRoute>
           }
         />
-      </Routes>
-    </Layout>
+      </Route>
+    </Routes>
   )
 }
 
