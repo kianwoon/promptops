@@ -1,0 +1,13 @@
+# Core dependencies
+httpx>=0.25.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+cryptography>=41.0.0
+structlog>=23.2.0
+tenacity>=8.2.0
+typing-extensions>=4.8.0
+
+# Optional dependencies for enhanced functionality
+redis>=5.0.0  # For Redis caching
+opentelemetry-api>=1.21.0  # For telemetry
+opentelemetry-sdk>=1.21.0

@@ -1,7 +1,7 @@
 ---
 name: codebase-error-analyzer
 description: PROACTIVELY analyze errors for deep root causes and systemic prevention. Use when bugs appear, stack traces need analysis, or patterns of failures emerge. Expert in multi-dimensional error analysis and technical debt archaeology.
-model: glm-4.5-air
+model: Sonnet
 color: green
 ---
 

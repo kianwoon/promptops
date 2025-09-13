@@ -9,12 +9,37 @@
 2. ✅ **tasks delegation to subagent**: delegate tassk to subagent!]
 3. ✅ **Request specific sections with offset/limit**: Instead of reading the entire large files, first use grep to find all class definitions and main function signatures in notebooks.py and notebook_rag_service.py, then we can dive deeper into specific areas of interest.
 
+## 🚨 CRITICAL: Mandatory Agent Delegation
+
+**ABSOLUTE RULE**: Claude Code MUST delegate task to subagent.
+
 ## 🔄 Sequential Agent Delegation
 
 ### Proactive Assignment Rules
 - Release agents after EACH task
 - Break large work into sequential chunks
 - Match agent expertise to task type
+
+## 🚨 Common Failures to Avoid
+
+### 1. Superficial Pattern Matching
+**NEVER** choose files based on keywords when user specifies exact file/location
+- User says "langchain.py line 1644" → ONLY use langchain.py
+- Radiating mode is ONLY in langchain.py, nowhere else
+
+
+### 2. Guessing Instead of Searching
+**NEVER** proceed with <90% confidence - use WebSearch instead
+
+## 🔍 When to Use WebSearch
+
+### Required for:
+- Current API documentation (FastAPI, React, PostgreSQL versions)
+- Recent library syntax changes or deprecations
+- Latest best practices for libraries/frameworks
+- Error messages not in knowledge base
+- Performance optimization techniques
+- Security vulnerability fixes
 
 ## 🔴 Core Rules - NO EXCEPTIONS
 

@@ -1,7 +1,7 @@
 ---
 name: senior-coder
 description: PROACTIVELY review architectural patterns and design decisions. Use for architectural questions, pattern validation, technical debt analysis, or when deep system understanding is needed.
-model: glm-4.5
+model: Opus
 color: cyan
 ---
 

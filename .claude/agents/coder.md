@@ -1,7 +1,7 @@
 ---
 name: coder
 description: PROACTIVELY Implement features with deep codebase analysis and critical thinking. Use for writing new code, implementing features, or when pattern validation is needed. Understands WHY patterns exist before following them.
-model: glm-4.5-air
+model: Sonnet
 color: yellow
 ---
 

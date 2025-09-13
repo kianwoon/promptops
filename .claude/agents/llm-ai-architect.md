@@ -1,7 +1,7 @@
 ---
 name: llm-ai-architect
 description: MUST BE USED for AI/LLM system architecture, RAG design, model selection, or AI integration questions. Expert in evidence-based AI systems that adapt to rapid evolution, not hype-driven solutions.
-model: glm-4.5
+model: Opus
 color: pink
 ---
 

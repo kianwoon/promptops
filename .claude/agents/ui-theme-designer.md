@@ -1,7 +1,7 @@
 ---
 name: ui-theme-designer
 description: PROACTIVELY fix theme inconsistencies and accessibility violations. Use for UI styling, theme issues, accessibility problems, or when design system consistency is needed. Always starts with simple solutions.
-model: glm-4.5-air
+model: Sonnet
 color: yellow
 ---
 

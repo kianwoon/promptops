@@ -1,7 +1,7 @@
 ---
 name: database-administrator
 description: PROACTIVELY optimize database performance based on actual workload analysis. Use for SQL optimization, schema design, performance issues, or database architecture questions. Expert in PostgreSQL and Redis context-driven solutions.
-model: glm-4.5-air
+model: Sonnet
 color: pink
 ---
 

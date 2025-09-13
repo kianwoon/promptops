@@ -1,13 +1,15 @@
-from fastapi import FastAPI, Security
+from fastapi import FastAPI, Security, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from app.middleware import ClientAPIMiddleware, SecurityHeadersMiddleware, RequestIDMiddleware
+from app.auth import get_current_user
 import structlog
 from contextlib import asynccontextmanager
 
 from app.config import settings
 from app.database import engine
 from app.models import Base
-from app.routers import templates, render, aliases, evals, policies, auth, projects, modules, prompts, model_compatibilities, approval_requests, delivery, dashboard, users
+from app.routers import templates, render, aliases, evals, policies, auth, projects, modules, prompts, model_compatibilities, approval_requests, delivery, dashboard, users, client_api, analytics
 
 # Configure structured logging
 structlog.configure(
@@ -45,6 +47,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Add security middleware
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Add request ID middleware
+app.add_middleware(RequestIDMiddleware)
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -54,13 +62,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add client API middleware
+app.add_middleware(ClientAPIMiddleware)
+
 # Security
 security = HTTPBearer()
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)):
-    # TODO: Implement proper JWT validation
-    # For now, just return a mock user
-    return {"user_id": "demo-user", "tenant": "demo-tenant"}
 
 # Include routers
 app.include_router(templates.router, prefix="/v1/templates", tags=["templates"])
@@ -79,6 +85,24 @@ app.include_router(approval_requests.router, prefix="/v1/approval-requests", tag
 app.include_router(delivery.router, prefix="/v1", tags=["runtime-delivery"])
 app.include_router(dashboard.router, prefix="/v1", tags=["dashboard"])
 app.include_router(users.router, prefix="/v1/users", tags=["users"])
+
+# Include Client API endpoints
+app.include_router(client_api.router, prefix="/v1/client", tags=["client-api"])
+
+# Simple user dependency for development
+async def get_current_user_dev():
+    return {"user_id": "demo-user", "tenant": "demo-tenant", "role": "admin"}
+
+# Add current user dependency for authentication
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    # Add current user to request state for routes that need it
+    # This is a simplified approach - in production you'd want proper JWT validation middleware
+    request.state.current_user = await get_current_user_dev()
+    return await call_next(request)
+
+# Include Analytics endpoints
+app.include_router(analytics.router, prefix="/v1/analytics", tags=["analytics"])
 
 @app.get("/")
 async def root():

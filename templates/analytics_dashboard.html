@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PromptOps Analytics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            color: #2c3e50;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 300;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            text-align: center;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .dashboard-controls {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .control-group input, .control-group select {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+        }
+
+        .metric-card.warning {
+            border-left-color: #f39c12;
+        }
+
+        .metric-card.error {
+            border-left-color: #e74c3c;
+        }
+
+        .metric-card.success {
+            border-left-color: #27ae60;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-label {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-change {
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .metric-change.positive {
+            color: #27ae60;
+        }
+
+        .metric-change.negative {
+            color: #e74c3c;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #2c3e50;
+        }
+
+        .alerts-section {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+
+        .alerts-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .alert-item {
+            padding: 1rem;
+            border-left: 4px solid;
+            margin-bottom: 1rem;
+            border-radius: 5px;
+            background: #f8f9fa;
+        }
+
+        .alert-item.high {
+            border-left-color: #e74c3c;
+        }
+
+        .alert-item.medium {
+            border-left-color: #f39c12;
+        }
+
+        .alert-item.low {
+            border-left-color: #3498db;
+        }
+
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .alert-title {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .alert-time {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .alert-message {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .top-prompts {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .prompt-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .prompt-item:last-child {
+            border-bottom: none;
+        }
+
+        .prompt-info {
+            flex: 1;
+        }
+
+        .prompt-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .prompt-details {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .prompt-metrics {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .metric-badge {
+            background: #667eea;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+
+        .error {
+            background: #e74c3c;
+            color: white;
+            padding: 1rem;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .dashboard-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>PromptOps Analytics Dashboard</h1>
+            <p>Real-time insights into your prompt usage and system performance</p>
+        </div>
+
+        <div class="dashboard-controls">
+            <div class="control-group">
+                <label for="start-date">Start Date</label>
+                <input type="date" id="start-date" />
+            </div>
+            <div class="control-group">
+                <label for="end-date">End Date</label>
+                <input type="date" id="end-date" />
+            </div>
+            <div class="control-group">
+                <label for="project-filter">Project</label>
+                <select id="project-filter">
+                    <option value="">All Projects</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="group-by">Group By</label>
+                <select id="group-by">
+                    <option value="hour">Hour</option>
+                    <option value="day">Day</option>
+                    <option value="week">Week</option>
+                    <option value="month">Month</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="loadDashboardData()">Update Dashboard</button>
+        </div>
+
+        <div id="error-container"></div>
+
+        <div class="metrics-grid" id="metrics-grid">
+            <div class="loading">Loading metrics...</div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-container">
+                <h3 class="chart-title">Usage Over Time</h3>
+                <canvas id="usage-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3 class="chart-title">Token Usage</h3>
+                <canvas id="token-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3 class="chart-title">Cost Analysis</h3>
+                <canvas id="cost-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3 class="chart-title">Success Rate</h3>
+                <canvas id="success-chart"></canvas>
+            </div>
+        </div>
+
+        <div class="alerts-section">
+            <div class="alerts-header">
+                <h3>Active Alerts</h3>
+                <button class="btn btn-primary" onclick="acknowledgeAllAlerts()">Acknowledge All</button>
+            </div>
+            <div id="alerts-container">
+                <div class="loading">Loading alerts...</div>
+            </div>
+        </div>
+
+        <div class="top-prompts">
+            <h3 class="chart-title">Top Prompts</h3>
+            <div id="top-prompts-container">
+                <div class="loading">Loading top prompts...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables for charts
+        let usageChart, tokenChart, costChart, successChart;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDateDefaults();
+            loadDashboardData();
+            loadAlerts();
+            loadTopPrompts();
+
+            // Auto-refresh every 5 minutes
+            setInterval(loadDashboardData, 300000);
+            setInterval(loadAlerts, 60000);
+            setInterval(loadTopPrompts, 120000);
+        });
+
+        function initializeDateDefaults() {
+            const today = new Date();
+            const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+            document.getElementById('end-date').value = today.toISOString().split('T')[0];
+            document.getElementById('start-date').value = lastWeek.toISOString().split('T')[0];
+        }
+
+        async function loadDashboardData() {
+            try {
+                showLoading();
+                clearError();
+
+                const startDate = document.getElementById('start-date').value;
+                const endDate = document.getElementById('end-date').value;
+                const projectFilter = document.getElementById('project-filter').value;
+                const groupBy = document.getElementById('group-by').value;
+
+                // Build query parameters
+                const params = new URLSearchParams({
+                    start_date: startDate,
+                    end_date: endDate,
+                    group_by: groupBy
+                });
+
+                if (projectFilter) {
+                    params.append('project_id', projectFilter);
+                }
+
+                const response = await fetch(`/v1/analytics/usage/overview?${params}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to load dashboard data');
+                }
+
+                updateMetrics(data.summary);
+                updateCharts(data.time_series, groupBy);
+                hideLoading();
+
+            } catch (error) {
+                showError(`Failed to load dashboard data: ${error.message}`);
+                hideLoading();
+            }
+        }
+
+        function updateMetrics(summary) {
+            const metricsGrid = document.getElementById('metrics-grid');
+
+            metricsGrid.innerHTML = `
+                <div class="metric-card success">
+                    <div class="metric-value">${formatNumber(summary.total_requests)}</div>
+                    <div class="metric-label">Total Requests</div>
+                    <div class="metric-change positive">
+                        <span>↑ 12%</span>
+                        <span>vs last period</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">${formatNumber(summary.total_tokens_used)}</div>
+                    <div class="metric-label">Tokens Used</div>
+                    <div class="metric-change positive">
+                        <span>↑ 8%</span>
+                        <span>vs last period</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">$${summary.total_cost_usd}</div>
+                    <div class="metric-label">Total Cost</div>
+                    <div class="metric-change negative">
+                        <span>↑ 15%</span>
+                        <span>vs last period</span>
+                    </div>
+                </div>
+                <div class="metric-card ${summary.success_rate >= 0.95 ? 'success' : summary.success_rate >= 0.9 ? 'warning' : 'error'}">
+                    <div class="metric-value">${(summary.success_rate * 100).toFixed(1)}%</div>
+                    <div class="metric-label">Success Rate</div>
+                    <div class="metric-change positive">
+                        <span>↑ 2%</span>
+                        <span>vs last period</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">${summary.average_response_time_ms.toFixed(0)}ms</div>
+                    <div class="metric-label">Avg Response Time</div>
+                    <div class="metric-change negative">
+                        <span>↑ 5%</span>
+                        <span>vs last period</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">${formatNumber(summary.total_tokens_used / summary.total_requests)}</div>
+                    <div class="metric-label">Avg Tokens/Request</div>
+                    <div class="metric-change positive">
+                        <span>↑ 3%</span>
+                        <span>vs last period</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateCharts(timeSeries, groupBy) {
+            const labels = timeSeries.map(item => {
+                const date = new Date(item.timestamp);
+                if (groupBy === 'hour') {
+                    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                } else if (groupBy === 'day') {
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                } else {
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }
+            });
+
+            const requestData = timeSeries.map(item => item.request_count);
+            const tokenData = timeSeries.map(item => item.tokens_used);
+            const costData = timeSeries.map(item => parseFloat(item.cost_usd));
+            const successData = timeSeries.map(item => (item.success_rate * 100));
+
+            // Usage Chart
+            if (usageChart) usageChart.destroy();
+            const usageCtx = document.getElementById('usage-chart').getContext('2d');
+            usageChart = new Chart(usageCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Requests',
+                        data: requestData,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Token Chart
+            if (tokenChart) tokenChart.destroy();
+            const tokenCtx = document.getElementById('token-chart').getContext('2d');
+            tokenChart = new Chart(tokenCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Tokens Used',
+                        data: tokenData,
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Cost Chart
+            if (costChart) costChart.destroy();
+            const costCtx = document.getElementById('cost-chart').getContext('2d');
+            costChart = new Chart(costCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Cost (USD)',
+                        data: costData,
+                        backgroundColor: 'rgba(231, 76, 60, 0.8)',
+                        borderColor: '#e74c3c',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Success Rate Chart
+            if (successChart) successChart.destroy();
+            const successCtx = document.getElementById('success-chart').getContext('2d');
+            successChart = new Chart(successCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Success Rate (%)',
+                        data: successData,
+                        borderColor: '#27ae60',
+                        backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+
+        async function loadAlerts() {
+            try {
+                const response = await fetch('/v1/analytics/alerts?limit=10');
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to load alerts');
+                }
+
+                updateAlerts(data.alerts);
+
+            } catch (error) {
+                console.error('Failed to load alerts:', error);
+            }
+        }
+
+        function updateAlerts(alerts) {
+            const container = document.getElementById('alerts-container');
+
+            if (alerts.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #666; padding: 1rem;">No active alerts</p>';
+                return;
+            }
+
+            container.innerHTML = alerts.map(alert => `
+                <div class="alert-item ${alert.severity}">
+                    <div class="alert-header">
+                        <div class="alert-title">${alert.alert_name}</div>
+                        <div class="alert-time">${formatDateTime(alert.triggered_at)}</div>
+                    </div>
+                    <div class="alert-message">
+                        ${alert.additional_context?.message || `${alert.alert_type} alert triggered`}
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <small>Triggered value: ${alert.triggered_value} | Threshold: ${alert.threshold}</small>
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <button class="btn btn-primary" onclick="acknowledgeAlert('${alert.id}')">Acknowledge</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadTopPrompts() {
+            try {
+                const response = await fetch('/v1/analytics/usage/top-prompts?metric=usage&limit=10');
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to load top prompts');
+                }
+
+                updateTopPrompts(data.top_prompts);
+
+            } catch (error) {
+                console.error('Failed to load top prompts:', error);
+            }
+        }
+
+        function updateTopPrompts(prompts) {
+            const container = document.getElementById('top-prompts-container');
+
+            if (prompts.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #666; padding: 1rem;">No prompt data available</p>';
+                return;
+            }
+
+            container.innerHTML = prompts.map(prompt => `
+                <div class="prompt-item">
+                    <div class="prompt-info">
+                        <div class="prompt-name">${prompt.prompt_id}</div>
+                        <div class="prompt-details">
+                            ${prompt.model_provider} • ${prompt.model_name}
+                        </div>
+                    </div>
+                    <div class="prompt-metrics">
+                        <span class="metric-badge">${formatNumber(prompt.usage_count)} uses</span>
+                        <span class="metric-badge">#${prompt.rank}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function acknowledgeAlert(alertId) {
+            try {
+                const response = await fetch(`/v1/analytics/alerts/${alertId}/acknowledge`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    loadAlerts(); // Refresh alerts
+                }
+            } catch (error) {
+                console.error('Failed to acknowledge alert:', error);
+            }
+        }
+
+        async function acknowledgeAllAlerts() {
+            try {
+                const response = await fetch('/v1/analytics/alerts?limit=50');
+                const data = await response.json();
+
+                if (response.ok) {
+                    for (const alert of data.alerts) {
+                        if (alert.status === 'active') {
+                            await acknowledgeAlert(alert.id);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to acknowledge all alerts:', error);
+            }
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toString();
+        }
+
+        function formatDateTime(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function showLoading() {
+            document.getElementById('metrics-grid').innerHTML = '<div class="loading">Loading metrics...</div>';
+        }
+
+        function hideLoading() {
+            // Loading is hidden when content is updated
+        }
+
+        function showError(message) {
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.innerHTML = `<div class="error">${message}</div>`;
+            setTimeout(() => {
+                errorContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        function clearError() {
+            document.getElementById('error-container').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -143,6 +143,10 @@ class ModelSpecificPrompt(BaseModel):
     expected_output_format: Optional[str] = None
     instructions: Optional[str] = None
 
+    model_config = ConfigDict(
+        protected_namespaces=()
+    )
+
 class PromptCreate(BaseModel):
     id: str
     version: str
@@ -156,6 +160,10 @@ class PromptCreate(BaseModel):
     mas_testing_notes: Optional[str] = None
     mas_risk_level: str
     mas_approval_log: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(
+        protected_namespaces=()
+    )
 
 class PromptResponse(BaseModel):
     id: str
@@ -174,8 +182,10 @@ class PromptResponse(BaseModel):
     target_models: List[str]
     model_specific_prompts: List[ModelSpecificPrompt]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        protected_namespaces=(),
+        from_attributes=True
+    )
 
 class PromptUpdate(BaseModel):
     name: Optional[str] = None
@@ -188,6 +198,10 @@ class PromptUpdate(BaseModel):
     mas_risk_level: Optional[str] = None
     mas_approval_log: Optional[Dict[str, Any]] = None
 
+    model_config = ConfigDict(
+        protected_namespaces=()
+    )
+
 # ModelCompatibility schemas
 class ModelCompatibilityCreate(BaseModel):
     prompt_id: str
@@ -196,8 +210,9 @@ class ModelCompatibilityCreate(BaseModel):
     is_compatible: bool
     compatibility_notes: Optional[str] = None
 
-    class Config:
-        protected_namespaces = ()
+    model_config = ConfigDict(
+        protected_namespaces=()
+    )
 
 class ModelCompatibilityResponse(BaseModel):
     id: str
@@ -208,13 +223,18 @@ class ModelCompatibilityResponse(BaseModel):
     compatibility_notes: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-        protected_namespaces = ()
+    model_config = ConfigDict(
+        protected_namespaces=(),
+        from_attributes=True
+    )
 
 class ModelCompatibilityUpdate(BaseModel):
     is_compatible: Optional[bool] = None
     compatibility_notes: Optional[str] = None
+
+    model_config = ConfigDict(
+        protected_namespaces=()
+    )
 
 # ApprovalRequest schemas
 class ApprovalRequestCreate(BaseModel):
@@ -282,3 +302,176 @@ class UserUpdate(BaseModel):
     avatar: Optional[str] = None
     role: Optional[str] = None
     is_verified: Optional[bool] = None
+
+# Client API Schemas
+class ClientApiKeyCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+
+    # Rate limiting configuration
+    rate_limit_per_minute: int = Field(default=60, ge=1, le=10000)
+    rate_limit_per_hour: int = Field(default=3600, ge=1, le=100000)
+    rate_limit_per_day: int = Field(default=86400, ge=1, le=1000000)
+
+    # Permissions
+    allowed_projects: Optional[List[str]] = None  # None means all projects
+    allowed_scopes: List[str] = Field(default=["read"], min_items=1)
+
+    # Optional expiration
+    expires_at: Optional[datetime] = None
+
+class ClientApiKeyResponse(BaseModel):
+    id: str
+    user_id: str
+    tenant_id: str
+    name: str
+    description: Optional[str] = None
+    api_key_prefix: str
+    api_key: Optional[str] = None  # Decrypted API key if available
+    secret_key: Optional[str] = None  # Decrypted secret key if available
+    rate_limit_per_minute: int
+    rate_limit_per_hour: int
+    rate_limit_per_day: int
+    allowed_projects: Optional[List[str]] = None
+    allowed_scopes: List[str]
+    status: str
+    last_used_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ClientApiKeyUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    rate_limit_per_minute: Optional[int] = Field(None, ge=1, le=10000)
+    rate_limit_per_hour: Optional[int] = Field(None, ge=1, le=100000)
+    rate_limit_per_day: Optional[int] = Field(None, ge=1, le=1000000)
+    allowed_projects: Optional[List[str]] = None
+    allowed_scopes: Optional[List[str]] = Field(None, min_items=1)
+    expires_at: Optional[datetime] = None
+
+class ClientApiKeyCreateResponse(BaseModel):
+    api_key: str
+    secret_key: str
+    api_key_data: ClientApiKeyResponse
+
+class UsageLogCreate(BaseModel):
+    endpoint: str
+    method: str
+    prompt_id: Optional[str] = None
+    project_id: Optional[str] = None
+    tokens_requested: Optional[int] = None
+    tokens_used: Optional[int] = None
+    response_size: Optional[int] = None
+    processing_time_ms: Optional[int] = None
+    estimated_cost_usd: Optional[str] = None
+    status_code: int
+    error_message: Optional[str] = None
+    user_agent: Optional[str] = None
+    ip_address: Optional[str] = None
+    request_id: Optional[str] = None
+
+class UsageLogResponse(BaseModel):
+    id: str
+    api_key_id: str
+    user_id: str
+    tenant_id: str
+    endpoint: str
+    method: str
+    prompt_id: Optional[str] = None
+    project_id: Optional[str] = None
+    tokens_requested: Optional[int] = None
+    tokens_used: Optional[int] = None
+    response_size: Optional[int] = None
+    processing_time_ms: Optional[int] = None
+    estimated_cost_usd: Optional[str] = None
+    status_code: int
+    error_message: Optional[str] = None
+    user_agent: Optional[str] = None
+    ip_address: Optional[str] = None
+    request_id: Optional[str] = None
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+class UsageStatsRequest(BaseModel):
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    prompt_id: Optional[str] = None
+    project_id: Optional[str] = None
+
+class UsageStatsResponse(BaseModel):
+    total_requests: int
+    total_tokens_requested: int
+    total_tokens_used: int
+    total_cost_usd: str
+    average_response_time_ms: float
+    success_rate: float
+    requests_by_endpoint: Dict[str, int]
+    requests_by_hour: List[Dict[str, Any]]
+    top_prompts: List[Dict[str, Any]]
+    period_start: datetime
+    period_end: datetime
+
+class UsageLimitsResponse(BaseModel):
+    current_usage_minute: int
+    current_usage_hour: int
+    current_usage_day: int
+    limits_minute: int
+    limits_hour: int
+    limits_day: int
+    remaining_minute: int
+    remaining_hour: int
+    remaining_day: int
+    reset_time_minute: datetime
+    reset_time_hour: datetime
+    reset_time_day: datetime
+
+class APIKeyValidationRequest(BaseModel):
+    api_key: str
+    signature: str
+    timestamp: str
+    endpoint: str
+    method: str
+
+class APIKeyValidationResponse(BaseModel):
+    valid: bool
+    api_key_id: Optional[str] = None
+    user_id: Optional[str] = None
+    tenant_id: Optional[str] = None
+    scopes: List[str] = []
+    allowed_projects: Optional[List[str]] = None
+    rate_limits: Optional[Dict[str, int]] = None
+    error: Optional[str] = None
+
+class BatchPromptRequest(BaseModel):
+    prompt_ids: List[str] = Field(..., min_items=1, max_items=100)
+    project_id: Optional[str] = None
+    include_versions: bool = False
+    include_metadata: bool = False
+
+class BatchPromptResponse(BaseModel):
+    prompts: Dict[str, Any]
+    errors: List[Dict[str, str]]
+    total_requested: int
+    total_found: int
+
+class PromptSearchRequest(BaseModel):
+    query: Optional[str] = None
+    project_id: Optional[str] = None
+    module_id: Optional[str] = None
+    limit: int = Field(default=50, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+    sort_by: str = Field(default="created_at", pattern="^(created_at|updated_at|name)$")
+    sort_order: str = Field(default="desc", pattern="^(asc|desc)$")
+
+class PromptSearchResponse(BaseModel):
+    prompts: List[Dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool

@@ -18,6 +18,7 @@ import { Profile } from './pages/Profile'
 import { UserManagement } from './pages/UserManagement'
 import { Projects } from './pages/Projects'
 import { ProjectDetail } from './pages/ProjectDetail'
+import { ApiKeysPage } from './pages/ApiKeys'
 import { Layout } from './components/Layout'
 import { PublicLayoutWrapper } from './components/PublicLayoutWrapper'
 import { DevProtectedRoute as ProtectedRoute } from './components/auth/DevProtectedRoute'
@@ -151,6 +152,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Settings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/api-keys"
+            element={
+              <ProtectedRoute>
+                <ApiKeysPage />
               </ProtectedRoute>
             }
           />
