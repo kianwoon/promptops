@@ -373,7 +373,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
     localStorage.removeItem('user')
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
+    localStorage.removeItem('dev_auth')
+    localStorage.removeItem('auth_reloaded')
+
+    // Dispatch logout action
     dispatch({ type: 'LOGOUT' })
+
+    // In development, prevent auto-reauthentication by adding a flag
+    if (import.meta.env.DEV) {
+      localStorage.setItem('logout_manual', 'true')
+    }
+
+    // Redirect to login page
+    window.location.href = '/login'
   }
 
   const updateUser = (userData: Partial<User>): void => {

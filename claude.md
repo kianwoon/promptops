@@ -9,6 +9,12 @@
 2. ✅ **tasks delegation to subagent**: delegate tassk to subagent!]
 3. ✅ **Request specific sections with offset/limit**: Instead of reading the entire large files, first use grep to find all class definitions and main function signatures in notebooks.py and notebook_rag_service.py, then we can dive deeper into specific areas of interest.
 
+## 🔄 Sequential Agent Delegation
+
+### Proactive Assignment Rules
+- Release agents after EACH task
+- Break large work into sequential chunks
+- Match agent expertise to task type
 
 ## 🔴 Core Rules - NO EXCEPTIONS
 
@@ -22,3 +28,10 @@
 8. **the propose solution should not just targeted for specific case. it should serve general cases**
 9. **Forbidden to use REGEX to create pattern for case route**
 10. **Forbidden to use hardcode approach like keywords matching. Go to HELL if you think or do so**
+
+## 📊 Progress Communication
+
+After each task:
+- Report: "✅ Completed: [task]"
+- Show: "📋 Progress: [3/7 complete]"
+- Next: "🔄 Starting: [next task]"

@@ -27,7 +27,9 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { useAuth, useRequireAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { useUsers } from '@/hooks/api'
+import { getDevelopmentUser } from '@/lib/devConfig'
 import { formatDate } from '@/lib/utils'
 
 interface UserData {
@@ -37,73 +39,59 @@ interface UserData {
   role: 'admin' | 'user' | 'viewer'
   organization: string
   status: 'active' | 'inactive' | 'pending'
-  lastLogin: string
+  lastLogin: string | null
   createdAt: string
   avatar?: string
 }
 
 export function UserManagement() {
-  const { user: currentUser, hasPermission } = useRequireAuth(['admin'])
+  // Development fallback - if auth context has issues, provide a default user
+  let currentUser = null
+  let hasPermission = (permission: string) => false
+  let isAuthenticated = false
+  let isLoading = false
+
+  try {
+    const auth = useAuth()
+    currentUser = auth.user
+    hasPermission = auth.hasPermission
+    isAuthenticated = auth.isAuthenticated
+    isLoading = auth.isLoading
+  } catch (error) {
+    console.warn('Auth context not available, using development mode')
+    // In development, create a mock admin user from config
+    if (import.meta.env.DEV) {
+      const devUser = getDevelopmentUser()
+      if (devUser) {
+        currentUser = devUser
+        isAuthenticated = true
+        hasPermission = (permission: string) => true // Admin has all permissions
+      }
+    }
+  }
+
+  // Fetch real users from API
+  const { data: users, isLoading: usersLoading } = useUsers()
+
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>('all')
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user' | 'viewer'>('all')
   const [selectedUsers, setSelectedUsers] = useState<string[]>([])
 
-  // Mock user data
-  const mockUsers: UserData[] = [
-    {
-      id: '1',
-      name: 'John Admin',
-      email: 'admin@company.com',
-      role: 'admin',
-      organization: 'Acme Corp',
-      status: 'active',
-      lastLogin: '2024-01-20T10:30:00Z',
-      createdAt: '2024-01-15T10:30:00Z',
-    },
-    {
-      id: '2',
-      name: 'Jane User',
-      email: 'user@company.com',
-      role: 'user',
-      organization: 'Acme Corp',
-      status: 'active',
-      lastLogin: '2024-01-19T14:20:00Z',
-      createdAt: '2024-02-01T14:20:00Z',
-    },
-    {
-      id: '3',
-      name: 'Bob Viewer',
-      email: 'viewer@company.com',
-      role: 'viewer',
-      organization: 'Acme Corp',
-      status: 'active',
-      lastLogin: '2024-01-18T09:45:00Z',
-      createdAt: '2024-02-15T09:45:00Z',
-    },
-    {
-      id: '4',
-      name: 'Alice Manager',
-      email: 'alice@company.com',
-      role: 'user',
-      organization: 'Acme Corp',
-      status: 'inactive',
-      lastLogin: '2024-01-10T16:30:00Z',
-      createdAt: '2024-01-10T16:30:00Z',
-    },
-    {
-      id: '5',
-      name: 'Charlie Developer',
-      email: 'charlie@company.com',
-      role: 'user',
-      organization: 'Acme Corp',
-      status: 'pending',
-      lastLogin: null,
-      createdAt: '2024-01-20T11:15:00Z',
-    },
-  ]
+  // Transform API users to match UserData interface
+  const apiUsers: UserData[] = users?.map(user => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    organization: user.organization || 'No Organization',
+    status: 'active', // Default to active for now
+    lastLogin: null, // API doesn't provide this yet
+    createdAt: user.createdAt || new Date().toISOString(),
+    avatar: user.avatar
+  })) || []
 
-  const filteredUsers = mockUsers.filter(user => {
+  const filteredUsers = apiUsers.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.organization.toLowerCase().includes(searchTerm.toLowerCase())
@@ -157,7 +145,33 @@ export function UserManagement() {
     }
   }
 
-  if (!hasPermission('users:read')) {
+  // Handle loading state
+  if (isLoading || usersLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    )
+  }
+
+  // Check if user is authenticated and has required permissions
+  const isAdmin = currentUser?.role === 'admin'
+  const canViewUsers = hasPermission('users:read') || isAdmin
+
+  // If not authenticated, show loading or redirect
+  if (!isAuthenticated || !currentUser) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Authenticating...</h3>
+          <p className="text-gray-600">Please wait while we verify your session.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!canViewUsers) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -196,7 +210,7 @@ export function UserManagement() {
               <Users className="h-8 w-8 text-blue-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Users</p>
-                <p className="text-2xl font-bold text-gray-900">{mockUsers.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{apiUsers.length}</p>
               </div>
             </div>
           </CardContent>
@@ -209,7 +223,7 @@ export function UserManagement() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Active Users</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {mockUsers.filter(u => u.status === 'active').length}
+                  {apiUsers.filter(u => u.status === 'active').length}
                 </p>
               </div>
             </div>
@@ -223,7 +237,7 @@ export function UserManagement() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Inactive Users</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {mockUsers.filter(u => u.status === 'inactive').length}
+                  {apiUsers.filter(u => u.status === 'inactive').length}
                 </p>
               </div>
             </div>
@@ -237,7 +251,7 @@ export function UserManagement() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Admin Users</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {mockUsers.filter(u => u.role === 'admin').length}
+                  {apiUsers.filter(u => u.role === 'admin').length}
                 </p>
               </div>
             </div>

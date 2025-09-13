@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dropdown Menu Debug</title>
+</head>
+<body>
+    <h1>Dropdown Menu Debug Instructions</h1>
+
+    <h2>Current Issue:</h2>
+    <p>Clicking "Settings" in the avatar dropdown menu doesn't navigate to the settings page.</p>
+
+    <h2>Debug Steps:</h2>
+    <ol>
+        <li>Open http://localhost:3000 in your browser</li>
+        <li>Press F12 to open Developer Tools</li>
+        <li>Go to the Console tab</li>
+        <li>Click on your avatar in the top-right corner</li>
+        <li>Click on "Settings" in the dropdown menu</li>
+        <li>Look for console messages:
+            <ul>
+                <li>You should see: "Settings clicked, navigating to /settings"</li>
+                <li>If you don't see this message, the click handler isn't working</li>
+                <li>If you see the message but no navigation, there's a routing issue</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>What to Check:</h2>
+    <ul>
+        <li><strong>Console Errors:</strong> Look for any JavaScript errors</li>
+        <li><strong>Network Tab:</strong> Check if the navigation request is being made</li>
+        <li><strong>Elements Tab:</strong> Verify the dropdown menu items are properly rendered</li>
+    </ul>
+
+    <h2>Alternative Test:</h2>
+    <p>If dropdown doesn't work, try typing these URLs directly in the browser:</p>
+    <ul>
+        <li>http://localhost:3000/settings</li>
+        <li>http://localhost:3000/profile</li>
+    </ul>
+    <p>If these work, the issue is specifically with the dropdown menu click handlers.</p>
+
+    <h2>Expected Behavior:</h2>
+    <ul>
+        <li>Clicking Settings → Navigate to /settings</li>
+        <li>Clicking Profile → Navigate to /profile</li>
+        <li>Clicking Logout → Navigate to /login</li>
+    </ul>
+
+    <div id="test-results"></div>
+
+    <script>
+        // Simple test to check if frontend is accessible
+        fetch('http://localhost:3000')
+            .then(response => {
+                if (response.ok) {
+                    document.getElementById('test-results').innerHTML =
+                        '<p style="color: green;">✅ Frontend is accessible at http://localhost:3000</p>';
+                } else {
+                    document.getElementById('test-results').innerHTML =
+                        '<p style="color: red;">❌ Frontend not responding properly</p>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('test-results').innerHTML =
+                    '<p style="color: red;">❌ Cannot connect to frontend</p>';
+            });
+    </script>
+</body>
+</html>

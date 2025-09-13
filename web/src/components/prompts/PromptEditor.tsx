@@ -1,0 +1,681 @@
+import React, { useRef, useEffect, useState } from 'react'
+import Editor from '@monaco-editor/react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Save,
+  Play,
+  Eye,
+  EyeOff,
+  Shield,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  TestTube,
+  Send,
+  GitCommit,
+  BarChart3,
+  FileText
+} from 'lucide-react'
+import { usePrompt, useUpdatePrompt, useCreatePrompt, useModelCompatibilities, useTestPromptCompatibility, useCompatibilityMatrix, useApprovalRequests, useCreateApprovalRequest } from '@/hooks/api'
+import type { Prompt, PromptCreate, PromptUpdate } from '@/types/api'
+import { formatDistanceToNow } from 'date-fns'
+
+interface PromptEditorProps {
+  projectId?: string
+  moduleId?: string
+  promptId?: string
+  version?: string
+  isNew?: boolean
+  onSave?: (prompt: Prompt) => void
+  onCancel?: () => void
+}
+
+interface MASComplianceValidation {
+  isValid: boolean
+  errors: string[]
+  warnings: string[]
+}
+
+export function PromptEditor({
+  projectId,
+  moduleId,
+  promptId,
+  version = '1.0.0',
+  isNew = false,
+  onSave,
+  onCancel
+}: PromptEditorProps) {
+  const editorRef = useRef<any>(null)
+  const [content, setContent] = useState('')
+  const [description, setDescription] = useState('')
+  const [masIntent, setMasIntent] = useState('')
+  const [masFairnessNotes, setMasFairnessNotes] = useState('')
+  const [masTestingNotes, setMasTestingNotes] = useState('')
+  const [masRiskLevel, setMasRiskLevel] = useState<'low' | 'medium' | 'high'>('low')
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
+  const [validation, setValidation] = useState<MASComplianceValidation>({ isValid: true, errors: [], warnings: [] })
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false)
+  const [activeTab, setActiveTab] = useState('content')
+
+  const { data: prompt, isLoading } = usePrompt(promptId || '', version || '')
+  const updatePrompt = useUpdatePrompt()
+  const createPrompt = useCreatePrompt()
+  const { data: compatibilities } = useModelCompatibilities(promptId)
+  const { data: matrix } = useCompatibilityMatrix(promptId || '', version)
+  const { data: approvalRequests } = useApprovalRequests(promptId)
+  const testCompatibility = useTestPromptCompatibility()
+  const createApprovalRequest = useCreateApprovalRequest()
+
+  // Initialize form with prompt data if editing
+  useEffect(() => {
+    if (prompt && !isNew) {
+      setContent(prompt.model_specific_prompts?.[0]?.content || '')
+      setDescription(prompt.description || '')
+      setMasIntent(prompt.mas_intent)
+      setMasFairnessNotes(prompt.mas_fairness_notes)
+      setMasTestingNotes(prompt.mas_testing_notes || '')
+      setMasRiskLevel(prompt.mas_risk_level as 'low' | 'medium' | 'high')
+    }
+  }, [prompt, isNew])
+
+  const handleEditorDidMount = (editor: any) => {
+    editorRef.current = editor
+
+    // Configure editor options for prompt editing
+    editor.updateOptions({
+      fontSize: 14,
+      tabSize: 2,
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      automaticLayout: true,
+      wordWrap: 'on',
+      lineNumbers: 'on',
+      renderLineHighlight: 'all',
+      selectOnLineNumbers: true,
+      matchBrackets: 'always',
+      autoIndent: 'advanced',
+      formatOnPaste: true,
+      formatOnType: true,
+      quickSuggestions: true,
+      suggestOnTriggerCharacters: true,
+      acceptSuggestionOnEnter: 'on',
+      tabCompletion: 'on',
+      wordBasedSuggestions: true,
+      parameterHints: { enabled: true }
+    })
+  }
+
+  // Configure editor language for prompts
+  useEffect(() => {
+    if (editorRef.current) {
+      const editor = editorRef.current
+      const model = editor.getModel()
+      if (model) {
+        // Set language to markdown for prompt editing
+        const monaco = (window as any).monaco
+        if (monaco) {
+          monaco.editor.setModelLanguage(model, 'markdown')
+        }
+      }
+    }
+  }, [editorRef.current])
+
+  const validateMASCompliance = (): MASComplianceValidation => {
+    const errors: string[] = []
+    const warnings: string[] = []
+
+    // Required fields validation
+    if (!masIntent.trim()) {
+      errors.push('MAS Intent is required')
+    }
+
+    if (!masFairnessNotes.trim()) {
+      errors.push('MAS Fairness Notes are required')
+    }
+
+    // Risk level validation
+    if (masRiskLevel === 'high') {
+      warnings.push('High risk prompts require approval before deployment')
+    }
+
+    // Content validation
+    if (content.length < 50) {
+      warnings.push('Prompt content seems too short for effective use')
+    }
+
+    // Sensitive content detection
+    const sensitiveKeywords = ['password', 'secret', 'confidential', 'personal information']
+    const hasSensitiveContent = sensitiveKeywords.some(keyword =>
+      content.toLowerCase().includes(keyword)
+    )
+
+    if (hasSensitiveContent) {
+      errors.push('Prompt contains potentially sensitive content that requires additional safeguards')
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    }
+  }
+
+  const handleSave = async () => {
+    const complianceValidation = validateMASCompliance()
+    setValidation(complianceValidation)
+
+    if (!complianceValidation.isValid) {
+      return
+    }
+
+    try {
+      if (isNew && moduleId) {
+        const newPrompt: PromptCreate = {
+          id: promptId || `prompt-${Date.now()}`,
+          version,
+          module_id: moduleId,
+          name: description || 'Untitled Prompt',
+          description,
+          target_models: ['openai'], // Default to OpenAI for now
+          model_specific_prompts: [{
+            model_provider: 'openai',
+            model_name: 'gpt-4',
+            content,
+            expected_output_format: '',
+            instructions: ''
+          }],
+          mas_intent: masIntent,
+          mas_fairness_notes: masFairnessNotes,
+          mas_testing_notes: masTestingNotes,
+          mas_risk_level: masRiskLevel
+        }
+
+        const result = await createPrompt.mutateAsync(newPrompt)
+        onSave?.(result.data)
+      } else if (promptId && version) {
+        const updateData: PromptUpdate = {
+          description,
+          mas_intent: masIntent,
+          mas_fairness_notes: masFairnessNotes,
+          mas_testing_notes: masTestingNotes,
+          mas_risk_level: masRiskLevel
+        }
+
+        const result = await updatePrompt.mutateAsync({
+          promptId,
+          version,
+          prompt: updateData
+        })
+        onSave?.(result.data)
+      }
+    } catch (error) {
+      console.error('Failed to save prompt:', error)
+    }
+  }
+
+  const handleTestCompatibility = async () => {
+    if (!promptId || !version) return
+
+    setIsTesting(true)
+    try {
+      await testCompatibility.mutateAsync({
+        promptId,
+        version,
+        providers: ['openai', 'anthropic', 'google']
+      })
+    } catch (error) {
+      console.error('Compatibility test failed:', error)
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
+  const handleSubmitForApproval = async () => {
+    if (!promptId) return
+
+    try {
+      await createApprovalRequest.mutateAsync({
+        prompt_id: promptId,
+        requested_by: 'current-user', // This would come from auth context
+        status: 'pending'
+      })
+      setShowApprovalDialog(false)
+    } catch (error) {
+      console.error('Failed to create approval request:', error)
+    }
+  }
+
+  const getRiskLevelColor = (risk: string) => {
+    switch (risk) {
+      case 'low': return 'bg-green-100 text-green-800 border-green-200'
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'high': return 'bg-red-100 text-red-800 border-red-200'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
+  }
+
+  const getRiskLevelIcon = (risk: string) => {
+    switch (risk) {
+      case 'low': return <CheckCircle className="w-4 h-4" />
+      case 'medium': return <AlertTriangle className="w-4 h-4" />
+      case 'high': return <Shield className="w-4 h-4" />
+      default: return null
+    }
+  }
+
+  if (isLoading && !isNew) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {isNew ? 'Create New Prompt' : `Edit Prompt: ${promptId || 'Untitled'}`}
+          </h1>
+          <p className="text-muted-foreground">
+            {isNew ? 'Create a new prompt with MAS FEAT compliance' : `Version ${version}`}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <Badge
+            variant="outline"
+            className={`flex items-center gap-2 ${getRiskLevelColor(masRiskLevel)}`}
+          >
+            {getRiskLevelIcon(masRiskLevel)}
+            {masRiskLevel.toUpperCase()} Risk
+          </Badge>
+
+          {!isNew && (
+            <Button
+              variant="outline"
+              onClick={() => setShowApprovalDialog(true)}
+              disabled={masRiskLevel !== 'high'}
+            >
+              <Send className="w-4 h-4 mr-2" />
+              Submit for Approval
+            </Button>
+          )}
+
+          <Button onClick={handleSave} disabled={!validation.isValid}>
+            <Save className="w-4 h-4 mr-2" />
+            {isNew ? 'Create' : 'Save'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Validation Errors */}
+      {validation.errors.length > 0 && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="space-y-1">
+              <strong>Please fix the following errors:</strong>
+              {validation.errors.map((error, index) => (
+                <div key={index}>• {error}</div>
+              ))}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Validation Warnings */}
+      {validation.warnings.length > 0 && (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="space-y-1">
+              <strong>Warnings:</strong>
+              {validation.warnings.map((warning, index) => (
+                <div key={index}>• {warning}</div>
+              ))}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="content" className="flex items-center">
+            <FileText className="w-4 h-4 mr-2" />
+            Content
+          </TabsTrigger>
+          <TabsTrigger value="compliance" className="flex items-center">
+            <Shield className="w-4 h-4 mr-2" />
+            MAS FEAT
+          </TabsTrigger>
+          <TabsTrigger value="testing" className="flex items-center">
+            <TestTube className="w-4 h-4 mr-2" />
+            Testing
+          </TabsTrigger>
+          <TabsTrigger value="versions" className="flex items-center">
+            <GitCommit className="w-4 h-4 mr-2" />
+            History
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="content" className="space-y-4">
+          {/* Basic Info */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Basic Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Input
+                    id="description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Brief description of this prompt"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="risk-level">MAS Risk Level</Label>
+                  <Select value={masRiskLevel} onValueChange={(value: 'low' | 'medium' | 'high') => setMasRiskLevel(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low Risk</SelectItem>
+                      <SelectItem value="medium">Medium Risk</SelectItem>
+                      <SelectItem value="high">High Risk</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Editor */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardTitle>Prompt Content</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsPreviewVisible(!isPreviewVisible)}
+              >
+                {isPreviewVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {isPreviewVisible ? "Hide Preview" : "Show Preview"}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="border rounded-md overflow-hidden">
+                <Editor
+                  height="600px"
+                  language="markdown"
+                  theme="vs-dark"
+                  value={content}
+                  onChange={(value) => setContent(value || '')}
+                  onMount={handleEditorDidMount}
+                  options={{
+                    readOnly: false,
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    minimap: { enabled: false }
+                  }}
+                />
+              </div>
+
+              {isPreviewVisible && (
+                <div className="mt-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Preview</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="prose prose-sm max-w-none">
+                        <pre className="bg-muted p-4 rounded-md text-sm overflow-auto max-h-96 whitespace-pre-wrap">
+                          {content}
+                        </pre>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="compliance" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Shield className="w-5 h-5 mr-2" />
+                  MAS FEAT Compliance
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="mas-intent">MAS Intent *</Label>
+                  <Textarea
+                    id="mas-intent"
+                    value={masIntent}
+                    onChange={(e) => setMasIntent(e.target.value)}
+                    placeholder="Describe the intended purpose and use case of this prompt"
+                    rows={3}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="mas-fairness">MAS Fairness Notes *</Label>
+                  <Textarea
+                    id="mas-fairness"
+                    value={masFairnessNotes}
+                    onChange={(e) => setMasFairnessNotes(e.target.value)}
+                    placeholder="Document fairness considerations and potential biases"
+                    rows={3}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="mas-testing">MAS Testing Notes</Label>
+                  <Textarea
+                    id="mas-testing"
+                    value={masTestingNotes}
+                    onChange={(e) => setMasTestingNotes(e.target.value)}
+                    placeholder="Document testing methodology and results"
+                    rows={3}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Compliance Status</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Risk Assessment</span>
+                    <Badge className={getRiskLevelColor(masRiskLevel)}>
+                      {masRiskLevel.toUpperCase()}
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Intent Documentation</span>
+                    <Badge variant={masIntent.trim() ? "default" : "secondary"}>
+                      {masIntent.trim() ? "Complete" : "Required"}
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Fairness Documentation</span>
+                    <Badge variant={masFairnessNotes.trim() ? "default" : "secondary"}>
+                      {masFairnessNotes.trim() ? "Complete" : "Required"}
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Testing Documentation</span>
+                    <Badge variant={masTestingNotes.trim() ? "default" : "outline"}>
+                      {masTestingNotes.trim() ? "Complete" : "Optional"}
+                    </Badge>
+                  </div>
+                </div>
+
+                {approvalRequests && approvalRequests.length > 0 && (
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium mb-2">Approval Status</h4>
+                    <div className="space-y-2">
+                      {approvalRequests.map((request) => (
+                        <div key={request.id} className="flex items-center justify-between text-sm">
+                          <span>{request.status}</span>
+                          <span className="text-muted-foreground">
+                            {formatDistanceToNow(new Date(request.requested_at), { addSuffix: true })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="testing" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <TestTube className="w-5 h-5 mr-2" />
+                Model Compatibility Testing
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Test prompt compatibility across different model providers
+                </p>
+                <Button
+                  onClick={handleTestCompatibility}
+                  disabled={isTesting || !promptId}
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  {isTesting ? 'Testing...' : 'Run Tests'}
+                </Button>
+              </div>
+
+              {matrix && (
+                <div className="space-y-4">
+                  <h4 className="font-medium">Compatibility Matrix</h4>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {matrix.results?.map((result: any, index: number) => (
+                      <Card key={index}>
+                        <CardContent className="pt-4">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{result.provider}</span>
+                              <Badge variant={result.is_compatible ? "default" : "destructive"}>
+                                {result.is_compatible ? "Compatible" : "Incompatible"}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {result.model_name}
+                            </p>
+                            {result.compatibility_notes && (
+                              <p className="text-xs text-muted-foreground">
+                                {result.compatibility_notes}
+                              </p>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="versions" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <GitCommit className="w-5 h-5 mr-2" />
+                Version History
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                {isNew ? 'No versions yet. Create the first version to get started.' : 'Version history and comparison will be available here.'}
+              </p>
+
+              {!isNew && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-3 border rounded">
+                    <div>
+                      <span className="font-medium">{version}</span>
+                      <span className="text-sm text-muted-foreground ml-2">
+                        {formatDistanceToNow(new Date(prompt?.updated_at || ''), { addSuffix: true })}
+                      </span>
+                    </div>
+                    <Badge variant="default">Current</Badge>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Approval Dialog */}
+      <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submit for Approval</DialogTitle>
+            <DialogDescription>
+              This high-risk prompt requires approval before deployment. Submitting will create an approval request.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <AlertTriangle className="h-5 w-5 text-yellow-800 mt-0.5 mr-3" />
+                <div>
+                  <h4 className="text-sm font-medium text-yellow-800">High Risk Alert</h4>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    This prompt has been classified as high risk and requires approval before it can be deployed to production.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitForApproval}>
+              Submit for Approval
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}

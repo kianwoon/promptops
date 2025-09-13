@@ -25,7 +25,7 @@ export function Templates() {
   
   const templateIds = useMemo(() => {
     if (!templatesData) return []
-    return templatesData.items.map(t => t.id)
+    return templatesData.map(t => t.id)
   }, [templatesData])
 
   const templatesVersions = useTemplateVersions(templateIds.join(','))
@@ -33,9 +33,9 @@ export function Templates() {
   const filteredAndSortedTemplates = useMemo(() => {
     if (!templatesData) return []
 
-    let filtered = templatesData.items.filter(template => {
+    let filtered = templatesData.filter(template => {
       const metadata = template.metadata || {}
-      const matchesSearch = 
+      const matchesSearch =
         template.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (metadata.description && metadata.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (metadata.tags && metadata.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
@@ -79,7 +79,7 @@ export function Templates() {
 
   const availableOwners = useMemo(() => {
     if (!templatesData) return []
-    const owners = [...new Set(templatesData.items.map(t => t.owner))]
+    const owners = [...new Set(templatesData.map(t => t.owner))]
     return owners.sort()
   }, [templatesData])
 
@@ -149,7 +149,7 @@ export function Templates() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Templates</h1>
           <p className="text-muted-foreground">
-            Manage your prompt templates and versions ({templatesData?.total || 0} total)
+            Manage your prompt templates and versions ({templatesData?.length || 0} total)
           </p>
         </div>
       </div>

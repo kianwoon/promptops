@@ -77,12 +77,24 @@ class Alias(Base):
 
 class Module(Base):
     __tablename__ = "modules"
-    
+
     id = Column(String, primary_key=True)
     version = Column(String, primary_key=True)
+    project_id = Column(String, nullable=False)
     slot = Column(String, nullable=False)
     render_body = Column(String, nullable=False)
     metadata_json = Column(JSON)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Foreign key
+    __table_args__ = (
+        ForeignKeyConstraint(['project_id'], ['projects.id']),
+    )
+
+    # Relationships
+    project = relationship("Project", back_populates="modules")
+    prompts = relationship("Prompt", back_populates="module")
 
 class Variant(Base):
     __tablename__ = "variants"
@@ -112,7 +124,7 @@ class EvaluationRun(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
-    
+
     id = Column(String, primary_key=True)
     actor = Column(String, nullable=False)
     action = Column(String, nullable=False)
@@ -123,8 +135,95 @@ class AuditLog(Base):
 
 class TenantOverlay(Base):
     __tablename__ = "tenant_overlays"
-    
+
     tenant_id = Column(String, primary_key=True)
     template_id = Column(String, primary_key=True)
     version = Column(String, primary_key=True)
     overrides_json = Column(JSON)
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    owner = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    modules = relationship("Module", back_populates="project")
+
+class Prompt(Base):
+    __tablename__ = "prompts"
+
+    id = Column(String, primary_key=True)
+    version = Column(String, primary_key=True)
+    module_id = Column(String, nullable=False)
+    content = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    created_by = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Model-specific prompt variations
+    target_models = Column(JSON, nullable=False)
+    model_specific_prompts = Column(JSON, nullable=False)
+
+    # MAS FEAT compliance fields
+    mas_intent = Column(String, nullable=False)
+    mas_fairness_notes = Column(String, nullable=False)
+    mas_testing_notes = Column(String, nullable=True)
+    mas_risk_level = Column(String, nullable=False)
+    mas_approval_log = Column(JSON, nullable=True)
+
+    # Foreign key
+    __table_args__ = (
+        ForeignKeyConstraint(['module_id'], ['modules.id']),
+    )
+
+    # Relationships
+    module = relationship("Module", back_populates="prompts")
+    model_compatibilities = relationship("ModelCompatibility", back_populates="prompt")
+    approval_requests = relationship("ApprovalRequest", back_populates="prompt")
+
+class ModelCompatibility(Base):
+    __tablename__ = "model_compatibilities"
+
+    id = Column(String, primary_key=True)
+    prompt_id = Column(String, nullable=False)
+    model_name = Column(String, nullable=False)
+    model_provider = Column(String, nullable=False)
+    is_compatible = Column(Boolean, nullable=False)
+    compatibility_notes = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Foreign key
+    __table_args__ = (
+        ForeignKeyConstraint(['prompt_id'], ['prompts.id']),
+    )
+
+    # Relationships
+    prompt = relationship("Prompt", back_populates="model_compatibilities")
+
+class ApprovalRequest(Base):
+    __tablename__ = "approval_requests"
+
+    id = Column(String, primary_key=True)
+    prompt_id = Column(String, nullable=False)
+    requested_by = Column(String, nullable=False)
+    requested_at = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(String, nullable=False)
+    approver = Column(String, nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    rejection_reason = Column(String, nullable=True)
+    comments = Column(String, nullable=True)
+
+    # Foreign key
+    __table_args__ = (
+        ForeignKeyConstraint(['prompt_id'], ['prompts.id']),
+    )
+
+    # Relationships
+    prompt = relationship("Prompt", back_populates="approval_requests")

@@ -1,12 +1,12 @@
-import { 
-  useQuery, 
-  useMutation, 
+import {
+  useQuery,
+  useMutation,
   useQueryClient,
   UseQueryOptions,
   UseMutationOptions
 } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import type { 
+import type {
   Template,
   TemplateCreate,
   TemplateVersion,
@@ -20,8 +20,29 @@ import type {
   PolicyEvaluationResponse,
   DashboardStats,
   UsageMetrics,
+  Project,
+  ProjectCreate,
+  ProjectUpdate,
+  Module,
+  ModuleCreate,
+  ModuleUpdate,
+  Prompt,
+  PromptCreate,
+  PromptUpdate,
+  ModelCompatibility,
+  ModelCompatibilityCreate,
+  ModelCompatibilityUpdate,
+  ApprovalRequest,
+  ApprovalRequestCreate,
+  ApprovalRequestUpdate,
+  CompatibilityMatrixResponse,
+  ProjectCompatibilitySummary,
+  BatchTestResult,
+  CompatibilityTrend,
   ApiResponse,
-  PaginatedResponse
+  PaginatedResponse,
+  User,
+  UserUpdate
 } from '@/types/api'
 
 // Base API client
@@ -185,3 +206,497 @@ export const useUsageMetrics = (timeRange: string = '7d') =>
     queryKey: ['dashboard', 'usage', timeRange],
     queryFn: () => apiRequest<UsageMetrics[]>(`/dashboard/usage?range=${timeRange}`),
   })
+
+// Project APIs
+export const useProjects = () =>
+  useQuery({
+    queryKey: ['projects'],
+    queryFn: () => apiRequest<Project[]>('/projects'),
+  })
+
+export const useProject = (projectId: string) =>
+  useQuery({
+    queryKey: ['projects', projectId],
+    queryFn: () => apiRequest<Project>(`/projects/${projectId}`),
+    enabled: !!projectId,
+  })
+
+export const useCreateProject = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (project: ProjectCreate) =>
+      apiRequest<ApiResponse<Project>>('/projects', {
+        method: 'POST',
+        body: JSON.stringify(project),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      toast.success('Project created successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to create project: ${error.message}`)
+    },
+  })
+}
+
+export const useUpdateProject = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ projectId, project }: { projectId: string; project: ProjectUpdate }) =>
+      apiRequest<ApiResponse<Project>>(`/projects/${projectId}`, {
+        method: 'PUT',
+        body: JSON.stringify(project),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['projects', variables.projectId] })
+      toast.success('Project updated successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to update project: ${error.message}`)
+    },
+  })
+}
+
+export const useDeleteProject = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (projectId: string) =>
+      apiRequest<ApiResponse<null>>(`/projects/${projectId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      toast.success('Project deleted successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete project: ${error.message}`)
+    },
+  })
+}
+
+// Module APIs
+export const useModules = (projectId?: string) =>
+  useQuery({
+    queryKey: ['modules', projectId],
+    queryFn: () => {
+      const endpoint = projectId ? `/modules?project_id=${projectId}` : '/modules'
+      return apiRequest<Module[]>(endpoint)
+    },
+    enabled: projectId !== undefined,
+  })
+
+export const useModuleVersions = (moduleId: string) =>
+  useQuery({
+    queryKey: ['modules', moduleId, 'versions'],
+    queryFn: () => apiRequest<Module[]>(`/modules/${moduleId}`),
+    enabled: !!moduleId,
+  })
+
+export const useModule = (moduleId: string, version: string) =>
+  useQuery({
+    queryKey: ['modules', moduleId, version],
+    queryFn: () => apiRequest<Module>(`/modules/${moduleId}/${version}`),
+    enabled: !!moduleId && !!version,
+  })
+
+export const useCreateModule = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (module: ModuleCreate) =>
+      apiRequest<ApiResponse<Module>>('/modules', {
+        method: 'POST',
+        body: JSON.stringify(module),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['modules', variables.project_id] })
+      queryClient.invalidateQueries({ queryKey: ['modules'] })
+      toast.success('Module created successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to create module: ${error.message}`)
+    },
+  })
+}
+
+export const useUpdateModule = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ moduleId, version, module }: { moduleId: string; version: string; module: ModuleUpdate }) =>
+      apiRequest<ApiResponse<Module>>(`/modules/${moduleId}/${version}`, {
+        method: 'PUT',
+        body: JSON.stringify(module),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['modules'] })
+      queryClient.invalidateQueries({ queryKey: ['modules', variables.moduleId] })
+      queryClient.invalidateQueries({ queryKey: ['modules', variables.moduleId, 'versions'] })
+      toast.success('Module updated successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to update module: ${error.message}`)
+    },
+  })
+}
+
+export const useDeleteModule = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ moduleId, version }: { moduleId: string; version: string }) =>
+      apiRequest<ApiResponse<null>>(`/modules/${moduleId}/${version}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['modules'] })
+      toast.success('Module deleted successfully')
+    },
+    onError: (error) => {
+      // Handle 404 errors specifically
+      if (error.message.includes('404') || error.message.includes('not found')) {
+        toast.error('Module not found. Refreshing the page...')
+        // Refresh the data to show current state
+        queryClient.invalidateQueries({ queryKey: ['modules'] })
+      } else {
+        toast.error(`Failed to delete module: ${error.message}`)
+      }
+    },
+  })
+}
+
+// Prompt APIs
+export const usePrompts = (moduleId?: string) =>
+  useQuery({
+    queryKey: ['prompts', moduleId],
+    queryFn: () => {
+      const endpoint = moduleId ? `/prompts?module_id=${moduleId}` : '/prompts'
+      return apiRequest<Prompt[]>(endpoint)
+    },
+    enabled: moduleId !== undefined,
+  })
+
+export const usePromptVersions = (promptId: string) =>
+  useQuery({
+    queryKey: ['prompts', promptId, 'versions'],
+    queryFn: () => apiRequest<Prompt[]>(`/prompts/${promptId}`),
+    enabled: !!promptId,
+  })
+
+export const usePrompt = (promptId: string, version: string) =>
+  useQuery({
+    queryKey: ['prompts', promptId, version],
+    queryFn: () => apiRequest<Prompt>(`/prompts/${promptId}/${version}`),
+    enabled: !!promptId && !!version,
+  })
+
+export const useCreatePrompt = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (prompt: PromptCreate) =>
+      apiRequest<ApiResponse<Prompt>>('/prompts', {
+        method: 'POST',
+        body: JSON.stringify(prompt),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['prompts', variables.module_id] })
+      queryClient.invalidateQueries({ queryKey: ['prompts'] })
+      toast.success('Prompt created successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to create prompt: ${error.message}`)
+    },
+  })
+}
+
+export const useUpdatePrompt = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ promptId, version, prompt }: { promptId: string; version: string; prompt: PromptUpdate }) =>
+      apiRequest<ApiResponse<Prompt>>(`/prompts/${promptId}/${version}`, {
+        method: 'PUT',
+        body: JSON.stringify(prompt),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['prompts'] })
+      queryClient.invalidateQueries({ queryKey: ['prompts', variables.promptId] })
+      queryClient.invalidateQueries({ queryKey: ['prompts', variables.promptId, 'versions'] })
+      toast.success('Prompt updated successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to update prompt: ${error.message}`)
+    },
+  })
+}
+
+export const useDeletePrompt = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ promptId, version }: { promptId: string; version: string }) =>
+      apiRequest<ApiResponse<null>>(`/prompts/${promptId}/${version}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prompts'] })
+      toast.success('Prompt deleted successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete prompt: ${error.message}`)
+    },
+  })
+}
+
+// Model Compatibility APIs
+export const useModelCompatibilities = (promptId?: string) =>
+  useQuery({
+    queryKey: ['model-compatibilities', promptId],
+    queryFn: () => {
+      const endpoint = promptId ? `/model-compatibilities?prompt_id=${promptId}` : '/model-compatibilities'
+      return apiRequest<ModelCompatibility[]>(endpoint)
+    },
+    enabled: promptId !== undefined,
+  })
+
+export const useModelCompatibility = (compatibilityId: string) =>
+  useQuery({
+    queryKey: ['model-compatibilities', compatibilityId],
+    queryFn: () => apiRequest<ModelCompatibility>(`/model-compatibilities/${compatibilityId}`),
+    enabled: !!compatibilityId,
+  })
+
+export const useCreateModelCompatibility = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (compatibility: ModelCompatibilityCreate) =>
+      apiRequest<ApiResponse<ModelCompatibility>>('/model-compatibilities', {
+        method: 'POST',
+        body: JSON.stringify(compatibility),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['model-compatibilities', variables.prompt_id] })
+      queryClient.invalidateQueries({ queryKey: ['model-compatibilities'] })
+      toast.success('Model compatibility created successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to create model compatibility: ${error.message}`)
+    },
+  })
+}
+
+export const useUpdateModelCompatibility = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ compatibilityId, compatibility }: { compatibilityId: string; compatibility: ModelCompatibilityUpdate }) =>
+      apiRequest<ApiResponse<ModelCompatibility>>(`/model-compatibilities/${compatibilityId}`, {
+        method: 'PUT',
+        body: JSON.stringify(compatibility),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['model-compatibilities'] })
+      queryClient.invalidateQueries({ queryKey: ['model-compatibilities', variables.compatibilityId] })
+      toast.success('Model compatibility updated successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to update model compatibility: ${error.message}`)
+    },
+  })
+}
+
+export const useDeleteModelCompatibility = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (compatibilityId: string) =>
+      apiRequest<ApiResponse<null>>(`/model-compatibilities/${compatibilityId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['model-compatibilities'] })
+      toast.success('Model compatibility deleted successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete model compatibility: ${error.message}`)
+    },
+  })
+}
+
+export const useTestPromptCompatibility = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ promptId, version, providers }: { promptId: string; version: string; providers?: string[] }) =>
+      apiRequest<any>(`/model-compatibilities/test/${promptId}/${version}`, {
+        method: 'POST',
+        body: JSON.stringify({ providers }),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['model-compatibilities', variables.promptId] })
+      queryClient.invalidateQueries({ queryKey: ['model-compatibilities'] })
+      toast.success('Compatibility test completed successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to test prompt compatibility: ${error.message}`)
+    },
+  })
+}
+
+export const useCompatibilityMatrix = (promptId: string, version?: string) =>
+  useQuery({
+    queryKey: ['model-compatibilities', 'matrix', promptId, version],
+    queryFn: () => {
+      const endpoint = version
+        ? `/model-compatibilities/matrix/${promptId}?version=${version}`
+        : `/model-compatibilities/matrix/${promptId}`
+      return apiRequest<CompatibilityMatrixResponse>(endpoint)
+    },
+    enabled: !!promptId,
+  })
+
+export const useProjectCompatibilitySummary = (projectId: string) =>
+  useQuery({
+    queryKey: ['model-compatibilities', 'summary', projectId],
+    queryFn: () => apiRequest<ProjectCompatibilitySummary>(`/model-compatibilities/summary/${projectId}`),
+    enabled: !!projectId,
+  })
+
+export const useRunBatchCompatibilityTests = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ promptIds, versions, providers }: { promptIds: string[]; versions?: string[]; providers?: string[] }) =>
+      apiRequest<BatchTestResult>('/model-compatibilities/test/batch', {
+        method: 'POST',
+        body: JSON.stringify({ prompt_ids: promptIds, versions, providers }),
+      }),
+    onSuccess: (data) => {
+      // Invalidate all prompt compatibility queries
+      data.results.forEach((result, key) => {
+        const [promptId, version] = key.split('@')
+        queryClient.invalidateQueries({ queryKey: ['model-compatibilities', promptId] })
+        queryClient.invalidateQueries({ queryKey: ['model-compatibilities', 'matrix', promptId, version] })
+      })
+      toast.success(`Batch compatibility test completed for ${data.total_prompts_tested} prompts`)
+    },
+    onError: (error) => {
+      toast.error(`Failed to run batch compatibility tests: ${error.message}`)
+    },
+  })
+}
+
+export const useCompatibilityTrends = (promptId: string, days: number = 30) =>
+  useQuery({
+    queryKey: ['model-compatibilities', 'trends', promptId, days],
+    queryFn: () => apiRequest<CompatibilityTrend>(`/model-compatibilities/trends/${promptId}?days=${days}`),
+    enabled: !!promptId,
+  })
+
+// Approval Request APIs
+export const useApprovalRequests = (promptId?: string) =>
+  useQuery({
+    queryKey: ['approval-requests', promptId],
+    queryFn: () => {
+      const endpoint = promptId ? `/approval-requests?prompt_id=${promptId}` : '/approval-requests'
+      return apiRequest<ApprovalRequest[]>(endpoint)
+    },
+    enabled: promptId !== undefined,
+  })
+
+export const useApprovalRequest = (requestId: string) =>
+  useQuery({
+    queryKey: ['approval-requests', requestId],
+    queryFn: () => apiRequest<ApprovalRequest>(`/approval-requests/${requestId}`),
+    enabled: !!requestId,
+  })
+
+export const useCreateApprovalRequest = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (request: ApprovalRequestCreate) =>
+      apiRequest<ApiResponse<ApprovalRequest>>('/approval-requests', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['approval-requests', variables.prompt_id] })
+      queryClient.invalidateQueries({ queryKey: ['approval-requests'] })
+      toast.success('Approval request created successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to create approval request: ${error.message}`)
+    },
+  })
+}
+
+export const useUpdateApprovalRequest = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ requestId, request }: { requestId: string; request: ApprovalRequestUpdate }) =>
+      apiRequest<ApiResponse<ApprovalRequest>>(`/approval-requests/${requestId}`, {
+        method: 'PUT',
+        body: JSON.stringify(request),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['approval-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['approval-requests', variables.requestId] })
+      toast.success('Approval request updated successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to update approval request: ${error.message}`)
+    },
+  })
+}
+
+export const useDeleteApprovalRequest = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (requestId: string) =>
+      apiRequest<ApiResponse<null>>(`/approval-requests/${requestId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['approval-requests'] })
+      toast.success('Approval request deleted successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete approval request: ${error.message}`)
+    },
+  })
+}
+
+// User APIs
+export const useUsers = () =>
+  useQuery({
+    queryKey: ['users'],
+    queryFn: () => apiRequest<User[]>('/users'),
+  })
+
+export const useUpdateUser = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ userId, userData }: { userId: string; userData: UserUpdate }) =>
+      apiRequest<ApiResponse<User>>(`/users/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify(userData),
+      }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('User updated successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to update user: ${error.message}`)
+    },
+  })
+}

@@ -1,0 +1,284 @@
+import React, { useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { Plus, Edit, Trash2, ArrowLeft, FileText, Shield, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { usePrompts, useDeletePrompt, useProject, useModule } from '@/hooks/api'
+import { PromptEditor } from './PromptEditor'
+import { formatDistanceToNow } from 'date-fns'
+import type { Prompt } from '@/types/api'
+
+interface ModulePromptsProps {
+  projectId: string
+  moduleId: string
+}
+
+export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
+  const navigate = useNavigate()
+  const { data: project } = useProject(projectId)
+  const { data: module } = useModule(moduleId, '1.0.0')
+  const { data: prompts, isLoading, refetch } = usePrompts(moduleId)
+  const deletePrompt = useDeletePrompt()
+
+  const [isCreatePromptOpen, setIsCreatePromptOpen] = useState(false)
+  const [editingPrompt, setEditingPrompt] = useState<{ prompt: Prompt; version: string } | null>(null)
+
+  const handleDeletePrompt = async (promptId: string, version: string) => {
+    if (window.confirm('Are you sure you want to delete this prompt version?')) {
+      try {
+        await deletePrompt.mutateAsync({ promptId, version })
+      } catch (error) {
+        console.error('Failed to delete prompt:', error)
+      }
+    }
+  }
+
+  const openEditDialog = (prompt: Prompt, version: string) => {
+    setEditingPrompt({ prompt, version })
+  }
+
+  const handlePromptSaved = () => {
+    setIsCreatePromptOpen(false)
+    setEditingPrompt(null)
+    refetch()
+  }
+
+  const handleCancel = () => {
+    setIsCreatePromptOpen(false)
+    setEditingPrompt(null)
+  }
+
+  const getRiskLevelColor = (risk: string) => {
+    switch (risk) {
+      case 'low': return 'bg-green-100 text-green-800 border-green-200'
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'high': return 'bg-red-100 text-red-800 border-red-200'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
+  }
+
+  const getRiskLevelIcon = (risk: string) => {
+    switch (risk) {
+      case 'low': return <CheckCircle className="w-4 h-4" />
+      case 'medium': return <AlertTriangle className="w-4 h-4" />
+      case 'high': return <Shield className="w-4 h-4" />
+      default: return null
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <Button variant="ghost" onClick={() => navigate(`/projects/${projectId}`)}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Project
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Prompts</h1>
+            <p className="text-muted-foreground">
+              {module?.slot || 'Unknown Module'} • {project?.name || 'Unknown Project'}
+            </p>
+          </div>
+        </div>
+
+        <Dialog open={isCreatePromptOpen} onOpenChange={setIsCreatePromptOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              New Prompt
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
+            <PromptEditor
+              projectId={projectId}
+              moduleId={moduleId}
+              isNew={true}
+              onSave={handlePromptSaved}
+              onCancel={handleCancel}
+            />
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Module Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <FileText className="w-5 h-5 mr-2" />
+            Module Information
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <div className="text-sm font-medium text-muted-foreground">Module ID</div>
+              <p className="font-mono text-sm">{module?.id}</p>
+            </div>
+            <div>
+              <div className="text-sm font-medium text-muted-foreground">Slot</div>
+              <p>{module?.slot}</p>
+            </div>
+            <div>
+              <div className="text-sm font-medium text-muted-foreground">Version</div>
+              <p>{module?.version}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Prompts Grid */}
+      {prompts && prompts.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {prompts.map((prompt) => (
+            <Card key={`${prompt.id}-${prompt.version}`} className="hover:shadow-md transition-shadow">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="text-lg truncate">
+                      {prompt.description || 'Untitled Prompt'}
+                    </CardTitle>
+                    <CardDescription className="flex items-center mt-1">
+                      ID: {prompt.id} v{prompt.version}
+                    </CardDescription>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => openEditDialog(prompt, prompt.version)}>
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleDeletePrompt(prompt.id, prompt.version)}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {/* Risk Level Badge */}
+                  <div className="flex items-center justify-between">
+                    <Badge
+                      variant="outline"
+                      className={`flex items-center gap-2 ${getRiskLevelColor(prompt.mas_risk_level)}`}
+                    >
+                      {getRiskLevelIcon(prompt.mas_risk_level)}
+                      {prompt.mas_risk_level.toUpperCase()} Risk
+                    </Badge>
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Description</div>
+                    <p className="text-sm line-clamp-4">
+                      {prompt.description || 'No description provided'}
+                    </p>
+                  </div>
+
+                  {/* Target Models */}
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Target Models</div>
+                    <p className="text-sm">
+                      {prompt.target_models?.join(', ') || 'None specified'}
+                    </p>
+                  </div>
+
+                  {/* MAS Compliance Info */}
+                  <div className="space-y-2">
+                    <div className="text-sm text-muted-foreground">MAS Compliance</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center">
+                        <CheckCircle className={`w-3 h-3 mr-1 ${prompt.mas_intent ? 'text-green-500' : 'text-gray-300'}`} />
+                        Intent
+                      </div>
+                      <div className="flex items-center">
+                        <CheckCircle className={`w-3 h-3 mr-1 ${prompt.mas_fairness_notes ? 'text-green-500' : 'text-gray-300'}`} />
+                        Fairness
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Metadata */}
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center">
+                      <Clock className="w-3 h-3 mr-1" />
+                      {formatDistanceToNow(new Date(prompt.updated_at), { addSuffix: true })}
+                    </div>
+                    <Badge variant="secondary" className="text-xs">
+                      {prompt.version}
+                    </Badge>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="pt-2 space-y-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => openEditDialog(prompt, prompt.version)}
+                    >
+                      <Edit className="w-3 h-3 mr-2" />
+                      Edit Prompt
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <FileText className="w-12 h-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No prompts yet</h3>
+            <p className="text-muted-foreground mb-4 text-center">
+              Create your first prompt for this module.
+            </p>
+            <Button onClick={() => setIsCreatePromptOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create First Prompt
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Edit Prompt Dialog */}
+      <Dialog open={!!editingPrompt} onOpenChange={() => setEditingPrompt(null)}>
+        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
+          {editingPrompt && (
+            <PromptEditor
+              projectId={projectId}
+              moduleId={moduleId}
+              promptId={editingPrompt.prompt.id}
+              version={editingPrompt.version}
+              onSave={handlePromptSaved}
+              onCancel={handleCancel}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}

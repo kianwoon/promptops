@@ -58,6 +58,7 @@ async def update_alias_weights(
     
     # Log the change
     audit_log = AuditLog(
+        id=str(uuid.uuid4()),
         actor=current_user["user_id"],
         action="update_alias_weights",
         subject=alias,
@@ -109,6 +110,7 @@ async def promote_alias(
     
     # Log the promotion
     audit_log = AuditLog(
+        id=str(uuid.uuid4()),
         actor=current_user["user_id"],
         action="promote_alias",
         subject=alias,

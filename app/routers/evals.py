@@ -62,6 +62,7 @@ async def run_evaluation(
     
     # Log the evaluation
     audit_log = AuditLog(
+        id=str(uuid.uuid4()),
         actor=current_user["user_id"],
         action="run_evaluation",
         subject=f"{eval_data.template_id}@{eval_data.version}",

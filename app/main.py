@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import engine
 from app.models import Base
-from app.routers import templates, render, aliases, evals, policies, auth
+from app.routers import templates, render, aliases, evals, policies, auth, projects, modules, prompts, model_compatibilities, approval_requests, delivery, dashboard, users
 
 # Configure structured logging
 structlog.configure(
@@ -69,6 +69,16 @@ app.include_router(aliases.router, prefix="/v1/aliases", tags=["aliases"])
 app.include_router(evals.router, prefix="/v1/evals", tags=["evaluations"])
 app.include_router(policies.router, prefix="/v1/policies", tags=["policies"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
+
+# Include new PromptOps V1 routers
+app.include_router(projects.router, prefix="/v1/projects", tags=["projects"])
+app.include_router(modules.router, prefix="/v1/modules", tags=["modules"])
+app.include_router(prompts.router, prefix="/v1/prompts", tags=["prompts"])
+app.include_router(model_compatibilities.router, prefix="/v1/model-compatibilities", tags=["model-compatibilities"])
+app.include_router(approval_requests.router, prefix="/v1/approval-requests", tags=["approval-requests"])
+app.include_router(delivery.router, prefix="/v1", tags=["runtime-delivery"])
+app.include_router(dashboard.router, prefix="/v1", tags=["dashboard"])
+app.include_router(users.router, prefix="/v1/users", tags=["users"])
 
 @app.get("/")
 async def root():

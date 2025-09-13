@@ -1,15 +1,17 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
-import { 
-  LayoutDashboard, 
-  FileText, 
-  Rocket, 
-  BarChart3, 
-  Shield, 
+import {
+  LayoutDashboard,
+  FileText,
+  Rocket,
+  BarChart3,
+  Shield,
   Settings,
   Users,
+  FolderOpen,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Grid3X3
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -24,12 +26,14 @@ interface NavigationItem {
 
 const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Projects', href: '/projects', icon: FolderOpen },
   { name: 'Templates', href: '/templates', icon: FileText, permission: 'templates:read' },
   { name: 'Deployments', href: '/deployments', icon: Rocket, permission: 'deployments:read' },
   { name: 'Evaluations', href: '/evaluations', icon: BarChart3, permission: 'evaluations:read' },
+  { name: 'Compatibility Matrix', href: '/compatibility', icon: Grid3X3, permission: 'compatibility:read' },
   { name: 'Governance', href: '/governance', icon: Shield, permission: 'audits:read' },
   { name: 'User Management', href: '/users', icon: Users, permission: 'users:read' },
-  { name: 'Settings', href: '/settings', icon: Settings, permission: 'settings:manage' },
+  { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
 interface SidebarProps {
@@ -38,12 +42,36 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
-  const { user, logout } = useAuth()
+  const { user, logout, hasPermission } = useAuth()
+
+  // Debug: Log navigation items and permissions
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('🔍 Sidebar Debug:', {
+        user,
+        navigationItems: navigation.map(item => ({
+          name: item.name,
+          permission: item.permission,
+          hasPermission: item.permission ? hasPermission(item.permission) : 'N/A'
+        }))
+      })
+    }
+  }, [user, hasPermission])
 
   const visibleNavigation = navigation.filter(item => {
+    console.log('Checking navigation item:', item.name, 'permission:', item.permission);
     if (!item.permission) return true
-    return usePermission(item.permission)
+    try {
+      const hasPerm = hasPermission(item.permission)
+      console.log(`${item.name} has permission ${item.permission}:`, hasPerm);
+      return hasPerm
+    } catch (error) {
+      console.warn(`Permission check failed for ${item.name}:`, error)
+      return false
+    }
   })
+
+  console.log('Visible navigation items:', visibleNavigation.map(item => item.name));
 
   return (
     <div className={cn(
@@ -56,12 +84,20 @@ export function Sidebar({ className }: SidebarProps) {
         <div className="flex h-16 items-center justify-between px-4 border-b border-border">
           {sidebarOpen ? (
             <div className="flex items-center">
-              <img src="/src/assets/logo-nav.svg" alt="PromptOps Logo" className="h-10 w-10" />
+              <img src="/src/assets/logo-nav.svg" alt="PromptOps Logo" className="h-10 w-10" onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                target.parentElement!.insertAdjacentHTML('afterbegin', '<span class="text-xl font-bold mr-2">PO</span>');
+              }} />
               <span className="ml-2 text-xl font-semibold">PromptOps</span>
             </div>
           ) : (
             <div className="flex items-center justify-center w-full">
-              <img src="/src/assets/logo-nav.svg" alt="PromptOps Logo" className="h-10 w-10" />
+              <img src="/src/assets/logo-nav.svg" alt="PromptOps Logo" className="h-10 w-10" onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                target.parentElement!.innerHTML = '<span class="text-xl font-bold">PO</span>';
+              }} />
             </div>
           )}
           <Button

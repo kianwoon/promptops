@@ -30,12 +30,20 @@
       "Bash(find:*)",
       "Read(//Users/kianwoonwong/Downloads/**)",
       "Bash(PORT=3000 npm run dev)",
-      "Bash(PORT=3001 npm run dev)"
+      "Bash(PORT=3001 npm run dev)",
+      "Bash(redis-cli:*)",
+      "Bash(redis-server:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npx tsc:*)",
+      "Bash(DATABASE_URL=postgresql://promptops:promptops@localhost:5432/promptops_dev psql:*)",
+      "Bash(alembic downgrade:*)",
+      "Bash(alembic current:*)",
+      "Bash(say:*)"
     ],
     "deny": [],
     "ask": []
   },
-   "hooks": {
+  "hooks": {
     "Notification": [
       {
         "hooks": [
