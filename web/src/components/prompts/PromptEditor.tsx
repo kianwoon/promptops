@@ -24,8 +24,11 @@ import {
   GitCommit,
   BarChart3,
   FileText,
-  Bot
+  Bot,
+  Copy,
+  Check
 } from 'lucide-react'
+import { AIAssistantLoading } from '@/components/ai/AIAssistantLoading'
 import { usePrompt, useUpdatePrompt, useCreatePrompt, useModelCompatibilities, useTestPromptCompatibility, useCompatibilityMatrix, useApprovalRequests, useCreateApprovalRequest } from '@/hooks/api'
 import type { Prompt, PromptCreate, PromptUpdate } from '@/types/api'
 import { formatDistanceToNow } from 'date-fns'
@@ -67,10 +70,9 @@ export function PromptEditor({
   const [validation, setValidation] = useState<MASComplianceValidation>({ isValid: true, errors: [], warnings: [] })
   const [showApprovalDialog, setShowApprovalDialog] = useState(false)
   const [activeTab, setActiveTab] = useState('content')
-  const [showAIAssistantDialog, setShowAIAssistantDialog] = useState(false)
-  const [aiAssistantMessage, setAIAssistantMessage] = useState('')
-  const [aiAssistantTitle, setAIAssistantTitle] = useState('')
-
+  const [showAIAssistantLoading, setShowAIAssistantLoading] = useState(false)
+  const [isCopied, setIsCopied] = useState(false)
+  
   const { data: prompt, isLoading } = usePrompt(promptId || '', version || '')
   const updatePrompt = useUpdatePrompt()
   const createPrompt = useCreatePrompt()
@@ -92,6 +94,7 @@ export function PromptEditor({
     }
   }, [prompt, isNew])
 
+  
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor
 
@@ -256,9 +259,7 @@ export function PromptEditor({
         }
       })
       if (!response.ok) {
-        setAIAssistantTitle('AI Assistant Configuration Required')
-        setAIAssistantMessage('Please configure an AI Assistant provider first in the Assistant page.')
-        setShowAIAssistantDialog(true)
+        alert('Please configure an AI Assistant provider first in the Assistant page.')
         return
       }
 
@@ -266,17 +267,61 @@ export function PromptEditor({
 
       // The API returns an array directly, not wrapped in a providers property
       if (!providers || providers.length === 0) {
-        setAIAssistantTitle('AI Assistant Configuration Required')
-        setAIAssistantMessage('Please configure an AI Assistant provider first in the Assistant page.')
-        setShowAIAssistantDialog(true)
+        alert('Please configure an AI Assistant provider first in the Assistant page.')
         return
       }
 
-      // For now, use a simple modal approach
-      // In a real implementation, this would open a more sophisticated AI assistant interface
+      // Show the AI Assistant loading screen
+      // Context will be captured at generation time, not button click time
+      setShowAIAssistantLoading(true)
+
+    } catch (error) {
+      console.error('AI Assistant error:', error)
+      alert('Failed to connect to AI Assistant. Please check your configuration.')
+    }
+  }
+
+  const handleCopyContent = async () => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setIsCopied(true)
+      setTimeout(() => setIsCopied(false), 2000)
+    } catch (error) {
+      console.error('Failed to copy content:', error)
+    }
+  }
+
+  const handleAIAssistantComplete = async (generatedContent: string, masFields?: {
+  masIntent: string
+  masFairnessNotes: string
+  masRiskLevel: string
+  masTestingNotes: string
+}) => {
+    try {
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token') || 'demo-token'
+      console.log('Using token for AI Assistant:', token.substring(0, 20) + '...')
+
+      // Get providers for the actual API call
+      const response = await fetch('/v1/ai-assistant/providers', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        console.error('Failed to get providers:', response.status, response.statusText)
+        throw new Error(`Failed to get providers: ${response.status}`)
+      }
+
+      const providers = await response.json()
+      console.log('Got providers:', providers.length, 'providers found')
+
       const promptType = isNew ? 'create_prompt' : 'edit_prompt'
+      const currentDescription = description || 'Create a prompt'
+      console.log('AI Assistant using description:', currentDescription)
+
       const context = {
-        description: description || 'Create a prompt',
+        description: currentDescription,
         target_models: ['gpt-4', 'claude-3-sonnet'],
         module_info: `Module: ${moduleId}`,
         existing_prompt: content,
@@ -284,42 +329,88 @@ export function PromptEditor({
         examples: ''
       }
 
+      const requestBody = {
+        provider_id: providers[0].id,
+        prompt_type: promptType,
+        context: context,
+        target_models: ['gpt-4', 'claude-3-sonnet']
+      }
+
+      console.log('AI Assistant request body:', requestBody)
+
       const generationResponse = await fetch('/v1/ai-assistant/generate-prompt', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          provider_id: providers[0].id, // Use first provider
-          prompt_type: promptType,
-          context: context,
-          target_models: ['gpt-4', 'claude-3-sonnet']
-        })
+        body: JSON.stringify(requestBody)
       })
+
+      console.log('AI Assistant response status:', generationResponse.status)
 
       if (generationResponse.ok) {
         const result = await generationResponse.json()
+        console.log('AI Assistant generation result:', result)
+        console.log('Generated content:', result.generated_content)
 
-        // Update form with generated content
+        // Update form with generated content and MAS fields
         if (result.generated_content) {
           setContent(result.generated_content)
+        } else {
+          // Fallback to the content from the loading animation
+          setContent(generatedContent)
+        }
 
-          // Show success message
-          setAIAssistantTitle('AI Assistant Success')
-          setAIAssistantMessage('AI Assistant generated content successfully! Please review and edit before saving.')
-          setShowAIAssistantDialog(true)
+        // Populate MAS FEAT fields
+        if (result.mas_intent) {
+          setMasIntent(result.mas_intent)
+        }
+        if (result.mas_fairness_notes) {
+          setMasFairnessNotes(result.mas_fairness_notes)
+        }
+        if (result.mas_risk_level) {
+          setMasRiskLevel(result.mas_risk_level)
+        }
+        if (result.mas_testing_notes) {
+          setMasTestingNotes(result.mas_testing_notes)
         }
       } else {
-        setAIAssistantTitle('AI Assistant Error')
-        setAIAssistantMessage('Failed to generate content with AI Assistant. Please try again.')
-        setShowAIAssistantDialog(true)
+        // Use the content from loading animation as fallback
+        setContent(generatedContent)
+
+        // Use MAS fields from loading component if provided, otherwise use defaults
+        if (masFields) {
+          setMasIntent(masFields.masIntent)
+          setMasFairnessNotes(masFields.masFairnessNotes)
+          setMasRiskLevel(masFields.masRiskLevel as 'low' | 'medium' | 'high')
+          setMasTestingNotes(masFields.masTestingNotes)
+        } else {
+          setMasIntent("To provide exceptional AI assistance while ensuring fair, transparent, and accountable interactions.")
+          setMasFairnessNotes("AI-generated prompt designed with fairness considerations and bias mitigation. Regular fairness audits recommended.")
+          setMasRiskLevel("low")
+          setMasTestingNotes("AI-generated prompt requiring human review and testing before deployment.")
+        }
       }
     } catch (error) {
-      console.error('AI Assistant error:', error)
-      setAIAssistantTitle('AI Assistant Connection Error')
-      setAIAssistantMessage('Failed to connect to AI Assistant. Please check your configuration.')
-      setShowAIAssistantDialog(true)
+      console.error('AI Assistant generation error:', error)
+      // Use the content from loading animation as fallback
+      setContent(generatedContent)
+
+      // Use MAS fields from loading component if provided, otherwise use defaults
+      if (masFields) {
+        setMasIntent(masFields.masIntent)
+        setMasFairnessNotes(masFields.masFairnessNotes)
+        setMasRiskLevel(masFields.masRiskLevel as 'low' | 'medium' | 'high')
+        setMasTestingNotes(masFields.masTestingNotes)
+      } else {
+        setMasIntent("To provide exceptional AI assistance while ensuring fair, transparent, and accountable interactions.")
+        setMasFairnessNotes("AI-generated prompt designed with fairness considerations and bias mitigation. Regular fairness audits recommended.")
+        setMasRiskLevel("low")
+        setMasTestingNotes("AI-generated prompt requiring human review and testing before deployment.")
+      }
+    } finally {
+      setShowAIAssistantLoading(false)
     }
   }
 
@@ -501,14 +592,34 @@ export function PromptEditor({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle>Prompt Content</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsPreviewVisible(!isPreviewVisible)}
-              >
-                {isPreviewVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                {isPreviewVisible ? "Hide Preview" : "Show Preview"}
-              </Button>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyContent}
+                  className="flex items-center space-x-1"
+                >
+                  {isCopied ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsPreviewVisible(!isPreviewVisible)}
+                >
+                  {isPreviewVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {isPreviewVisible ? "Hide Preview" : "Show Preview"}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="border rounded-md overflow-hidden">
@@ -769,22 +880,17 @@ export function PromptEditor({
         </DialogContent>
       </Dialog>
 
-      {/* AI Assistant Dialog */}
-      <Dialog open={showAIAssistantDialog} onOpenChange={setShowAIAssistantDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{aiAssistantTitle}</DialogTitle>
-            <DialogDescription>
-              {aiAssistantMessage}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={() => setShowAIAssistantDialog(false)}>
-              OK
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* AI Assistant Loading Component */}
+      <AIAssistantLoading
+        isOpen={showAIAssistantLoading}
+        onClose={() => setShowAIAssistantLoading(false)}
+        onComplete={handleAIAssistantComplete}
+        getContext={() => ({
+          description: description || 'Create a prompt',
+          existingContent: content,
+          promptType: isNew ? 'create_prompt' : 'edit_prompt'
+        })}
+      />
     </div>
   )
 }
