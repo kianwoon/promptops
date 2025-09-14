@@ -20,6 +20,7 @@ import { Projects } from './pages/Projects'
 import { ProjectDetail } from './pages/ProjectDetail'
 import { ApiKeysPage } from './pages/ApiKeys'
 import { DeveloperPage as Developer } from './pages/Developer'
+import { AssistantPage } from './pages/Assistant'
 import { Layout } from './components/Layout'
 import { PublicLayoutWrapper } from './components/PublicLayoutWrapper'
 import { DevProtectedRoute as ProtectedRoute } from './components/auth/DevProtectedRoute'
@@ -170,6 +171,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/assistant"
+            element={
+              <ProtectedRoute>
+                <AssistantPage />
               </ProtectedRoute>
             }
           />

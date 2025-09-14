@@ -89,6 +89,10 @@ app.include_router(users.router, prefix="/v1/users", tags=["users"])
 # Include Client API endpoints
 app.include_router(client_api.router, prefix="/v1/client", tags=["client-api"])
 
+# Include AI Assistant endpoints with proper database storage and authentication
+from app.routers.ai_assistant_final import router as ai_assistant_router
+app.include_router(ai_assistant_router, prefix="/v1", tags=["ai-assistant"])
+
 # Simple user dependency for development
 async def get_current_user_dev():
     return {"user_id": "demo-user", "tenant": "demo-tenant", "role": "admin"}

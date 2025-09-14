@@ -4,6 +4,40 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 import enum
 
+try:
+    from app.utilslib.enums import (
+        AIAssistantProviderType, AIAssistantProviderStatus, AIAssistantSystemPromptType,
+        AIAssistantConversationStatus, AIAssistantMessageRole
+    )
+except ImportError:
+    # Fallback enums for backwards compatibility
+    class AIAssistantProviderType(str, enum.Enum):
+        openai = "openai"
+        anthropic = "anthropic"
+        gemini = "gemini"
+        qwen = "qwen"
+        openrouter = "openrouter"
+        ollama = "ollama"
+
+    class AIAssistantProviderStatus(str, enum.Enum):
+        active = "active"
+        inactive = "inactive"
+        error = "error"
+
+    class AIAssistantSystemPromptType(str, enum.Enum):
+        create_prompt = "create_prompt"
+        edit_prompt = "edit_prompt"
+
+    class AIAssistantConversationStatus(enum.Enum):
+        active = "active"
+        archived = "archived"
+        deleted = "deleted"
+
+    class AIAssistantMessageRole(enum.Enum):
+        user = "user"
+        assistant = "assistant"
+        system = "system"
+
 class UserRole(enum.Enum):
     ADMIN = "admin"
     USER = "user"
@@ -32,13 +66,18 @@ class User(Base):
     
     # Authentication
     hashed_password = Column(String, nullable=True)
-    
+
+    # AI Assistant defaults
+    default_ai_provider_id = Column(String, nullable=True)
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     last_login = Column(DateTime(timezone=True), nullable=True)
     
-    # Relationships (will be updated as needed)
+    # Relationships
+    ai_assistant_providers = relationship("AIAssistantProvider", back_populates="user", cascade="all, delete-orphan")
+    ai_assistant_conversations = relationship("AIAssistantConversation", back_populates="user", cascade="all, delete-orphan")
     # templates = relationship("Template", foreign_keys="Template.created_by")
     # audit_logs = relationship("AuditLog", foreign_keys="AuditLog.actor")
 
@@ -331,3 +370,94 @@ class RateLimitRecord(Base):
         ForeignKeyConstraint(['api_key_id'], ['client_api_keys.id']),
         UniqueConstraint('api_key_id', 'window_type', 'window_start', name='uq_rate_limit_window')
     )
+
+# AI Assistant Models
+class AIAssistantProvider(Base):
+    __tablename__ = "ai_assistant_providers"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider_type = Column(Enum(AIAssistantProviderType, name="aiassistantprovidertype", native_enum=True, values_callable=lambda e: [m.value for m in e], create_type=False), nullable=False)
+    name = Column(String, nullable=False)  # User-friendly name for this provider config
+    status = Column(Enum(AIAssistantProviderStatus, name="aiassistantproviderstatus", native_enum=True, values_callable=lambda e: [m.value for m in e], create_type=False), default=AIAssistantProviderStatus.active, nullable=False)
+
+    # Configuration details
+    api_key = Column(String, nullable=True)  # API key for authentication
+    api_base_url = Column(String, nullable=True)  # Custom API base URL
+    model_name = Column(String, nullable=True)  # Default model for this provider
+    organization = Column(String, nullable=True)  # For OpenAI organization
+    project = Column(String, nullable=True)  # For OpenAI project
+
+    # Additional provider-specific config
+    config_json = Column(JSON, nullable=True)  # Additional configuration options
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Unique constraint to ensure one active provider per type per user
+    __table_args__ = (
+        UniqueConstraint('user_id', 'provider_type', name='uq_user_provider_type'),
+    )
+
+    # Relationships
+    user = relationship("User", back_populates="ai_assistant_providers")
+
+class AIAssistantSystemPrompt(Base):
+    __tablename__ = "ai_assistant_system_prompts"
+
+    id = Column(String, primary_key=True)
+    provider_id = Column(String, ForeignKey("ai_assistant_providers.id", ondelete="CASCADE"), nullable=False)
+    prompt_type = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    content = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    is_mas_feat_compliant = Column(Boolean, default=True, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_by = Column(String, nullable=False)
+
+    # Relationships
+    provider = relationship("AIAssistantProvider", backref="system_prompts")
+
+class AIAssistantConversation(Base):
+    __tablename__ = "ai_assistant_conversations"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider_id = Column(String, ForeignKey("ai_assistant_providers.id", ondelete="SET NULL"), nullable=True)
+    context_type = Column(String, nullable=False)  # "create_prompt", "edit_prompt", "general"
+    context_id = Column(String, nullable=True)  # Related prompt ID, module ID, etc.
+    title = Column(String, nullable=True)
+
+    # Conversation state
+    messages = Column(JSON, nullable=False)  # Array of message objects
+    current_provider_id = Column(String, nullable=True)  # Currently active provider
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    user = relationship("User", back_populates="ai_assistant_conversations")
+    provider = relationship("AIAssistantProvider")
+    messages = relationship("AIAssistantMessage", back_populates="conversation", cascade="all, delete-orphan")
+
+class AIAssistantMessage(Base):
+    __tablename__ = "ai_assistant_messages"
+
+    id = Column(String, primary_key=True)
+    conversation_id = Column(String, ForeignKey("ai_assistant_conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(Enum(AIAssistantMessageRole), nullable=False)  # "user", "assistant", "system"
+    content = Column(String, nullable=False)
+    metadata_json = Column(JSON, nullable=True)  # Additional metadata (tokens, model, etc.)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    conversation = relationship("AIAssistantConversation", back_populates="messages")

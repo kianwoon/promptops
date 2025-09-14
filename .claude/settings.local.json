@@ -41,7 +41,13 @@
       "Bash(say:*)",
       "Bash(alembic:*)",
       "Bash(mkdir:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(env:*)",
+      "Bash(nc:*)",
+      "Bash(rm:*)",
+      "Bash(dropdb:*)",
+      "Bash(echo:*)",
+      "Bash(export:*)"
     ],
     "deny": [],
     "ask": []

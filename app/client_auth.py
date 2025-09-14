@@ -15,7 +15,7 @@ from app.database import get_db
 from app.models import ClientApiKey, RateLimitRecord, ClientApiKeyStatus
 from app.schemas import APIKeyValidationResponse
 from app.config import settings
-from app.utils import (
+from app.utilslib import (
     generate_api_key_pair, hash_api_key, hash_secret_key, extract_api_key_prefix,
     verify_hmac_signature, is_timestamp_valid, create_success_response,
     create_error_response, get_client_ip

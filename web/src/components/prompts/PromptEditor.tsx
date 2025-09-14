@@ -23,7 +23,8 @@ import {
   Send,
   GitCommit,
   BarChart3,
-  FileText
+  FileText,
+  Bot
 } from 'lucide-react'
 import { usePrompt, useUpdatePrompt, useCreatePrompt, useModelCompatibilities, useTestPromptCompatibility, useCompatibilityMatrix, useApprovalRequests, useCreateApprovalRequest } from '@/hooks/api'
 import type { Prompt, PromptCreate, PromptUpdate } from '@/types/api'
@@ -66,6 +67,9 @@ export function PromptEditor({
   const [validation, setValidation] = useState<MASComplianceValidation>({ isValid: true, errors: [], warnings: [] })
   const [showApprovalDialog, setShowApprovalDialog] = useState(false)
   const [activeTab, setActiveTab] = useState('content')
+  const [showAIAssistantDialog, setShowAIAssistantDialog] = useState(false)
+  const [aiAssistantMessage, setAIAssistantMessage] = useState('')
+  const [aiAssistantTitle, setAIAssistantTitle] = useState('')
 
   const { data: prompt, isLoading } = usePrompt(promptId || '', version || '')
   const updatePrompt = useUpdatePrompt()
@@ -240,6 +244,85 @@ export function PromptEditor({
     }
   }
 
+  const handleAIAssistant = async () => {
+    if (!projectId || !moduleId) return
+
+    try {
+      // Check if user has AI Assistant providers configured
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token') || 'demo-token'
+      const response = await fetch('/v1/ai-assistant/providers', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (!response.ok) {
+        setAIAssistantTitle('AI Assistant Configuration Required')
+        setAIAssistantMessage('Please configure an AI Assistant provider first in the Assistant page.')
+        setShowAIAssistantDialog(true)
+        return
+      }
+
+      const providers = await response.json()
+
+      // The API returns an array directly, not wrapped in a providers property
+      if (!providers || providers.length === 0) {
+        setAIAssistantTitle('AI Assistant Configuration Required')
+        setAIAssistantMessage('Please configure an AI Assistant provider first in the Assistant page.')
+        setShowAIAssistantDialog(true)
+        return
+      }
+
+      // For now, use a simple modal approach
+      // In a real implementation, this would open a more sophisticated AI assistant interface
+      const promptType = isNew ? 'create_prompt' : 'edit_prompt'
+      const context = {
+        description: description || 'Create a prompt',
+        target_models: ['gpt-4', 'claude-3-sonnet'],
+        module_info: `Module: ${moduleId}`,
+        existing_prompt: content,
+        requirements: 'Must be MAS FEAT compliant',
+        examples: ''
+      }
+
+      const generationResponse = await fetch('/v1/ai-assistant/generate-prompt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          provider_id: providers[0].id, // Use first provider
+          prompt_type: promptType,
+          context: context,
+          target_models: ['gpt-4', 'claude-3-sonnet']
+        })
+      })
+
+      if (generationResponse.ok) {
+        const result = await generationResponse.json()
+
+        // Update form with generated content
+        if (result.generated_content) {
+          setContent(result.generated_content)
+
+          // Show success message
+          setAIAssistantTitle('AI Assistant Success')
+          setAIAssistantMessage('AI Assistant generated content successfully! Please review and edit before saving.')
+          setShowAIAssistantDialog(true)
+        }
+      } else {
+        setAIAssistantTitle('AI Assistant Error')
+        setAIAssistantMessage('Failed to generate content with AI Assistant. Please try again.')
+        setShowAIAssistantDialog(true)
+      }
+    } catch (error) {
+      console.error('AI Assistant error:', error)
+      setAIAssistantTitle('AI Assistant Connection Error')
+      setAIAssistantMessage('Failed to connect to AI Assistant. Please check your configuration.')
+      setShowAIAssistantDialog(true)
+    }
+  }
+
   const handleSubmitForApproval = async () => {
     if (!promptId) return
 
@@ -313,6 +396,15 @@ export function PromptEditor({
               Submit for Approval
             </Button>
           )}
+
+          <Button
+            variant="outline"
+            onClick={handleAIAssistant}
+            className="flex items-center"
+          >
+            <Bot className="w-4 h-4 mr-2" />
+            AI Assistant
+          </Button>
 
           <Button onClick={handleSave} disabled={!validation.isValid}>
             <Save className="w-4 h-4 mr-2" />
@@ -672,6 +764,23 @@ export function PromptEditor({
             </Button>
             <Button onClick={handleSubmitForApproval}>
               Submit for Approval
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Assistant Dialog */}
+      <Dialog open={showAIAssistantDialog} onOpenChange={setShowAIAssistantDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{aiAssistantTitle}</DialogTitle>
+            <DialogDescription>
+              {aiAssistantMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowAIAssistantDialog(false)}>
+              OK
             </Button>
           </DialogFooter>
         </DialogContent>

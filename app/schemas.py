@@ -1,6 +1,41 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+import enum
+
+try:
+    from app.utilslib.enums import (
+        AIAssistantProviderType, AIAssistantProviderStatus, AIAssistantSystemPromptType,
+        AIAssistantConversationStatus, AIAssistantMessageRole
+    )
+except ImportError:
+    # Fallback enums for backwards compatibility
+    class AIAssistantProviderType(str, enum.Enum):
+        openai = "openai"
+        anthropic = "anthropic"
+        gemini = "gemini"
+        qwen = "qwen"
+        openrouter = "openrouter"
+        ollama = "ollama"
+
+    class AIAssistantProviderStatus(str, enum.Enum):
+        active = "active"
+        inactive = "inactive"
+        error = "error"
+
+    class AIAssistantSystemPromptType(str, enum.Enum):
+        create_prompt = "create_prompt"
+        edit_prompt = "edit_prompt"
+
+    class AIAssistantConversationStatus(str, enum.Enum):
+        active = "active"
+        archived = "archived"
+        deleted = "deleted"
+
+    class AIAssistantMessageRole(str, enum.Enum):
+        user = "user"
+        assistant = "assistant"
+        system = "system"
 
 # Template schemas
 class TemplateCreate(BaseModel):
@@ -475,3 +510,170 @@ class PromptSearchResponse(BaseModel):
     limit: int
     offset: int
     has_more: bool
+
+# AI Assistant Schemas
+
+class AIAssistantProviderCreate(BaseModel):
+    provider_type: AIAssistantProviderType
+    name: str = Field(..., min_length=1, max_length=100)
+    api_key: Optional[str] = None
+    api_base_url: Optional[str] = None
+    model_name: Optional[str] = None
+    organization: Optional[str] = None
+    project: Optional[str] = None
+    config_json: Optional[Dict[str, Any]] = None
+
+class AIAssistantProviderUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    status: Optional[AIAssistantProviderStatus] = None
+    api_key: Optional[str] = None
+    api_base_url: Optional[str] = None
+    model_name: Optional[str] = None
+    organization: Optional[str] = None
+    project: Optional[str] = None
+    config_json: Optional[Dict[str, Any]] = None
+
+class AIAssistantProviderResponse(BaseModel):
+    id: str
+    user_id: str
+    provider_type: AIAssistantProviderType
+    name: str
+    status: AIAssistantProviderStatus
+    api_key_prefix: Optional[str] = None  # Only first few characters for security
+    api_base_url: Optional[str] = None
+    model_name: Optional[str] = None
+    organization: Optional[str] = None
+    project: Optional[str] = None
+    config_json: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+    last_used_at: Optional[datetime] = None
+
+
+class AIAssistantProviderEditResponse(BaseModel):
+    id: str
+    user_id: str
+    provider_type: AIAssistantProviderType
+    name: str
+    status: AIAssistantProviderStatus
+    api_key: Optional[str] = None  # Full API key for editing
+    api_key_prefix: Optional[str] = None  # Only first few characters for security
+    api_base_url: Optional[str] = None
+    model_name: Optional[str] = None
+    organization: Optional[str] = None
+    project: Optional[str] = None
+    config_json: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+    last_used_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class AIAssistantSystemPromptCreate(BaseModel):
+    provider_id: str
+    prompt_type: AIAssistantSystemPromptType
+    name: str = Field(..., min_length=1, max_length=100)
+    content: str = Field(..., min_length=1)
+    description: Optional[str] = None
+    is_mas_feat_compliant: bool = True
+    is_active: bool = True
+
+class AIAssistantSystemPromptUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    content: Optional[str] = Field(None, min_length=1)
+    description: Optional[str] = None
+    is_mas_feat_compliant: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+class AIAssistantSystemPromptResponse(BaseModel):
+    id: str
+    provider_id: str
+    prompt_type: AIAssistantSystemPromptType
+    name: str
+    content: str
+    description: Optional[str] = None
+    is_mas_feat_compliant: bool
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    created_by: str
+
+    class Config:
+        from_attributes = True
+
+class AIAssistantMessage(BaseModel):
+    role: str
+    content: str
+    metadata_json: Optional[Dict[str, Any]] = None
+
+class AIAssistantConversationCreate(BaseModel):
+    provider_id: str
+    context_type: str = Field(..., pattern="^(create_prompt|edit_prompt|general)$")
+    context_id: Optional[str] = None
+    title: Optional[str] = None
+    initial_message: Optional[AIAssistantMessage] = None
+
+class AIAssistantConversationResponse(BaseModel):
+    id: str
+    user_id: str
+    provider_id: str
+    context_type: str
+    context_id: Optional[str] = None
+    title: Optional[str] = None
+    messages: List[AIAssistantMessage]
+    current_provider_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class AIAssistantChatRequest(BaseModel):
+    conversation_id: Optional[str] = None
+    message: str = Field(..., min_length=1)
+    provider_id: Optional[str] = None  # Allow switching providers during conversation
+    context_type: Optional[str] = Field(None, pattern="^(create_prompt|edit_prompt|general)$")
+    context_id: Optional[str] = None
+    system_prompt_overrides: Optional[Dict[str, Any]] = None
+
+class AIAssistantChatResponse(BaseModel):
+    conversation_id: str
+    message_id: str
+    role: str
+    content: str
+    metadata_json: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class AIAssistantPromptGenerationRequest(BaseModel):
+    provider_id: str
+    prompt_type: AIAssistantSystemPromptType = Field(..., pattern="^(create_prompt|edit_prompt)$")
+    context: Dict[str, Any] = Field(...)  # Context about what prompt to create/edit
+    description: Optional[str] = None
+    target_models: Optional[List[str]] = None
+    custom_instructions: Optional[str] = None
+    system_prompt_overrides: Optional[Dict[str, Any]] = None
+
+class AIAssistantPromptGenerationResponse(BaseModel):
+    conversation_id: str
+    generated_prompt: Dict[str, Any]  # Generated prompt structure
+    mas_feat_compliance: Dict[str, Any]  # Compliance information
+    metadata_json: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
+class AIAssistantProviderTestRequest(BaseModel):
+    test_message: str = "Hello, this is a test message."
+
+class AIAssistantProviderTestResponse(BaseModel):
+    success: bool
+    response_time_ms: int
+    status_code: int
+    error_message: Optional[str] = None
+    response_data: Optional[Dict[str, Any]] = None
+    timestamp: str
+
+    class Config:
+        from_attributes = True
