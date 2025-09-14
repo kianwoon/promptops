@@ -11,7 +11,9 @@ import {
   Shield,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  Search,
+  X
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -40,6 +42,12 @@ import {
   AlertDescription,
   AlertTitle,
 } from '@/components/ui/alert'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs'
 import { useAuth, usePermission } from '@/contexts/AuthContext'
 import { formatDate } from '@/lib/utils'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -198,6 +206,8 @@ export function ApiKeysPage() {
   const [copiedKeys, setCopiedKeys] = useState<{ [key: string]: boolean }>({})
   const [visibleKeys, setVisibleKeys] = useState<{ [key: string]: boolean }>({})
   const [selectedKeyForStats, setSelectedKeyForStats] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'active' | 'revoked'>('active')
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Form state
   const [formData, setFormData] = useState({
@@ -326,25 +336,54 @@ export function ApiKeysPage() {
     setSelectedKeyForStats(selectedKeyForStats === apiKeyId ? null : apiKeyId)
   }
 
+  const handleClearSearch = () => {
+    setSearchQuery('')
+  }
+
   // API Keys are now accessible to all users - removed permission check
+
+  // Filter API keys based on active tab and search query
+  const filteredApiKeys = apiKeys.filter(key => {
+    // First filter by status (tab)
+    if (key.status !== activeTab) {
+      return false
+    }
+
+    // Then filter by search query if present
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      const nameMatch = key.name.toLowerCase().includes(query)
+      const descriptionMatch = key.description?.toLowerCase().includes(query)
+      const prefixMatch = key.api_key_prefix.toLowerCase().includes(query)
+
+      return nameMatch || descriptionMatch || prefixMatch
+    }
+
+    return true
+  })
+
+  // Count API keys for each tab
+  const activeKeyCount = apiKeys.filter(key => key.status === 'active').length
+  const revokedKeyCount = apiKeys.filter(key => key.status === 'revoked').length
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">API Keys</h1>
-          <p className="text-muted-foreground">
-            Manage your API keys for accessing PromptOps services
-          </p>
-        </div>
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Create API Key
-            </Button>
-          </DialogTrigger>
+      <div className="flex flex-col space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">API Keys</h1>
+            <p className="text-muted-foreground">
+              Manage your API keys for accessing PromptOps services
+            </p>
+          </div>
+          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Create API Key
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Create New API Key</DialogTitle>
@@ -479,6 +518,27 @@ export function ApiKeysPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Search Input */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          <Input
+            placeholder="Search API keys by name, description, or prefix..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 pr-10"
+          />
+          {searchQuery && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearSearch}
+              className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Usage Statistics Overview */}
@@ -606,8 +666,49 @@ export function ApiKeysPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {apiKeys.map((apiKey) => (
+        <Tabs value={activeTab} onValueChange={(value) => {
+    setActiveTab(value as 'active' | 'revoked')
+    setSearchQuery('') // Clear search when switching tabs
+  }}>
+          <TabsList>
+            <TabsTrigger value="active" className="flex items-center space-x-2">
+              <span>Active</span>
+              <Badge variant="secondary" className="ml-2">
+                {activeKeyCount}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="revoked" className="flex items-center space-x-2">
+              <span>Revoked</span>
+              <Badge variant="secondary" className="ml-2">
+                {revokedKeyCount}
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="active" className="space-y-4">
+            {filteredApiKeys.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <Search className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    {searchQuery ? 'No Matching API Keys' : 'No Active API Keys'}
+                  </h3>
+                  <p className="text-muted-foreground mb-4">
+                    {searchQuery
+                      ? `No active API keys found matching "${searchQuery}". Try a different search term.`
+                      : 'Create your first API key to start using PromptOps services.'
+                    }
+                  </p>
+                  {!searchQuery && (
+                    <Button onClick={() => setShowCreateDialog(true)}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create API Key
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              filteredApiKeys.map((apiKey) => (
             <Card key={apiKey.id}>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -874,8 +975,287 @@ export function ApiKeysPage() {
                 </CardContent>
               )}
             </Card>
-          ))}
-        </div>
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="revoked" className="space-y-4">
+            {filteredApiKeys.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <Search className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    {searchQuery ? 'No Matching API Keys' : 'No Revoked API Keys'}
+                  </h3>
+                  <p className="text-muted-foreground">
+                    {searchQuery
+                      ? `No revoked API keys found matching "${searchQuery}". Try a different search term.`
+                      : 'No API keys have been revoked yet.'
+                    }
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              filteredApiKeys.map((apiKey) => (
+            <Card key={apiKey.id}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div>
+                      <CardTitle className="flex items-center space-x-2">
+                        <span>{apiKey.name}</span>
+                        {getStatusBadge(apiKey.status)}
+                      </CardTitle>
+                      {apiKey.description && (
+                        <CardDescription>{apiKey.description}</CardDescription>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewStats(apiKey.id)}
+                    >
+                      <BarChart3 className="w-4 h-4 mr-2" />
+                      {selectedKeyForStats === apiKey.id ? 'Hide Stats' : 'View Stats'}
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">API Key Prefix</Label>
+                        <div className="flex items-center space-x-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleKeyVisibility(`${apiKey.id}-prefix`)}
+                            className="h-6 w-6 p-0"
+                          >
+                            {visibleKeys[`${apiKey.id}-prefix`] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCopyToClipboard(apiKey.api_key_prefix, `${apiKey.id}-prefix`)}
+                            className="h-6 w-6 p-0"
+                          >
+                            {copiedKeys[`${apiKey.id}-prefix`] ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="font-mono text-sm bg-muted p-2 rounded">
+                        {visibleKeys[`${apiKey.id}-prefix`] ? apiKey.api_key_prefix : '••••••••'}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">API Key</Label>
+                        <div className="flex items-center space-x-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleKeyVisibility(`${apiKey.id}-full`)}
+                            className="h-6 w-6 p-0"
+                          >
+                            {visibleKeys[`${apiKey.id}-full`] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCopyToClipboard(apiKey.api_key || apiKey.api_key_prefix + '••••••••', `${apiKey.id}-full`)}
+                            className="h-6 w-6 p-0"
+                            title={apiKey.api_key ? "Copy full API key" : "Full API key only available on creation"}
+                          >
+                            {copiedKeys[`${apiKey.id}-full`] ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="font-mono text-sm bg-muted p-2 rounded">
+                        {visibleKeys[`${apiKey.id}-full`]
+                          ? (apiKey.api_key || apiKey.api_key_prefix + '••••••••')
+                          : '••••••••••••••'
+                        }
+                      </div>
+                      {!visibleKeys[`${apiKey.id}-full`] && apiKey.api_key && (
+                        <p className="text-xs text-muted-foreground">Click eye icon to reveal full API key</p>
+                      )}
+                      {!visibleKeys[`${apiKey.id}-full`] && !apiKey.api_key && (
+                        <p className="text-xs text-muted-foreground">Full API key only available on creation</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Secret Key</Label>
+                        <div className="flex items-center space-x-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleKeyVisibility(`${apiKey.id}-secret`)}
+                            className="h-6 w-6 p-0"
+                          >
+                            {visibleKeys[`${apiKey.id}-secret`] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCopyToClipboard(apiKey.secret_key || 'secret-key-not-available', `${apiKey.id}-secret`)}
+                            className="h-6 w-6 p-0"
+                            title={apiKey.secret_key ? "Copy secret key" : "Secret key only available on creation"}
+                          >
+                            {copiedKeys[`${apiKey.id}-secret`] ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="font-mono text-sm bg-muted p-2 rounded">
+                        {visibleKeys[`${apiKey.id}-secret`]
+                          ? (apiKey.secret_key || '•••••••••••••••••••••••••••••••••••••••••••••••••••')
+                          : '•••••••••••••••••••••••••••••••••••••••••••••••••••'
+                        }
+                      </div>
+                      {!visibleKeys[`${apiKey.id}-secret`] && apiKey.secret_key && (
+                        <p className="text-xs text-muted-foreground">Click eye icon to reveal secret key</p>
+                      )}
+                      {!visibleKeys[`${apiKey.id}-secret`] && !apiKey.secret_key && (
+                        <p className="text-xs text-muted-foreground">Secret key only available on creation</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Rate Limits</Label>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span>Per minute:</span>
+                        <span>{apiKey.rate_limit_per_minute.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Per hour:</span>
+                        <span>{apiKey.rate_limit_per_hour.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Per day:</span>
+                        <span>{apiKey.rate_limit_per_day.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Permissions</Label>
+                    <div className="flex flex-wrap gap-1">
+                      {apiKey.allowed_scopes.map((scope) => (
+                        <Badge key={scope} variant="outline" className="text-xs">
+                          {scope}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Created</Label>
+                    <div className="text-sm text-muted-foreground">
+                      {formatDate(apiKey.created_at)}
+                    </div>
+                  </div>
+
+                  {apiKey.last_used_at && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Last Used</Label>
+                      <div className="text-sm text-muted-foreground">
+                        {formatDate(apiKey.last_used_at)}
+                      </div>
+                    </div>
+                  )}
+
+                  {apiKey.expires_at && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Expires</Label>
+                      <div className="text-sm text-muted-foreground">
+                        {formatDate(apiKey.expires_at)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+
+              {/* Detailed Statistics Section */}
+              {selectedKeyForStats === apiKey.id && usageStats && (
+                <CardContent className="border-t pt-6">
+                  <div className="mt-6">
+                    <h4 className="text-lg font-semibold mb-4 flex items-center">
+                      <BarChart3 className="w-5 h-5 mr-2" />
+                      Detailed Usage Statistics
+                    </h4>
+                    {statsLoading ? (
+                      <div className="text-center py-4">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                        <p className="mt-2 text-sm text-muted-foreground">Loading statistics...</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium">Requests</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold">{usageStats.total_requests}</div>
+                            <div className="text-xs text-muted-foreground">
+                              Total in last 30 days
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold">{(usageStats.success_rate * 100).toFixed(1)}%</div>
+                            <div className="text-xs text-muted-foreground">
+                              Successful requests
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium">Avg Response Time</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold">{usageStats.average_response_time_ms.toFixed(0)}ms</div>
+                            <div className="text-xs text-muted-foreground">
+                              Average processing time
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold">${usageStats.total_cost_usd}</div>
+                            <div className="text-xs text-muted-foreground">
+                              Estimated usage cost
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+              ))
+            )}
+          </TabsContent>
+        </Tabs>
       )}
 
       {/* New API Key Dialog */}
@@ -966,6 +1346,7 @@ export function ApiKeysPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
     </div>
   )
 }

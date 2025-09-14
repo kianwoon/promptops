@@ -33,7 +33,7 @@ const navigation: NavigationItem[] = [
   { name: 'Evaluations', href: '/evaluations', icon: BarChart3, permission: 'evaluations:read' },
   { name: 'Compatibility Matrix', href: '/compatibility', icon: Grid3X3, permission: 'compatibility:read' },
   { name: 'Governance', href: '/governance', icon: Shield, permission: 'audits:read' },
-  { name: 'API Keys', href: '/api-keys', icon: Key },
+  { name: 'API Keys', href: '/keys', icon: Key },
   { name: 'User Management', href: '/users', icon: Users, permission: 'users:read' },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]

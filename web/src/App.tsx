@@ -19,6 +19,7 @@ import { UserManagement } from './pages/UserManagement'
 import { Projects } from './pages/Projects'
 import { ProjectDetail } from './pages/ProjectDetail'
 import { ApiKeysPage } from './pages/ApiKeys'
+import { DeveloperPage as Developer } from './pages/Developer'
 import { Layout } from './components/Layout'
 import { PublicLayoutWrapper } from './components/PublicLayoutWrapper'
 import { DevProtectedRoute as ProtectedRoute } from './components/auth/DevProtectedRoute'
@@ -32,6 +33,7 @@ function App() {
         {/* Public Routes with Layout */}
         <Route element={<PublicLayoutWrapper />}>
           <Route path="/" element={<Landing />} />
+          <Route path="/developer" element={<Developer />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/auth/success" element={<AuthSuccess />} />
@@ -156,7 +158,7 @@ function App() {
             }
           />
           <Route
-            path="/api-keys"
+            path="/keys"
             element={
               <ProtectedRoute>
                 <ApiKeysPage />

@@ -23,6 +23,7 @@ export function PublicLayout({ children, onSignInClick, onRegisterClick }: Publi
 
   const navigation = [
     { name: 'Features', href: '/#features' },
+    { name: 'Developer', href: '/developer' },
     { name: 'Use Cases', href: '/#use-cases' },
     { name: 'Pricing', href: '/#pricing' },
     { name: 'About', href: '/#about' },
