@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Plus, Edit, Trash2, ArrowLeft, Folder, FileText, Code, Clock, Hash, Calendar, User, Eye, AlertTriangle } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,7 +22,41 @@ export function ProjectDetail() {
   const navigate = useNavigate()
   const { data: project, isLoading: projectLoading, error: projectError } = useProject(projectId || '')
   const { data: modules } = useModules(projectId)
-  const { data: prompts } = usePrompts()
+  // We'll calculate prompt counts per module manually after data is loaded
+  const [promptCounts, setPromptCounts] = useState<Record<string, number>>({})
+
+  // Load prompts for each module to get accurate counts
+  useEffect(() => {
+    if (modules && modules.length > 0) {
+      const loadPromptCounts = async () => {
+        const counts: Record<string, number> = {}
+
+        for (const module of modules) {
+          try {
+            const token = localStorage.getItem('access_token') || localStorage.getItem('token') || 'demo-token'
+            const response = await fetch(`/v1/prompts?module_id=${module.id}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            })
+            if (response.ok) {
+              const prompts = await response.json()
+              counts[module.id] = prompts.length
+            } else {
+              counts[module.id] = 0
+            }
+          } catch (error) {
+            console.error(`Failed to load prompts for module ${module.id}:`, error)
+            counts[module.id] = 0
+          }
+        }
+
+        setPromptCounts(counts)
+      }
+
+      loadPromptCounts()
+    }
+  }, [modules])
   const createModule = useCreateModule()
   const updateModule = useUpdateModule()
   const deleteModule = useDeleteModule()
@@ -199,10 +233,7 @@ export function ProjectDetail() {
     )
   }
 
-  const promptsInProject = prompts?.filter(prompt =>
-    modules?.some(module => module.id === prompt.module_id)
-  ) || []
-
+  
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -559,8 +590,8 @@ export function ProjectDetail() {
 
           {modules && modules.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2">
-              {modules.map((module) => {
-                const modulePromptCount = prompts?.filter(p => p.module_id === module.id).length || 0;
+              {modules.map((module, index) => {
+                const modulePromptCount = promptCounts[module.id] || 0;
                 const canDelete = modulePromptCount === 0;
 
                 return (

@@ -26,9 +26,11 @@ import {
   FileText,
   Bot,
   Copy,
-  Check
+  Check,
+  GitCompare
 } from 'lucide-react'
 import { AIAssistantLoading } from '@/components/ai/AIAssistantLoading'
+import { DiffViewer } from '@/components/DiffViewer'
 import { usePrompt, useUpdatePrompt, useCreatePrompt, useModelCompatibilities, useTestPromptCompatibility, useCompatibilityMatrix, useApprovalRequests, useCreateApprovalRequest } from '@/hooks/api'
 import type { Prompt, PromptCreate, PromptUpdate } from '@/types/api'
 import { formatDistanceToNow } from 'date-fns'
@@ -72,6 +74,8 @@ export function PromptEditor({
   const [activeTab, setActiveTab] = useState('content')
   const [showAIAssistantLoading, setShowAIAssistantLoading] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
+  const [showDiff, setShowDiff] = useState(false)
+  const [originalContent, setOriginalContent] = useState('')
   
   const { data: prompt, isLoading } = usePrompt(promptId || '', version || '')
   const updatePrompt = useUpdatePrompt()
@@ -251,6 +255,8 @@ export function PromptEditor({
     if (!projectId || !moduleId) return
 
     try {
+      // Save the current content as original before AI modifies it
+      setOriginalContent(content)
       // Check if user has AI Assistant providers configured
       const token = localStorage.getItem('access_token') || localStorage.getItem('token') || 'demo-token'
       const response = await fetch('/v1/ai-assistant/providers', {
@@ -614,6 +620,16 @@ export function PromptEditor({
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => setShowDiff(true)}
+                  disabled={!originalContent}
+                  className="flex items-center space-x-1"
+                >
+                  <GitCompare className="w-4 h-4" />
+                  <span>Show Diff</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => setIsPreviewVisible(!isPreviewVisible)}
                 >
                   {isPreviewVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -884,13 +900,37 @@ export function PromptEditor({
       <AIAssistantLoading
         isOpen={showAIAssistantLoading}
         onClose={() => setShowAIAssistantLoading(false)}
-        onComplete={handleAIAssistantComplete}
+        onComplete={(generatedContent, masFields) => {
+          // Apply the generated content and MAS fields but don't close the modal
+          setContent(generatedContent);
+          if (masFields) {
+            setMasIntent(masFields.masIntent);
+            setMasFairnessNotes(masFields.masFairnessNotes);
+            setMasRiskLevel(masFields.masRiskLevel as 'low' | 'medium' | 'high');
+            setMasTestingNotes(masFields.masTestingNotes);
+          }
+        }}
         getContext={() => ({
           description: description || 'Create a prompt',
           existingContent: content,
           promptType: isNew ? 'create_prompt' : 'edit_prompt'
         })}
       />
+
+      {/* Diff Viewer */}
+      {showDiff && (
+        <DiffViewer
+          isOpen={showDiff}
+          onClose={() => {
+            setShowDiff(false)
+            // Reset original content after viewing diff
+            setOriginalContent('')
+          }}
+          oldContent={originalContent}
+          newContent={content}
+          title="Prompt Content Changes"
+        />
+      )}
     </div>
   )
 }

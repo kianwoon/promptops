@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Bot, Brain, Sparkles, Loader2, Copy, Check } from 'lucide-react'
+import { Bot, Brain, Sparkles, Loader2, Copy, Check, GitCompare } from 'lucide-react'
+import { DiffViewer } from '@/components/DiffViewer'
 
 interface AIAssistantLoadingProps {
   isOpen: boolean
@@ -53,15 +54,10 @@ const thinkingStages: ThinkingStage[] = [
 
 // Intelligent content generation based on common prompt types
 function generateIntelligentSampleContent(description: string): string {
-  console.log('AI Assistant generating content for description:', description)
   const descriptionLower = description.toLowerCase()
-  console.log('AI Assistant processing description (lowercase):', descriptionLower)
-  console.log('Contains "private banking":', descriptionLower.includes('private banking'))
-  console.log('Contains "banking":', descriptionLower.includes('banking'))
 
   // Generate specialized content based on description
   if (descriptionLower.includes('private banking') || descriptionLower.includes('banking')) {
-    console.log('MATCH: Using private banking template')
     return `# Private Banking Customer Support Agent Prompt
 
 ## Role Definition
@@ -107,7 +103,6 @@ You are a knowledgeable, professional customer support agent specializing in pri
 
 *Generated for private banking with focus on personalized wealth management and regulatory compliance*`
   } else if (descriptionLower.includes('customer support') || descriptionLower.includes('support agent')) {
-    console.log('MATCH: Using customer support template')
     return `# Customer Support Agent Prompt
 
 ## Role Definition
@@ -162,7 +157,6 @@ You are a knowledgeable, empathetic, and professional customer support agent. Yo
 
 *Generated with intelligent prompt engineering based on customer support best practices*`
   } else {
-    console.log('NO MATCH: Using default template for description:', descriptionLower)
     // Default fallback template
     return `# AI Assistant Generated Prompt
 
@@ -196,12 +190,13 @@ You are an intelligent AI assistant designed to help with various tasks based on
 }
 
 export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: AIAssistantLoadingProps) {
-  console.log('AI Assistant Loading component received getContext function:', !!getContext)
   const [currentStage, setCurrentStage] = useState(0)
   const [progress, setProgress] = useState(0)
   const [confidence, setConfidence] = useState(0)
   const [isCompleting, setIsCompleting] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
+  const [showDiff, setShowDiff] = useState(false)
+  const [generatedContent, setGeneratedContent] = useState('')
 
   useEffect(() => {
     if (!isOpen) return
@@ -252,10 +247,10 @@ export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: 
               promptType: 'create_prompt'
             }
 
-            console.log('AI Assistant generating content with current context:', currentContext)
-
+            
             // Generate sample content using current context
             const sampleContent = generateIntelligentSampleContent(currentContext.description)
+            setGeneratedContent(sampleContent)
 
             onComplete(sampleContent, {
   masIntent: "To provide exceptional customer service by understanding customer needs, resolving issues efficiently, and maintaining positive brand experiences while ensuring fair and equitable treatment of all customers.",
@@ -288,6 +283,8 @@ export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: 
       setConfidence(0)
       setIsCompleting(false)
       setIsCopied(false)
+      setShowDiff(false)
+      setGeneratedContent('')
     }
   }, [isOpen])
 
@@ -417,22 +414,31 @@ export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: 
         {/* Action Buttons */}
         {isCompleting && (
           <div className="space-y-3">
-            <button
-              onClick={handleCopyContent}
-              className="w-full bg-gray-100 text-gray-700 py-3 px-6 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 flex items-center justify-center space-x-2"
-            >
-              {isCopied ? (
-                <>
-                  <Check className="w-5 h-5" />
-                  <span>Copied to Clipboard!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-5 h-5" />
-                  <span>Copy Generated Content</span>
-                </>
-              )}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleCopyContent}
+                className="flex-1 bg-gray-100 text-gray-700 py-3 px-6 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 flex items-center justify-center space-x-2"
+              >
+                {isCopied ? (
+                  <>
+                    <Check className="w-5 h-5" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-5 h-5" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setShowDiff(true)}
+                className="flex-1 bg-gray-100 text-gray-700 py-3 px-6 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 flex items-center justify-center space-x-2"
+              >
+                <GitCompare className="w-5 h-5" />
+                <span>Show Diff</span>
+              </button>
+            </div>
             <button
               onClick={() => onClose()}
               className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105"
@@ -440,6 +446,17 @@ export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: 
               Review Generated Content
             </button>
           </div>
+        )}
+
+        {/* Diff Viewer */}
+        {showDiff && getContext && (
+          <DiffViewer
+            isOpen={showDiff}
+            onClose={() => setShowDiff(false)}
+            oldContent={getContext().existingContent}
+            newContent={generatedContent}
+            title="Prompt Content Changes"
+          />
         )}
       </div>
     </div>

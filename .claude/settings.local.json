@@ -47,7 +47,8 @@
       "Bash(rm:*)",
       "Bash(dropdb:*)",
       "Bash(echo:*)",
-      "Bash(export:*)"
+      "Bash(export:*)",
+      "Bash(npm run lint)"
     ],
     "deny": [],
     "ask": []

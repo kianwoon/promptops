@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -7,20 +7,20 @@ from datetime import datetime
 from app.database import get_db
 from app.models import ApprovalRequest, Prompt, AuditLog
 from app.schemas import ApprovalRequestCreate, ApprovalRequestResponse, ApprovalRequestUpdate
-from app.auth import get_current_user
 
 router = APIRouter()
 
 @router.get("/", response_model=List[ApprovalRequestResponse])
 async def list_approval_requests(
+    request: Request,
     prompt_id: Optional[str] = None,
     status: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """List all approval requests, optionally filtered by prompt or status"""
+    current_user = request.state.current_user
     query = db.query(ApprovalRequest)
     if prompt_id:
         query = query.filter(ApprovalRequest.prompt_id == prompt_id)
@@ -32,11 +32,12 @@ async def list_approval_requests(
 
 @router.get("/{request_id}", response_model=ApprovalRequestResponse)
 async def get_approval_request(
+    request: Request,
     request_id: str,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """Get a specific approval request"""
+    current_user = request.state.current_user
     request = db.query(ApprovalRequest).filter(ApprovalRequest.id == request_id).first()
     if not request:
         raise HTTPException(status_code=404, detail="Approval request not found")
@@ -44,11 +45,12 @@ async def get_approval_request(
 
 @router.post("/", response_model=ApprovalRequestResponse)
 async def create_approval_request(
+    request: Request,
     request_data: ApprovalRequestCreate = Body(...),
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """Create a new approval request"""
+    current_user = request.state.current_user
     # Verify prompt exists
     prompt = db.query(Prompt).filter(Prompt.id == request_data.prompt_id).first()
     if not prompt:
@@ -93,12 +95,13 @@ async def create_approval_request(
 
 @router.put("/{request_id}", response_model=ApprovalRequestResponse)
 async def update_approval_request(
+    request: Request,
     request_id: str,
     request_update: ApprovalRequestUpdate = Body(...),
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """Update an approval request"""
+    current_user = request.state.current_user
     request = db.query(ApprovalRequest).filter(ApprovalRequest.id == request_id).first()
     if not request:
         raise HTTPException(status_code=404, detail="Approval request not found")
@@ -145,11 +148,12 @@ async def update_approval_request(
 
 @router.delete("/{request_id}")
 async def delete_approval_request(
+    request: Request,
     request_id: str,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """Delete an approval request"""
+    current_user = request.state.current_user
     request = db.query(ApprovalRequest).filter(ApprovalRequest.id == request_id).first()
     if not request:
         raise HTTPException(status_code=404, detail="Approval request not found")

@@ -11,7 +11,7 @@
 
 ## 🚨 CRITICAL: Mandatory Agent Delegation
 
-**ABSOLUTE RULE**: Claude Code MUST delegate task to subagent.
+**ABSOLUTE RULE**: Claude Code MUST delegate task to subagent. Treat the project as PRODUCTION. NOT MOCK SYSTEM.
 
 ## 🔄 Sequential Agent Delegation
 
