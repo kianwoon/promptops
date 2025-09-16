@@ -78,6 +78,7 @@ const rolePermissions = {
     'settings:manage',
     'analytics:read',
     'audits:read',
+    'compatibility:read',
   ],
   user: [
     'templates:create',

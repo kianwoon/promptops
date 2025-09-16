@@ -627,7 +627,7 @@ async def get_default_provider(
         service = AIAssistantService(db)
         default_provider = service.get_default_provider(current_user.get("id"))
         if not default_provider:
-            return None
+            raise HTTPException(status_code=404, detail="No default provider found")
         return default_provider
     except Exception as e:
         logger.error("Error getting default provider", user_id=current_user.get("id"), error=str(e))

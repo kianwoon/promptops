@@ -523,6 +523,10 @@ class AIAssistantProviderCreate(BaseModel):
     project: Optional[str] = None
     config_json: Optional[Dict[str, Any]] = None
 
+    model_config = ConfigDict(
+        protected_namespaces=()
+    )
+
 class AIAssistantProviderUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     status: Optional[AIAssistantProviderStatus] = None
@@ -532,6 +536,10 @@ class AIAssistantProviderUpdate(BaseModel):
     organization: Optional[str] = None
     project: Optional[str] = None
     config_json: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(
+        protected_namespaces=()
+    )
 
 class AIAssistantProviderResponse(BaseModel):
     id: str
@@ -548,6 +556,11 @@ class AIAssistantProviderResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_used_at: Optional[datetime] = None
+
+    model_config = ConfigDict(
+        protected_namespaces=(),
+        from_attributes=True
+    )
 
 
 class AIAssistantProviderEditResponse(BaseModel):
@@ -567,8 +580,10 @@ class AIAssistantProviderEditResponse(BaseModel):
     updated_at: datetime
     last_used_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        protected_namespaces=(),
+        from_attributes=True
+    )
 
 class AIAssistantSystemPromptCreate(BaseModel):
     provider_id: str
@@ -677,3 +692,1308 @@ class AIAssistantProviderTestResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Governance System Schemas
+
+class SecurityEventCreate(BaseModel):
+    event_type: str = Field(..., pattern="^(login_attempt|login_success|login_failure|permission_denied|data_access|data_modification|config_change|security_policy_violation|suspicious_activity|rate_limit_exceeded|api_key_compromise)$")
+    severity: str = Field(..., pattern="^(low|medium|high|critical)$")
+    user_id: Optional[str] = None
+    tenant_id: str
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
+    action: str
+    description: str
+    details_json: Optional[Dict[str, Any]] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    session_id: Optional[str] = None
+
+class SecurityEventUpdate(BaseModel):
+    is_resolved: Optional[bool] = None
+    resolved_by: Optional[str] = None
+    resolution_notes: Optional[str] = None
+
+class SecurityEventResponse(BaseModel):
+    id: str
+    event_type: str
+    severity: str
+    user_id: Optional[str] = None
+    tenant_id: str
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
+    action: str
+    description: str
+    details_json: Optional[Dict[str, Any]] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    session_id: Optional[str] = None
+    is_resolved: bool
+    resolved_by: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+    resolution_notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkflowDefinitionCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    version: str = Field(..., min_length=1, max_length=20)
+    category: str = Field(..., pattern="^(approval|compliance|security|access_control)$")
+    trigger_condition: Dict[str, Any]
+    steps_json: List[Dict[str, Any]]
+    timeout_minutes: int = Field(default=1440, ge=1, le=10080)  # 1 minute to 1 week
+    requires_evidence: bool = False
+    auto_approve_threshold: Optional[int] = Field(None, ge=1)
+    escalation_rules: Optional[Dict[str, Any]] = None
+    notification_settings: Optional[Dict[str, Any]] = None
+    tenant_id: str
+
+class WorkflowDefinitionUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = None
+    status: Optional[str] = Field(None, pattern="^(draft|active|inactive|archived)$")
+    trigger_condition: Optional[Dict[str, Any]] = None
+    steps_json: Optional[List[Dict[str, Any]]] = None
+    timeout_minutes: Optional[int] = Field(None, ge=1, le=10080)
+    requires_evidence: Optional[bool] = None
+    auto_approve_threshold: Optional[int] = Field(None, ge=1)
+    escalation_rules: Optional[Dict[str, Any]] = None
+    notification_settings: Optional[Dict[str, Any]] = None
+
+class WorkflowDefinitionResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    version: str
+    status: str
+    category: str
+    trigger_condition: Dict[str, Any]
+    steps_json: List[Dict[str, Any]]
+    timeout_minutes: int
+    requires_evidence: bool
+    auto_approve_threshold: Optional[int] = None
+    escalation_rules: Optional[Dict[str, Any]] = None
+    notification_settings: Optional[Dict[str, Any]] = None
+    created_by: Optional[str] = None
+    updated_by: Optional[str] = None
+    tenant_id: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkflowInstanceCreate(BaseModel):
+    workflow_definition_id: str
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    resource_type: str
+    resource_id: str
+    context_json: Dict[str, Any]
+    due_date: Optional[datetime] = None
+    tenant_id: str
+
+class WorkflowInstanceUpdate(BaseModel):
+    status: Optional[str] = Field(None, pattern="^(pending|in_progress|completed|rejected|cancelled|error)$")
+    current_step: Optional[int] = Field(None, ge=0)
+    context_json: Optional[Dict[str, Any]] = None
+    steps_json: Optional[List[Dict[str, Any]]] = None
+    evidence: Optional[Dict[str, Any]] = None
+    approvers: Optional[List[str]] = None
+    current_assignee: Optional[str] = None
+    due_date: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+
+class WorkflowInstanceResponse(BaseModel):
+    id: str
+    workflow_definition_id: str
+    status: str
+    title: str
+    description: Optional[str] = None
+    resource_type: str
+    resource_id: str
+    initiated_by: Optional[str] = None
+    current_step: int
+    context_json: Dict[str, Any]
+    steps_json: List[Dict[str, Any]]
+    evidence: Optional[Dict[str, Any]] = None
+    approvers: Optional[List[str]] = None
+    current_assignee: Optional[str] = None
+    due_date: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    tenant_id: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ComplianceReportCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    report_type: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    scope_json: Dict[str, Any]
+    tenant_id: str
+
+class ComplianceReportUpdate(BaseModel):
+    status: Optional[str] = Field(None, pattern="^(generating|completed|failed|archived)$")
+    findings: Optional[Dict[str, Any]] = None
+    recommendations: Optional[Dict[str, Any]] = None
+    metrics: Optional[Dict[str, Any]] = None
+    file_path: Optional[str] = None
+    file_size: Optional[int] = Field(None, ge=0)
+    file_hash: Optional[str] = None
+
+class ComplianceReportResponse(BaseModel):
+    id: str
+    name: str
+    report_type: str
+    description: Optional[str] = None
+    status: str
+    scope_json: Dict[str, Any]
+    findings: Optional[Dict[str, Any]] = None
+    recommendations: Optional[Dict[str, Any]] = None
+    metrics: Optional[Dict[str, Any]] = None
+    generated_by: Optional[str] = None
+    tenant_id: str
+    file_path: Optional[str] = None
+    file_size: Optional[int] = None
+    file_hash: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class PermissionTemplateCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    permissions: List[Dict[str, Any]]
+    category: str = Field(..., pattern="^(admin|user|viewer|custom)$")
+    is_active: bool = True
+    tenant_id: str
+
+class PermissionTemplateUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = None
+    permissions: Optional[List[Dict[str, Any]]] = None
+    category: Optional[str] = Field(None, pattern="^(admin|user|viewer|custom)$")
+    is_active: Optional[bool] = None
+
+class PermissionTemplateResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    permissions: List[Dict[str, Any]]
+    category: str
+    is_system: bool
+    is_active: bool
+    created_by: Optional[str] = None
+    updated_by: Optional[str] = None
+    tenant_id: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class RolePermissionCreate(BaseModel):
+    role_name: str = Field(..., min_length=1, max_length=50)
+    resource_type: str = Field(..., min_length=1, max_length=50)
+    action: str = Field(..., min_length=1, max_length=50)
+    conditions: Optional[Dict[str, Any]] = None
+    permission_template_id: Optional[str] = None
+    is_active: bool = True
+    tenant_id: str
+
+class RolePermissionUpdate(BaseModel):
+    role_name: Optional[str] = Field(None, min_length=1, max_length=50)
+    resource_type: Optional[str] = Field(None, min_length=1, max_length=50)
+    action: Optional[str] = Field(None, min_length=1, max_length=50)
+    conditions: Optional[Dict[str, Any]] = None
+    permission_template_id: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class RolePermissionResponse(BaseModel):
+    id: str
+    role_name: str
+    resource_type: str
+    action: str
+    conditions: Optional[Dict[str, Any]] = None
+    permission_template_id: Optional[str] = None
+    is_active: bool
+    created_by: Optional[str] = None
+    updated_by: Optional[str] = None
+    tenant_id: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkflowStepAction(BaseModel):
+    step_id: str
+    action: str = Field(..., pattern="^(approve|reject|request_changes|escalate|assign|add_evidence)$")
+    comments: Optional[str] = None
+    evidence: Optional[Dict[str, Any]] = None
+    assignee: Optional[str] = None
+
+class BulkRolePermissionCreate(BaseModel):
+    permissions: List[RolePermissionCreate]
+
+class BulkRolePermissionResponse(BaseModel):
+    created_count: int
+    failed_count: int
+    errors: List[Dict[str, str]]
+
+class PermissionCheckRequest(BaseModel):
+    role_name: str
+    resource_type: str
+    action: str
+    context: Optional[Dict[str, Any]] = None
+
+class PermissionCheckResponse(BaseModel):
+    has_permission: bool
+    reason: Optional[str] = None
+    conditions_met: Optional[Dict[str, bool]] = None
+
+
+# ============ ENHANCED RBAC SCHEMAS ============
+
+class CustomRoleCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=50)
+    description: Optional[str] = Field(None, max_length=500)
+    permissions: List[str] = []
+    permission_templates: List[str] = []
+    inherited_roles: List[str] = []
+    inheritance_type: str = "none"
+    conditions: Optional[Dict[str, Any]] = None
+
+class CustomRoleUpdate(BaseModel):
+    description: Optional[str] = Field(None, max_length=500)
+    permissions: Optional[List[str]] = None
+    permission_templates: Optional[List[str]] = None
+    inherited_roles: Optional[List[str]] = None
+    inheritance_type: Optional[str] = None
+    conditions: Optional[Dict[str, Any]] = None
+    is_active: Optional[bool] = None
+
+class CustomRoleResponse(BaseModel):
+    name: str
+    description: Optional[str] = None
+    permissions: List[str]
+    permission_templates: List[str]
+    inherited_roles: List[str]
+    inheritance_type: str
+    conditions: Dict[str, Any]
+    is_active: bool
+    created_at: datetime
+    created_by: Optional[str] = None
+    updated_at: datetime
+    updated_by: Optional[str] = None
+    tenant_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class PermissionTemplatePermission(BaseModel):
+    resource_type: str = Field(..., min_length=1, max_length=50)
+    action: str = Field(..., min_length=1, max_length=50)
+    conditions: Optional[Dict[str, Any]] = None
+
+class PermissionTemplateCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    permissions: List[PermissionTemplatePermission] = []
+    category: Optional[str] = Field(None, max_length=50)
+
+class PermissionTemplateUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    permissions: Optional[List[PermissionTemplatePermission]] = None
+    category: Optional[str] = Field(None, max_length=50)
+    is_active: Optional[bool] = None
+
+class PermissionTemplateResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    permissions: List[PermissionTemplatePermission]
+    category: str
+    is_system: bool
+    is_active: bool
+    created_at: datetime
+    created_by: Optional[str] = None
+    updated_at: datetime
+    updated_by: Optional[str] = None
+    tenant_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class RoleInheritanceCreate(BaseModel):
+    parent_role: str = Field(..., min_length=1, max_length=50)
+    child_role: str = Field(..., min_length=1, max_length=50)
+    inheritance_type: Optional[str] = "direct"
+    conditions: Optional[Dict[str, Any]] = None
+
+class RoleInheritanceUpdate(BaseModel):
+    inheritance_type: Optional[str] = None
+    conditions: Optional[Dict[str, Any]] = None
+    is_active: Optional[bool] = None
+
+class RoleInheritanceResponse(BaseModel):
+    parent_role: str
+    child_role: str
+    inheritance_type: str
+    conditions: Dict[str, Any]
+    is_active: bool
+    created_at: datetime
+    created_by: Optional[str] = None
+    tenant_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class ResourceSpecificPermissionCreate(BaseModel):
+    role_name: str = Field(..., min_length=1, max_length=50)
+    resource_type: str = Field(..., min_length=1, max_length=50)
+    resource_id: str = Field(..., min_length=1)
+    action: str = Field(..., min_length=1, max_length=50)
+    conditions: Optional[Dict[str, Any]] = None
+    expires_at: Optional[datetime] = None
+
+class ResourceSpecificPermissionUpdate(BaseModel):
+    conditions: Optional[Dict[str, Any]] = None
+    expires_at: Optional[datetime] = None
+    is_active: Optional[bool] = None
+
+class ResourceSpecificPermissionResponse(BaseModel):
+    id: str
+    role_name: str
+    resource_type: str
+    resource_id: str
+    action: str
+    conditions: Dict[str, Any]
+    expires_at: Optional[datetime] = None
+    is_active: bool
+    created_at: datetime
+    created_by: Optional[str] = None
+    tenant_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class AccessReviewScope(BaseModel):
+    users: Optional[List[str]] = None
+    roles: Optional[List[str]] = None
+    resources: Optional[List[Dict[str, Any]]] = None
+    time_period: Optional[Dict[str, str]] = None
+
+class AccessReviewCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    review_type: str = Field(..., pattern="^(periodic|event_based|user_driven)$")
+    scope: AccessReviewScope
+    reviewers: List[str] = Field(..., min_items=1)
+    due_date: Optional[datetime] = None
+
+class AccessReviewUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    reviewers: Optional[List[str]] = None
+    due_date: Optional[datetime] = None
+    status: Optional[str] = Field(None, pattern="^(pending|in_progress|completed|expired|cancelled)$")
+
+class AccessReviewResponse(BaseModel):
+    id: str
+    title: str
+    description: Optional[str] = None
+    review_type: str
+    scope: AccessReviewScope
+    reviewers: List[str]
+    status: str
+    due_date: Optional[datetime] = None
+    findings: List[Dict[str, Any]]
+    recommendations: List[Dict[str, Any]]
+    created_at: datetime
+    created_by: Optional[str] = None
+    completed_at: Optional[datetime] = None
+    tenant_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class BulkRoleAssignmentRequest(BaseModel):
+    user_ids: List[str] = Field(..., min_items=1)
+    role_names: List[str] = Field(..., min_items=1)
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
+    conditions: Optional[Dict[str, Any]] = None
+
+class BulkRoleAssignmentResponse(BaseModel):
+    success_count: int
+    failure_count: int
+    errors: List[str]
+    details: List[Dict[str, Any]]
+
+class BulkPermissionUpdateRequest(BaseModel):
+    role_name: str = Field(..., min_length=1, max_length=50)
+    updates: List[Dict[str, Any]] = Field(..., min_items=1)
+
+class BulkPermissionUpdateResponse(BaseModel):
+    success_count: int
+    failure_count: int
+    errors: List[str]
+
+class EnhancedPermissionCheckRequest(BaseModel):
+    user_roles: List[str] = Field(..., min_items=1)
+    action: str = Field(..., min_length=1, max_length=50)
+    resource_type: str = Field(..., min_length=1, max_length=50)
+    resource_id: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
+    tenant_id: Optional[str] = None
+
+class EnhancedPermissionCheckResponse(BaseModel):
+    allowed: bool
+    reason: str
+    conditions_met: Dict[str, bool]
+
+# ============ AUDIT LOG SCHEMAS ============
+
+class AuditLogResponse(BaseModel):
+    id: str
+    actor: str
+    action: str
+    subject: str
+    subject_type: str
+    subject_id: str
+    tenant_id: str
+    before_json: Optional[Dict[str, Any]] = None
+    after_json: Optional[Dict[str, Any]] = None
+    changes_json: Optional[Dict[str, Any]] = None
+    metadata_json: Optional[Dict[str, Any]] = None
+    session_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    request_id: Optional[str] = None
+    result: Optional[str] = None
+    error_message: Optional[str] = None
+    ts: datetime
+
+    class Config:
+        from_attributes = True
+
+class AuditLogFilter(BaseModel):
+    actor: Optional[str] = None
+    action: Optional[str] = None
+    subject_type: Optional[str] = None
+    subject_id: Optional[str] = None
+    result: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    ip_address: Optional[str] = None
+    session_id: Optional[str] = None
+    request_id: Optional[str] = None
+    search: Optional[str] = None
+    skip: int = 0
+    limit: int = 100
+
+class AuditLogExportRequest(BaseModel):
+    filters: AuditLogFilter
+    format: str = Field(..., pattern="^(json|csv|xlsx)$")
+    include_metadata: bool = True
+    include_changes: bool = True
+
+class AuditLogExportResponse(BaseModel):
+    export_id: str
+    file_url: Optional[str] = None
+    status: str
+    total_records: int
+    estimated_size: Optional[int] = None
+    created_at: datetime
+
+class AuditLogStats(BaseModel):
+    total_events: int
+    events_by_action: Dict[str, int]
+    events_by_subject_type: Dict[str, int]
+    events_by_actor: Dict[str, int]
+    events_by_result: Dict[str, int]
+    events_by_date: Dict[str, int]
+    top_actors: List[Dict[str, Any]]
+    top_resources: List[Dict[str, Any]]
+    recent_errors: List[Dict[str, Any]]
+    effective_permissions: List[str]
+    inheritance_chain: List[str]
+
+# Enhanced Workflow Schemas
+
+class WorkflowStepCreate(BaseModel):
+    workflow_definition_id: str
+    step_type: str
+    step_number: int
+    name: str
+    description: Optional[str] = None
+    config_json: Dict[str, Any]
+    condition_type: Optional[str] = None
+    condition_config: Optional[Dict[str, Any]] = None
+    approval_required: bool = False
+    approval_roles: Optional[List[str]] = None
+    approval_users: Optional[List[str]] = None
+    min_approvals: int = 1
+    auto_approve_after: Optional[int] = None
+    timeout_minutes: Optional[int] = None
+    is_optional: bool = False
+    can_skip: bool = False
+    parent_step_id: Optional[str] = None
+    child_steps: Optional[List[str]] = None
+    outputs: Optional[Dict[str, Any]] = None
+    transitions: Optional[Dict[str, Any]] = None
+
+class WorkflowStepResponse(BaseModel):
+    id: str
+    workflow_definition_id: str
+    step_type: str
+    step_number: int
+    name: str
+    description: Optional[str] = None
+    config_json: Dict[str, Any]
+    condition_type: Optional[str] = None
+    condition_config: Optional[Dict[str, Any]] = None
+    approval_required: bool
+    approval_roles: Optional[List[str]] = None
+    approval_users: Optional[List[str]] = None
+    min_approvals: int
+    auto_approve_after: Optional[int] = None
+    timeout_minutes: Optional[int] = None
+    is_optional: bool
+    can_skip: bool
+    parent_step_id: Optional[str] = None
+    child_steps: Optional[List[str]] = None
+    outputs: Optional[Dict[str, Any]] = None
+    transitions: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkflowStepUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    config_json: Optional[Dict[str, Any]] = None
+    condition_type: Optional[str] = None
+    condition_config: Optional[Dict[str, Any]] = None
+    approval_required: Optional[bool] = None
+    approval_roles: Optional[List[str]] = None
+    approval_users: Optional[List[str]] = None
+    min_approvals: Optional[int] = None
+    auto_approve_after: Optional[int] = None
+    timeout_minutes: Optional[int] = None
+    is_optional: Optional[bool] = None
+    can_skip: Optional[bool] = None
+    parent_step_id: Optional[str] = None
+    child_steps: Optional[List[str]] = None
+    outputs: Optional[Dict[str, Any]] = None
+    transitions: Optional[Dict[str, Any]] = None
+
+class WorkflowStepExecutionCreate(BaseModel):
+    workflow_instance_id: str
+    workflow_step_id: str
+    step_number: int
+    step_type: str
+    config_json: Dict[str, Any]
+    input_data: Optional[Dict[str, Any]] = None
+    approvers: Optional[List[str]] = None
+    due_date: Optional[datetime] = None
+
+class WorkflowStepExecutionResponse(BaseModel):
+    id: str
+    workflow_instance_id: str
+    workflow_step_id: Optional[str] = None
+    step_number: int
+    step_type: str
+    status: str
+    config_json: Dict[str, Any]
+    input_data: Optional[Dict[str, Any]] = None
+    output_data: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+    approvers: Optional[List[str]] = None
+    approvals_received: Optional[List[Dict[str, Any]]] = None
+    rejections_received: Optional[List[Dict[str, Any]]] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    due_date: Optional[datetime] = None
+    executed_by: Optional[str] = None
+    execution_time_ms: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkflowStepExecutionUpdate(BaseModel):
+    status: Optional[str] = None
+    input_data: Optional[Dict[str, Any]] = None
+    output_data: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+    approvals_received: Optional[List[Dict[str, Any]]] = None
+    rejections_received: Optional[List[Dict[str, Any]]] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    due_date: Optional[datetime] = None
+    executed_by: Optional[str] = None
+    execution_time_ms: Optional[int] = None
+
+class WorkflowEscalationRuleCreate(BaseModel):
+    workflow_definition_id: str
+    step_number: Optional[int] = None
+    escalation_type: str
+    trigger_condition: Dict[str, Any]
+    target_roles: Optional[List[str]] = None
+    target_users: Optional[List[str]] = None
+    notification_method: Optional[str] = None
+    notification_config: Optional[Dict[str, Any]] = None
+    escalation_delay_minutes: int = 0
+    max_escalation_level: int = 3
+    auto_approve: bool = False
+    auto_reject: bool = False
+    reassign_to: Optional[str] = None
+
+class WorkflowEscalationRuleResponse(BaseModel):
+    id: str
+    workflow_definition_id: str
+    step_number: Optional[int] = None
+    escalation_type: str
+    trigger_condition: Dict[str, Any]
+    target_roles: Optional[List[str]] = None
+    target_users: Optional[List[str]] = None
+    notification_method: Optional[str] = None
+    notification_config: Optional[Dict[str, Any]] = None
+    escalation_delay_minutes: int
+    max_escalation_level: int
+    auto_approve: bool
+    auto_reject: bool
+    reassign_to: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkflowEscalationRuleUpdate(BaseModel):
+    step_number: Optional[int] = None
+    escalation_type: Optional[str] = None
+    trigger_condition: Optional[Dict[str, Any]] = None
+    target_roles: Optional[List[str]] = None
+    target_users: Optional[List[str]] = None
+    notification_method: Optional[str] = None
+    notification_config: Optional[Dict[str, Any]] = None
+    escalation_delay_minutes: Optional[int] = None
+    max_escalation_level: Optional[int] = None
+    auto_approve: Optional[bool] = None
+    auto_reject: Optional[bool] = None
+    reassign_to: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class WorkflowTemplateCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    category: str
+    use_case: str
+    workflow_definition: Dict[str, Any]
+    steps_config: List[Dict[str, Any]]
+    escalation_rules: Optional[List[Dict[str, Any]]] = None
+    is_system: bool = False
+    is_public: bool = False
+    required_roles: Optional[List[str]] = None
+    version: str = "1.0.0"
+
+class WorkflowTemplateResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    category: str
+    use_case: str
+    workflow_definition: Dict[str, Any]
+    steps_config: List[Dict[str, Any]]
+    escalation_rules: Optional[List[Dict[str, Any]]] = None
+    is_system: bool
+    is_public: bool
+    required_roles: Optional[List[str]] = None
+    version: str
+    status: str
+    usage_count: int
+    created_by: Optional[str] = None
+    tenant_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkflowTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    use_case: Optional[str] = None
+    workflow_definition: Optional[Dict[str, Any]] = None
+    steps_config: Optional[List[Dict[str, Any]]] = None
+    escalation_rules: Optional[List[Dict[str, Any]]] = None
+    is_public: Optional[bool] = None
+    required_roles: Optional[List[str]] = None
+    version: Optional[str] = None
+    status: Optional[str] = None
+
+class WorkflowNotificationCreate(BaseModel):
+    workflow_instance_id: str
+    step_execution_id: Optional[str] = None
+    notification_type: str
+    recipient_type: str
+    recipient: str
+    subject: Optional[str] = None
+    message: str
+    template_data: Optional[Dict[str, Any]] = None
+    priority: str = "normal"
+    max_retries: int = 3
+
+class WorkflowNotificationResponse(BaseModel):
+    id: str
+    workflow_instance_id: str
+    step_execution_id: Optional[str] = None
+    notification_type: str
+    recipient_type: str
+    recipient: str
+    subject: Optional[str] = None
+    message: str
+    template_data: Optional[Dict[str, Any]] = None
+    status: str
+    sent_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    priority: str
+    retry_count: int
+    max_retries: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkflowNotificationUpdate(BaseModel):
+    status: Optional[str] = None
+    sent_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    retry_count: Optional[int] = None
+
+class WorkflowMetricsCreate(BaseModel):
+    workflow_definition_id: str
+    workflow_instance_id: Optional[str] = None
+    tenant_id: str
+    total_duration_minutes: Optional[int] = None
+    step_duration_minutes: Optional[Dict[str, Any]] = None
+    approval_time_minutes: Optional[int] = None
+    escalation_count: int = 0
+    success_rate: Optional[str] = None
+    completion_rate: Optional[str] = None
+    timeout_count: int = 0
+    sla_met: Optional[bool] = None
+    sla_breach_minutes: Optional[int] = None
+    average_steps_completed: Optional[str] = None
+    average_approvals_per_workflow: Optional[str] = None
+    user_satisfaction_score: Optional[str] = None
+    metric_date: datetime
+    is_aggregated: bool = False
+
+class WorkflowMetricsResponse(BaseModel):
+    id: str
+    workflow_definition_id: str
+    workflow_instance_id: Optional[str] = None
+    tenant_id: str
+    total_duration_minutes: Optional[int] = None
+    step_duration_minutes: Optional[Dict[str, Any]] = None
+    approval_time_minutes: Optional[int] = None
+    escalation_count: int
+    success_rate: Optional[str] = None
+    completion_rate: Optional[str] = None
+    timeout_count: int
+    sla_met: Optional[bool] = None
+    sla_breach_minutes: Optional[int] = None
+    average_steps_completed: Optional[str] = None
+    average_approvals_per_workflow: Optional[str] = None
+    user_satisfaction_score: Optional[str] = None
+    metric_date: datetime
+    is_aggregated: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkflowMetricsUpdate(BaseModel):
+    total_duration_minutes: Optional[int] = None
+    step_duration_minutes: Optional[Dict[str, Any]] = None
+    approval_time_minutes: Optional[int] = None
+    escalation_count: Optional[int] = None
+    success_rate: Optional[str] = None
+    completion_rate: Optional[str] = None
+    timeout_count: Optional[int] = None
+    sla_met: Optional[bool] = None
+    sla_breach_minutes: Optional[int] = None
+    average_steps_completed: Optional[str] = None
+    average_approvals_per_workflow: Optional[str] = None
+    user_satisfaction_score: Optional[str] = None
+
+class WorkflowEngineRequest(BaseModel):
+    workflow_definition_id: str
+    resource_type: str
+    resource_id: str
+    context: Dict[str, Any]
+    initiated_by: str
+    due_date: Optional[datetime] = None
+    priority: str = "normal"
+    metadata: Optional[Dict[str, Any]] = None
+
+class WorkflowEngineResponse(BaseModel):
+    workflow_instance_id: str
+    status: str
+    message: str
+    current_step: int
+    next_steps: List[Dict[str, Any]]
+    estimated_completion_time: Optional[datetime] = None
+    assignees: List[str]
+    notifications_sent: List[str]
+
+class WorkflowApprovalAction(BaseModel):
+    action: str = Field(..., pattern="^(approve|reject|request_changes|escalate|delegate)$")
+    workflow_step_execution_id: str
+    comments: Optional[str] = None
+    evidence: Optional[Dict[str, Any]] = None
+    delegate_to: Optional[str] = None
+    escalation_level: Optional[int] = None
+
+class WorkflowApprovalResponse(BaseModel):
+    success: bool
+    message: str
+    workflow_instance_id: str
+    current_status: str
+    next_step: Optional[Dict[str, Any]] = None
+
+# Security Monitoring Schemas
+
+class SecurityAlertCreate(BaseModel):
+    alert_type: str
+    severity: str
+    title: str
+    description: str
+    source: Optional[str] = None
+    source_id: Optional[str] = None
+    detection_details: Dict[str, Any]
+    affected_resources: Optional[Dict[str, Any]] = None
+    risk_score: Optional[str] = None
+    confidence_score: Optional[str] = None
+    tenant_id: str
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+
+class SecurityAlertUpdate(BaseModel):
+    status: Optional[str] = None
+    assigned_to: Optional[str] = None
+    investigation_notes: Optional[Dict[str, Any]] = None
+    resolution_details: Optional[Dict[str, Any]] = None
+    false_positive_reason: Optional[str] = None
+    related_incident: Optional[str] = None
+
+class SecurityAlertResponse(BaseModel):
+    id: str
+    alert_type: str
+    severity: str
+    status: str
+    title: str
+    description: str
+    source: Optional[str] = None
+    source_id: Optional[str] = None
+    detection_details: Dict[str, Any]
+    affected_resources: Optional[Dict[str, Any]] = None
+    risk_score: Optional[str] = None
+    confidence_score: Optional[str] = None
+    tenant_id: str
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    assigned_to: Optional[str] = None
+    investigation_notes: Optional[Dict[str, Any]] = None
+    resolution_details: Optional[Dict[str, Any]] = None
+    false_positive_reason: Optional[str] = None
+    related_incident: Optional[str] = None
+    detected_at: datetime
+    created_at: datetime
+    updated_at: datetime
+    resolved_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class SecurityIncidentCreate(BaseModel):
+    incident_type: str
+    severity: str
+    title: str
+    description: str
+    summary: Optional[str] = None
+    detection_method: Optional[str] = None
+    classification: Optional[str] = None
+    impact_score: Optional[str] = None
+    affected_systems: Optional[Dict[str, Any]] = None
+    data_affected: Optional[Dict[str, Any]] = None
+    business_impact: Optional[str] = None
+    tenant_id: str
+    reported_by: Optional[str] = None
+    assigned_to: Optional[str] = None
+    related_alerts: Optional[List[str]] = None
+    related_events: Optional[List[str]] = None
+
+class SecurityIncidentUpdate(BaseModel):
+    status: Optional[str] = None
+    classification: Optional[str] = None
+    impact_score: Optional[str] = None
+    affected_systems: Optional[Dict[str, Any]] = None
+    data_affected: Optional[Dict[str, Any]] = None
+    business_impact: Optional[str] = None
+    response_team: Optional[Dict[str, Any]] = None
+    containment_actions: Optional[Dict[str, Any]] = None
+    eradication_actions: Optional[Dict[str, Any]] = None
+    recovery_actions: Optional[Dict[str, Any]] = None
+    investigation_findings: Optional[Dict[str, Any]] = None
+    root_cause: Optional[str] = None
+    lessons_learned: Optional[str] = None
+    assigned_to: Optional[str] = None
+    compliance_impact: Optional[Dict[str, Any]] = None
+    report_required: Optional[bool] = None
+    report_filed: Optional[bool] = None
+    report_details: Optional[Dict[str, Any]] = None
+
+class SecurityIncidentResponse(BaseModel):
+    id: str
+    incident_type: str
+    severity: str
+    status: str
+    title: str
+    description: str
+    summary: Optional[str] = None
+    detection_method: Optional[str] = None
+    classification: Optional[str] = None
+    impact_score: Optional[str] = None
+    affected_systems: Optional[Dict[str, Any]] = None
+    data_affected: Optional[Dict[str, Any]] = None
+    business_impact: Optional[str] = None
+    response_team: Optional[Dict[str, Any]] = None
+    containment_actions: Optional[Dict[str, Any]] = None
+    eradication_actions: Optional[Dict[str, Any]] = None
+    recovery_actions: Optional[Dict[str, Any]] = None
+    investigation_findings: Optional[Dict[str, Any]] = None
+    root_cause: Optional[str] = None
+    lessons_learned: Optional[str] = None
+    detected_at: datetime
+    contained_at: Optional[datetime] = None
+    resolved_at: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
+    tenant_id: str
+    reported_by: Optional[str] = None
+    assigned_to: Optional[str] = None
+    related_alerts: Optional[List[str]] = None
+    related_events: Optional[List[str]] = None
+    compliance_impact: Optional[Dict[str, Any]] = None
+    report_required: bool
+    report_filed: bool
+    report_details: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class SecurityMetricsCreate(BaseModel):
+    tenant_id: str
+    metric_date: datetime
+    total_security_events: Optional[int] = 0
+    critical_events: Optional[int] = 0
+    high_severity_events: Optional[int] = 0
+    medium_severity_events: Optional[int] = 0
+    low_severity_events: Optional[int] = 0
+    total_alerts: Optional[int] = 0
+    open_alerts: Optional[int] = 0
+    resolved_alerts: Optional[int] = 0
+    false_positive_alerts: Optional[int] = 0
+    total_incidents: Optional[int] = 0
+    active_incidents: Optional[int] = 0
+    resolved_incidents: Optional[int] = 0
+    mean_time_to_resolve_minutes: Optional[int] = None
+    anomaly_score: Optional[str] = None
+    baseline_anomaly_score: Optional[str] = None
+    anomaly_detection_count: Optional[int] = 0
+    compliance_score: Optional[str] = None
+    policy_violations: Optional[int] = 0
+    compliance_checks_passed: Optional[int] = 0
+    compliance_checks_failed: Optional[int] = 0
+    threat_indicators_detected: Optional[int] = 0
+    known_threats_blocked: Optional[int] = 0
+    suspicious_ips_blocked: Optional[int] = 0
+    avg_response_time_ms: Optional[int] = None
+    system_load_score: Optional[str] = None
+    unique_active_users: Optional[int] = 0
+    suspicious_user_activities: Optional[int] = 0
+    metrics_json: Optional[Dict[str, Any]] = None
+
+class SecurityMetricsResponse(BaseModel):
+    id: str
+    tenant_id: str
+    metric_date: datetime
+    total_security_events: int
+    critical_events: int
+    high_severity_events: int
+    medium_severity_events: int
+    low_severity_events: int
+    total_alerts: int
+    open_alerts: int
+    resolved_alerts: int
+    false_positive_alerts: int
+    total_incidents: int
+    active_incidents: int
+    resolved_incidents: int
+    mean_time_to_resolve_minutes: Optional[int] = None
+    anomaly_score: Optional[str] = None
+    baseline_anomaly_score: Optional[str] = None
+    anomaly_detection_count: int
+    compliance_score: Optional[str] = None
+    policy_violations: int
+    compliance_checks_passed: int
+    compliance_checks_failed: int
+    threat_indicators_detected: int
+    known_threats_blocked: int
+    suspicious_ips_blocked: int
+    avg_response_time_ms: Optional[int] = None
+    system_load_score: Optional[str] = None
+    unique_active_users: int
+    suspicious_user_activities: int
+    metrics_json: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ThreatIntelligenceFeedCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    feed_type: str
+    source_url: Optional[str] = None
+    api_endpoint: Optional[str] = None
+    is_active: bool = True
+    update_frequency_minutes: int = 60
+    api_key: Optional[str] = None
+    auth_config: Optional[Dict[str, Any]] = None
+    tenant_id: str
+
+class ThreatIntelligenceFeedUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    feed_type: Optional[str] = None
+    source_url: Optional[str] = None
+    api_endpoint: Optional[str] = None
+    is_active: Optional[bool] = None
+    update_frequency_minutes: Optional[int] = None
+    api_key: Optional[str] = None
+    auth_config: Optional[Dict[str, Any]] = None
+
+class ThreatIntelligenceFeedResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    feed_type: str
+    source_url: Optional[str] = None
+    api_endpoint: Optional[str] = None
+    is_active: bool
+    update_frequency_minutes: int
+    last_updated_at: Optional[datetime] = None
+    next_update_at: Optional[datetime] = None
+    status: str
+    error_message: Optional[str] = None
+    total_indicators: int
+    new_indicators_last_update: int
+    tenant_id: str
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class AnomalyDetectionRuleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    rule_type: str
+    target_metric: str
+    detection_config: Dict[str, Any]
+    threshold_config: Dict[str, Any]
+    sensitivity: Optional[str] = None
+    alert_on_detection: bool = True
+    alert_severity: Optional[str] = None
+    alert_message_template: Optional[str] = None
+    is_active: bool = True
+    evaluation_frequency_minutes: int = 5
+    scope_config: Optional[Dict[str, Any]] = None
+    tenant_id: str
+
+class AnomalyDetectionRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    rule_type: Optional[str] = None
+    target_metric: Optional[str] = None
+    detection_config: Optional[Dict[str, Any]] = None
+    threshold_config: Optional[Dict[str, Any]] = None
+    sensitivity: Optional[str] = None
+    alert_on_detection: Optional[bool] = None
+    alert_severity: Optional[str] = None
+    alert_message_template: Optional[str] = None
+    is_active: Optional[bool] = None
+    evaluation_frequency_minutes: Optional[int] = None
+    scope_config: Optional[Dict[str, Any]] = None
+
+class AnomalyDetectionRuleResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    rule_type: str
+    target_metric: str
+    detection_config: Dict[str, Any]
+    threshold_config: Dict[str, Any]
+    sensitivity: Optional[str] = None
+    alert_on_detection: bool
+    alert_severity: Optional[str] = None
+    alert_message_template: Optional[str] = None
+    is_active: bool
+    evaluation_frequency_minutes: int
+    scope_config: Optional[Dict[str, Any]] = None
+    total_detections: int
+    true_positives: int
+    false_positives: int
+    last_detection_at: Optional[datetime] = None
+    tenant_id: str
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class SecurityDashboardMetrics(BaseModel):
+    total_events: int
+    critical_events: int
+    high_severity_events: int
+    active_alerts: int
+    critical_alerts: int
+    active_incidents: int
+    critical_incidents: int
+    compliance_score: Optional[str] = None
+    threat_indicators: int
+    blocked_threats: int
+    anomaly_score: Optional[str] = None
+    mean_time_to_resolve_minutes: Optional[int] = None
+    unique_active_users: int
+    suspicious_activities: int
+
+class SecurityEventFilter(BaseModel):
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    event_types: Optional[List[str]] = None
+    severities: Optional[List[str]] = None
+    user_id: Optional[str] = None
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    is_resolved: Optional[bool] = None
+    limit: int = 100
+    offset: int = 0
+
+class SecurityAlertFilter(BaseModel):
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    alert_types: Optional[List[str]] = None
+    severities: Optional[List[str]] = None
+    statuses: Optional[List[str]] = None
+    assigned_to: Optional[str] = None
+    user_id: Optional[str] = None
+    source: Optional[str] = None
+    limit: int = 100
+    offset: int = 0
+
+class SecurityIncidentFilter(BaseModel):
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    incident_types: Optional[List[str]] = None
+    severities: Optional[List[str]] = None
+    statuses: Optional[List[str]] = None
+    assigned_to: Optional[str] = None
+    reported_by: Optional[str] = None
+    limit: int = 100
+    offset: int = 0
+
+class AnomalyDetectionRequest(BaseModel):
+    rule_id: str
+    metric_value: float
+    timestamp: datetime
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    context_data: Optional[Dict[str, Any]] = None
+
+class AnomalyDetectionResponse(BaseModel):
+    is_anomaly: bool
+    anomaly_score: float
+    baseline_value: Optional[float] = None
+    confidence_level: Optional[str] = None
+    severity: Optional[str] = None
+    contributing_factors: Optional[List[str]] = None
+    alert_generated: bool
+    alert_id: Optional[str] = None
+
+class SecurityThreatIntelligenceRequest(BaseModel):
+    indicator_type: str
+    indicator_value: str
+    check_active_only: bool = True
+
+class SecurityThreatIntelligenceResponse(BaseModel):
+    is_threat: bool
+    threat_type: Optional[str] = None
+    threat_actor: Optional[str] = None
+    confidence_score: Optional[str] = None
+    severity: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    is_blocked: bool
+    block_reason: Optional[str] = None
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+
+
+class ThreatIndicatorResponse(BaseModel):
+    id: str
+    indicator_type: str
+    value: str
+    description: Optional[str] = None
+    threat_types: List[str] = []
+    confidence_level: Optional[str] = None
+    source: Optional[str] = None
+    is_active: bool = True
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    tags: List[str] = []
+    metadata: Dict[str, Any] = {}

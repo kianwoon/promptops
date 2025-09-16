@@ -16,6 +16,7 @@ from app.models import (
     AIAssistantMessage, User, AIAssistantProviderStatus, AIAssistantProviderType,
     AIAssistantSystemPromptType, AIAssistantConversationStatus, AIAssistantMessageRole
 )
+from app.database import Base
 from app.schemas import (
     AIAssistantProviderCreate, AIAssistantProviderUpdate, AIAssistantProviderResponse,
     AIAssistantProviderEditResponse,
@@ -35,6 +36,24 @@ class AIAssistantService:
 
     def __init__(self, db: Session):
         self.db = db
+
+    def _refresh_user_table_metadata(self):
+        """Refresh the User table metadata to ensure SQLAlchemy sees the latest schema changes"""
+        try:
+            # Simpler approach: clear the session and force a fresh query
+            self.db.expire_all()
+
+            # Force fresh metadata reflection
+            from sqlalchemy import inspect
+            inspector = inspect(self.db.bind)
+
+            # Get the actual table structure from the database
+            user_table_info = inspector.get_columns('users')
+            logger.info("Refreshed User table metadata", columns_found=len(user_table_info))
+
+        except Exception as e:
+            logger.warning("Failed to refresh User table metadata", error=str(e))
+            # Don't raise the exception as this is a best-effort operation
 
     # Provider Operations
     def get_providers(self, user_id: str) -> List[AIAssistantProviderResponse]:
@@ -906,6 +925,9 @@ class AIAssistantService:
     def get_default_provider(self, user_id: str) -> Optional[AIAssistantProviderResponse]:
         """Get the user's default AI provider"""
         try:
+            # Refresh User table metadata to ensure we see the latest schema
+            self._refresh_user_table_metadata()
+
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user or not user.default_ai_provider_id:
                 return None
@@ -942,6 +964,9 @@ class AIAssistantService:
     def set_default_provider(self, user_id: str, provider_id: str) -> AIAssistantProviderResponse:
         """Set the user's default AI provider"""
         try:
+            # Refresh User table metadata to ensure we see the latest schema
+            self._refresh_user_table_metadata()
+
             # Verify the provider exists and belongs to the user
             provider = self.db.query(AIAssistantProvider).filter(
                 AIAssistantProvider.id == provider_id,
@@ -984,6 +1009,9 @@ class AIAssistantService:
     def clear_default_provider(self, user_id: str) -> None:
         """Clear the user's default AI provider"""
         try:
+            # Refresh User table metadata to ensure we see the latest schema
+            self._refresh_user_table_metadata()
+
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
                 raise ValueError("User not found")

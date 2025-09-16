@@ -2,6 +2,7 @@ from fastapi import FastAPI, Security, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.middleware import ClientAPIMiddleware, SecurityHeadersMiddleware, RequestIDMiddleware
+from app.security_middleware import SecurityMonitoringMiddleware
 from app.auth import get_current_user
 import structlog
 from contextlib import asynccontextmanager
@@ -9,7 +10,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import engine
 from app.models import Base
-from app.routers import templates, render, aliases, evals, policies, auth, projects, modules, prompts, model_compatibilities, approval_requests, delivery, dashboard, users, client_api, analytics
+from app.routers import templates, render, aliases, evals, policies, auth, projects, modules, prompts, model_compatibilities, approval_requests, delivery, dashboard, users, client_api, analytics, governance
 
 # Configure structured logging
 structlog.configure(
@@ -65,6 +66,9 @@ app.add_middleware(
 # Add client API middleware
 app.add_middleware(ClientAPIMiddleware)
 
+# Add security monitoring middleware
+app.add_middleware(SecurityMonitoringMiddleware)
+
 # Security
 security = HTTPBearer()
 
@@ -84,6 +88,7 @@ app.include_router(model_compatibilities.router, prefix="/v1/model-compatibiliti
 app.include_router(approval_requests.router, prefix="/v1/approval-requests", tags=["approval-requests"])
 app.include_router(delivery.router, prefix="/v1", tags=["runtime-delivery"])
 app.include_router(dashboard.router, prefix="/v1", tags=["dashboard"])
+app.include_router(dashboard.router, prefix="/api/v1", tags=["dashboard"])
 app.include_router(users.router, prefix="/v1/users", tags=["users"])
 
 # Include Client API endpoints
@@ -107,6 +112,9 @@ async def auth_middleware(request: Request, call_next):
 
 # Include Analytics endpoints
 app.include_router(analytics.router, prefix="/v1/analytics", tags=["analytics"])
+
+# Include Governance endpoints
+app.include_router(governance.router, prefix="/v1/governance", tags=["governance"])
 
 @app.get("/")
 async def root():

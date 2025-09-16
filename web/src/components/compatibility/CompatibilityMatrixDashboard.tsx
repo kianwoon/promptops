@@ -174,7 +174,7 @@ export function CompatibilityMatrixDashboard({ projectId }: CompatibilityMatrixD
                   <SelectValue placeholder="Select prompt" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Prompts</SelectItem>
+                  <SelectItem value="all">All Prompts</SelectItem>
                   {/* This would be populated with actual prompts */}
                   <SelectItem value="prompt1">Customer Support Prompt</SelectItem>
                   <SelectItem value="prompt2">Code Review Prompt</SelectItem>
