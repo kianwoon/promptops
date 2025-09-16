@@ -174,33 +174,13 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
-                    <CardTitle className="text-lg truncate">
-                      {prompt.description || 'Untitled Prompt'}
+                    <CardTitle className="text-lg">
+                      {prompt.name || 'Untitled Prompt'}
                     </CardTitle>
                     <CardDescription className="flex items-center mt-1">
                       ID: {prompt.id} v{prompt.version}
                     </CardDescription>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEditDialog(prompt, prompt.version)}>
-                        <Edit className="w-4 h-4 mr-2" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleDeletePrompt(prompt.id, prompt.version)}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </div>
               </CardHeader>
               <CardContent>
@@ -217,9 +197,9 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
                   </div>
 
                   {/* Description */}
-                  <div>
+                  <div className="min-h-fit">
                     <div className="text-sm text-muted-foreground mb-1">Description</div>
-                    <p className="text-sm line-clamp-4">
+                    <p className="text-sm whitespace-normal break-words">
                       {prompt.description || 'No description provided'}
                     </p>
                   </div>

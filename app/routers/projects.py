@@ -77,8 +77,12 @@ async def create_project(
         actor=current_user["user_id"],
         action="create_project",
         subject=project_id,
+        subject_type="project",
+        subject_id=project_id,
+        tenant_id=current_user["tenant"],
         before_json=None,
-        after_json={"name": project_data.name, "description": project_data.description}
+        after_json={"name": project_data.name, "description": project_data.description},
+        result="success"
     )
     db.add(audit_log)
     db.commit()
@@ -116,8 +120,12 @@ async def update_project(
         actor=current_user["user_id"],
         action="update_project",
         subject=project_id,
+        subject_type="project",
+        subject_id=project_id,
+        tenant_id=current_user["tenant"],
         before_json=before_data,
-        after_json={"name": project.name, "description": project.description}
+        after_json={"name": project.name, "description": project.description},
+        result="success"
     )
     db.add(audit_log)
     db.commit()
@@ -147,8 +155,12 @@ async def delete_project(
         actor=current_user["user_id"],
         action="delete_project",
         subject=project_id,
+        subject_type="project",
+        subject_id=project_id,
+        tenant_id=current_user["tenant"],
         before_json=project_data,
-        after_json=None
+        after_json=None,
+        result="success"
     )
     db.add(audit_log)
     db.commit()

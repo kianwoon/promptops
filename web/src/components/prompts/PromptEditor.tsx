@@ -493,7 +493,7 @@ export function PromptEditor({
           )}
 
           <Button
-            variant="outline"
+            variant="siri"
             onClick={handleAIAssistant}
             className="flex items-center"
           >
@@ -568,11 +568,13 @@ export function PromptEditor({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>
-                  <Input
+                  <Textarea
                     id="description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Brief description of this prompt"
+                    rows={4}
+                    className="resize-y min-h-[120px] max-h-[200px]"
                   />
                 </div>
                 <div className="space-y-2">
