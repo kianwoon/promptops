@@ -209,7 +209,7 @@ export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: 
       // Update progress bar
       progressInterval = setInterval(() => {
         setProgress(prev => {
-          if (prev >= 100) {
+          if (prev >= 98) {
             clearInterval(progressInterval)
             return 100
           }
@@ -222,9 +222,9 @@ export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: 
       // Gradually increase confidence
       confidenceInterval = setInterval(() => {
         setConfidence(prev => {
-          if (prev >= 95) {
+          if (prev >= 98) {
             clearInterval(confidenceInterval)
-            return 95
+            return 100
           }
           return prev + Math.random() * 3
         })
@@ -247,17 +247,27 @@ export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: 
               promptType: 'create_prompt'
             }
 
-            
+
             // Generate sample content using current context
             const sampleContent = generateIntelligentSampleContent(currentContext.description)
             setGeneratedContent(sampleContent)
 
+            // Ensure progress reaches 100% and confidence completes
+            setProgress(100)
+            setConfidence(100)
+
+            // Complete the process
             onComplete(sampleContent, {
   masIntent: "To provide exceptional customer service by understanding customer needs, resolving issues efficiently, and maintaining positive brand experiences while ensuring fair and equitable treatment of all customers.",
   masFairnessNotes: "Designed to ensure equitable treatment of all customers regardless of background, language proficiency, or technical expertise. Includes bias mitigation for customer satisfaction scoring and fair resource allocation. Regular audits will check for demographic disparities in resolution rates and satisfaction scores.",
   masRiskLevel: "low",
   masTestingNotes: "AI-generated prompt requiring human review and testing before deployment."
 })
+
+            // Auto-dismiss after a short delay
+            setTimeout(() => {
+              onClose()
+            }, 2000)
           }, 1000)
         }, 800)
       }
@@ -445,6 +455,9 @@ export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: 
             >
               Review Generated Content
             </button>
+            <p className="text-sm text-gray-500 text-center mt-2">
+              Auto-closing in 2 seconds...
+            </p>
           </div>
         )}
 

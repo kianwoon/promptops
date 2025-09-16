@@ -37,6 +37,9 @@ import type {
   ApprovalRequestUpdate,
   CompatibilityMatrixResponse,
   ProjectCompatibilitySummary,
+  AIAssistantProvider,
+  AIAssistantProviderCreate,
+  AIAssistantProviderUpdate,
   BatchTestResult,
   CompatibilityTrend,
   ApiResponse,
@@ -719,6 +722,78 @@ export const useTestPromptAcrossProviders = () => {
       }),
     onError: (error) => {
       toast.error(`Failed to test prompt: ${error.message}`)
+    },
+  })
+}
+
+// AI Assistant Provider Hooks
+export const useAIAssistantProviders = () =>
+  useQuery({
+    queryKey: ['ai-assistant-providers'],
+    queryFn: () => apiRequest<AIAssistantProvider[]>('/ai-assistant/providers'),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+
+export const useAIAssistantProvider = (id: string) =>
+  useQuery({
+    queryKey: ['ai-assistant-providers', id],
+    queryFn: () => apiRequest<AIAssistantProvider>(`/ai-assistant/providers/${id}`),
+    enabled: !!id,
+  })
+
+export const useCreateAIAssistantProvider = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (providerData: AIAssistantProviderCreate) =>
+      apiRequest<AIAssistantProvider>('/ai-assistant/providers', {
+        method: 'POST',
+        body: JSON.stringify(providerData),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ai-assistant-providers'] })
+      toast.success('AI provider created successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to create AI provider: ${error.message}`)
+    },
+  })
+}
+
+export const useUpdateAIAssistantProvider = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, providerData }: { id: string; providerData: AIAssistantProviderUpdate }) =>
+      apiRequest<AIAssistantProvider>(`/ai-assistant/providers/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(providerData),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ai-assistant-providers'] })
+      queryClient.invalidateQueries({ queryKey: ['ai-assistant-providers'] })
+      toast.success('AI provider updated successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to update AI provider: ${error.message}`)
+    },
+  })
+}
+
+export const useDeleteAIAssistantProvider = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiRequest<ApiResponse<null>>(`/ai-assistant/providers/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ai-assistant-providers'] })
+      toast.success('AI provider deleted successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete AI provider: ${error.message}`)
     },
   })
 }

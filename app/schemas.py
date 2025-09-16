@@ -189,6 +189,7 @@ class PromptCreate(BaseModel):
     content: str
     name: str
     description: Optional[str] = None
+    provider_id: Optional[str] = None
     target_models: List[str] = Field(..., description="List of model providers (e.g., ['openai', 'claude', 'gemini'])")
     model_specific_prompts: List[ModelSpecificPrompt]
     mas_intent: str
@@ -208,6 +209,8 @@ class PromptResponse(BaseModel):
     content: str
     name: str
     description: Optional[str] = None
+    provider_id: Optional[str] = None
+    provider_name: Optional[str] = None
     created_by: str
     created_at: datetime
     updated_at: datetime
@@ -227,6 +230,7 @@ class PromptResponse(BaseModel):
 class PromptUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    provider_id: Optional[str] = None
     target_models: Optional[List[str]] = None
     model_specific_prompts: Optional[List[ModelSpecificPrompt]] = None
     mas_intent: Optional[str] = None

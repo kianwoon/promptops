@@ -93,6 +93,11 @@ export function AssistantPage() {
   const [testResult, setTestResult] = useState<any>(null)
   const [showApiKey, setShowApiKey] = useState(false)
 
+  // Helper function to get authentication token
+  const getAuthToken = () => {
+    return localStorage.getItem('access_token') || localStorage.getItem('token') || 'demo-token'
+  }
+
   // Form states
   const [providerForm, setProviderForm] = useState({
     name: '',
@@ -124,7 +129,7 @@ export function AssistantPage() {
     try {
       const response = await fetch('/v1/ai-assistant/providers', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       })
       if (response.ok) {
@@ -145,7 +150,7 @@ export function AssistantPage() {
     try {
       const response = await fetch('/v1/ai-assistant/default-provider', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       })
       if (response.ok) {
@@ -166,7 +171,7 @@ export function AssistantPage() {
     try {
       const response = await fetch('/v1/ai-assistant/system-prompts', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       })
       if (response.ok) {
@@ -189,7 +194,7 @@ export function AssistantPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         },
         body: JSON.stringify({
           ...providerForm,
@@ -231,7 +236,7 @@ export function AssistantPage() {
       const response = await fetch(`/v1/ai-assistant/providers/${deleteProviderInfo.id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       })
 
@@ -253,7 +258,7 @@ export function AssistantPage() {
       // Fetch full provider details including API key
       const response = await fetch(`/v1/ai-assistant/providers/${provider.id}/edit`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       })
 
@@ -307,7 +312,7 @@ export function AssistantPage() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         },
         body: JSON.stringify(providerForm)
       })
@@ -337,7 +342,7 @@ export function AssistantPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         },
         body: JSON.stringify({
           ...promptForm,
@@ -389,7 +394,7 @@ export function AssistantPage() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         },
         body: JSON.stringify(promptForm)
       })
@@ -427,7 +432,7 @@ export function AssistantPage() {
       const response = await fetch(`/v1/ai-assistant/system-prompts/${deletePromptInfo.id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       })
 
@@ -453,7 +458,7 @@ export function AssistantPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         },
         body: JSON.stringify({ test_message: 'hi' })
       })
@@ -482,7 +487,7 @@ export function AssistantPage() {
       const response = await fetch(`/v1/ai-assistant/default-provider/${providerId}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       })
       if (response.ok) {
@@ -503,7 +508,7 @@ export function AssistantPage() {
       const response = await fetch('/v1/ai-assistant/default-provider', {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         }
       })
       if (response.ok) {

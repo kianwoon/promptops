@@ -228,6 +228,8 @@ export interface Prompt {
   content: string
   name: string
   description?: string
+  provider_id?: string | null
+  provider_name?: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -247,6 +249,7 @@ export interface PromptCreate {
   content: string
   name: string
   description?: string
+  provider_id?: string | null
   target_models: string[]
   model_specific_prompts: ModelSpecificPrompt[]
   mas_intent: string
@@ -260,6 +263,7 @@ export interface PromptUpdate {
   name?: string
   description?: string
   content?: string
+  provider_id?: string | null
   target_models?: string[]
   model_specific_prompts?: ModelSpecificPrompt[]
   mas_intent?: string
@@ -378,4 +382,37 @@ export interface ApprovalRequestUpdate {
   approver?: string
   rejection_reason?: string
   comments?: string
+}
+
+// AI Assistant Provider Types
+export interface AIAssistantProvider {
+  id: string
+  user_id: string
+  provider_type: 'openai' | 'anthropic' | 'gemini' | 'qwen' | 'openrouter' | 'ollama'
+  name: string
+  status: 'active' | 'error' | 'inactive'
+  api_key?: string
+  api_base_url?: string
+  model_name?: string
+  organization?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AIAssistantProviderCreate {
+  provider_type: 'openai' | 'anthropic' | 'gemini' | 'qwen' | 'openrouter' | 'ollama'
+  name: string
+  api_key?: string
+  api_base_url?: string
+  model_name?: string
+  organization?: string
+}
+
+export interface AIAssistantProviderUpdate {
+  name?: string
+  api_key?: string
+  api_base_url?: string
+  model_name?: string
+  organization?: string
+  status?: 'active' | 'error' | 'inactive'
 }

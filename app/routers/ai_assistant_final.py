@@ -324,6 +324,16 @@ def generate_mas_fairness_notes(description: str) -> str:
     else:
         return "Designed with fairness considerations including bias mitigation, equitable treatment of all users, and regular fairness audits. Transparent decision-making processes with accountability measures."
 
+# Temporary: Create a mock user dependency for development (matching prompts router)
+async def get_mock_user():
+    """Mock user for development purposes"""
+    return {
+        "id": "demo-user",
+        "email": "demo@example.com",
+        "name": "Demo User",
+        "role": "admin"
+    }
+
 # Dependency to get current user with fallback for development
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -389,7 +399,7 @@ async def get_current_user(
 
 @router.get("/providers", response_model=List[AIAssistantProviderResponse])
 async def get_providers(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_mock_user),  # Using mock user for development
     db: Session = Depends(get_db)
 ):
     """Get all AI assistant providers for the current user"""

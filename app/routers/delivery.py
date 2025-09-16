@@ -15,6 +15,7 @@ router = APIRouter()
 async def get_prompt_runtime(
     prompt_id: str,
     version: str,
+    provider_id: Optional[str] = Query(None, description="Optional provider ID to get provider-specific prompt"),
     redis_service = Depends(get_redis_service),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -37,10 +38,24 @@ async def get_prompt_runtime(
             }
 
         # Fallback to database
-        prompt = db.query(Prompt).filter(
+        query = db.query(Prompt).filter(
             Prompt.id == prompt_id,
             Prompt.version == version
-        ).first()
+        )
+
+        # If provider_id is specified, try to get provider-specific prompt first
+        if provider_id:
+            prompt = query.filter(Prompt.provider_id == provider_id).first()
+            # If no provider-specific prompt found, fall back to default (null provider_id)
+            if not prompt:
+                prompt = query.filter(Prompt.provider_id.is_(None)).first()
+        else:
+            # Get provider-specific prompt or default (null provider_id)
+            prompt = query.first()
+
+        # If still no prompt found, try any version of this prompt
+        if not prompt:
+            prompt = query.filter(Prompt.provider_id.is_(None)).first()
 
         if not prompt:
             raise HTTPException(status_code=404, detail="Prompt not found")
@@ -78,6 +93,7 @@ async def get_prompt_runtime(
 @router.get("/runtime/{prompt_id}/latest")
 async def get_latest_prompt_runtime(
     prompt_id: str,
+    provider_id: Optional[str] = Query(None, description="Optional provider ID to get provider-specific prompt"),
     redis_service = Depends(get_redis_service),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -100,9 +116,21 @@ async def get_latest_prompt_runtime(
             }
 
         # Fallback to database - get latest version
-        latest_prompt = db.query(Prompt).filter(
-            Prompt.id == prompt_id
-        ).order_by(Prompt.updated_at.desc()).first()
+        query = db.query(Prompt).filter(Prompt.id == prompt_id)
+
+        # If provider_id is specified, try to get provider-specific prompt first
+        if provider_id:
+            latest_prompt = query.filter(Prompt.provider_id == provider_id).order_by(Prompt.updated_at.desc()).first()
+            # If no provider-specific prompt found, fall back to default (null provider_id)
+            if not latest_prompt:
+                latest_prompt = query.filter(Prompt.provider_id.is_(None)).order_by(Prompt.updated_at.desc()).first()
+        else:
+            # Get provider-specific prompt or default (null provider_id)
+            latest_prompt = query.order_by(Prompt.updated_at.desc()).first()
+
+        # If still no prompt found, try any version of this prompt
+        if not latest_prompt:
+            latest_prompt = query.filter(Prompt.provider_id.is_(None)).order_by(Prompt.updated_at.desc()).first()
 
         if not latest_prompt:
             raise HTTPException(status_code=404, detail="Prompt not found")

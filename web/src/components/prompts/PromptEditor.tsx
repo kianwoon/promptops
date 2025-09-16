@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react'
+import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -31,7 +32,7 @@ import {
 } from 'lucide-react'
 import { AIAssistantLoading } from '@/components/ai/AIAssistantLoading'
 import { DiffViewer } from '@/components/DiffViewer'
-import { usePrompt, useUpdatePrompt, useCreatePrompt, useModelCompatibilities, useTestPromptCompatibility, useCompatibilityMatrix, useApprovalRequests, useCreateApprovalRequest } from '@/hooks/api'
+import { usePrompt, useUpdatePrompt, useCreatePrompt, useModelCompatibilities, useTestPromptCompatibility, useCompatibilityMatrix, useApprovalRequests, useCreateApprovalRequest, useAIAssistantProviders } from '@/hooks/api'
 import type { Prompt, PromptCreate, PromptUpdate } from '@/types/api'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -63,6 +64,7 @@ export function PromptEditor({
   const editorRef = useRef<any>(null)
   const [content, setContent] = useState('')
   const [description, setDescription] = useState('')
+  const [providerId, setProviderId] = useState<string>('')
   const [masIntent, setMasIntent] = useState('')
   const [masFairnessNotes, setMasFairnessNotes] = useState('')
   const [masTestingNotes, setMasTestingNotes] = useState('')
@@ -83,6 +85,7 @@ export function PromptEditor({
   const { data: compatibilities } = useModelCompatibilities(promptId)
   const { data: matrix } = useCompatibilityMatrix(promptId || '', version)
   const { data: approvalRequests } = useApprovalRequests(promptId)
+  const { data: aiProviders } = useAIAssistantProviders()
   const testCompatibility = useTestPromptCompatibility()
   const createApprovalRequest = useCreateApprovalRequest()
 
@@ -91,6 +94,7 @@ export function PromptEditor({
     if (prompt && !isNew) {
       setContent(prompt.model_specific_prompts?.[0]?.content || '')
       setDescription(prompt.description || '')
+      setProviderId(prompt.provider_id || '')
       setMasIntent(prompt.mas_intent)
       setMasFairnessNotes(prompt.mas_fairness_notes)
       setMasTestingNotes(prompt.mas_testing_notes || '')
@@ -195,16 +199,12 @@ export function PromptEditor({
           id: promptId || `prompt-${Date.now()}`,
           version,
           module_id: moduleId,
+          content,
           name: description || 'Untitled Prompt',
           description,
-          target_models: ['openai'], // Default to OpenAI for now
-          model_specific_prompts: [{
-            model_provider: 'openai',
-            model_name: 'gpt-4',
-            content,
-            expected_output_format: '',
-            instructions: ''
-          }],
+          provider_id: providerId || null,
+          target_models: [], // Let user specify target models or leave empty
+          model_specific_prompts: [], // Model-specific prompts can be configured later
           mas_intent: masIntent,
           mas_fairness_notes: masFairnessNotes,
           mas_testing_notes: masTestingNotes,
@@ -216,6 +216,7 @@ export function PromptEditor({
       } else if (promptId && version) {
         const updateData: PromptUpdate = {
           description,
+          provider_id: providerId || null,
           mas_intent: masIntent,
           mas_fairness_notes: masFairnessNotes,
           mas_testing_notes: masTestingNotes,
@@ -576,6 +577,22 @@ export function PromptEditor({
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Brief description of this prompt"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider">AI Provider</Label>
+                  <Select value={providerId || 'default'} onValueChange={(value: string) => setProviderId(value === 'default' ? '' : value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select AI Provider (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Default for all providers</SelectItem>
+                      {aiProviders?.map((provider) => (
+                        <SelectItem key={provider.id} value={provider.id}>
+                          {provider.name} ({provider.provider_type})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="risk-level">MAS Risk Level</Label>

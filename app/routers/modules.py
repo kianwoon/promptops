@@ -163,8 +163,12 @@ async def update_module(
         actor=current_user["user_id"],
         action="update_module",
         subject=f"{module_id}@{version}",
+        subject_type="module",
+        subject_id=module_id,
+        tenant_id=current_user.get("tenant", "default"),
         before_json=before_data,
-        after_json={"slot": module.slot, "render_body": module.render_body}
+        after_json={"slot": module.slot, "render_body": module.render_body},
+        result="success"
     )
     db.add(audit_log)
     db.commit()
@@ -208,8 +212,12 @@ async def delete_module(
         actor=current_user["user_id"],
         action="delete_module",
         subject=f"{module_id}@{version}",
+        subject_type="module",
+        subject_id=module_id,
+        tenant_id=current_user.get("tenant", "default"),
         before_json=module_data,
-        after_json=None
+        after_json=None,
+        result="success"
     )
     db.add(audit_log)
     db.commit()

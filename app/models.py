@@ -255,6 +255,7 @@ class Prompt(Base):
     content = Column(String, nullable=False)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
+    provider_id = Column(String, ForeignKey("ai_assistant_providers.id"), nullable=True)
     created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -277,6 +278,7 @@ class Prompt(Base):
 
     # Relationships
     module = relationship("Module", back_populates="prompts")
+    provider = relationship("AIAssistantProvider", backref="prompts")
     model_compatibilities = relationship("ModelCompatibility", back_populates="prompt")
     approval_requests = relationship("ApprovalRequest", back_populates="prompt")
     creator_user = relationship("User", foreign_keys=[created_by], back_populates="created_prompts")

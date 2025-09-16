@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(DATABASE_URL=postgresql://promptops:promptops@localhost:5432/promptops python3:*)"
+      "Bash(DATABASE_URL=postgresql://promptops:promptops@localhost:5432/promptops python3:*)",
+      "Bash(sed:*)"
     ],
     "deny": [],
     "ask": []

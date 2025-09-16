@@ -24,15 +24,18 @@ router = APIRouter()
 @router.get("/", response_model=List[PromptResponse])
 async def list_prompts(
     module_id: Optional[str] = None,
+    provider_id: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_mock_user)  # Using mock user for development
 ):
-    """List all prompts, optionally filtered by module"""
+    """List all prompts, optionally filtered by module or provider"""
     query = db.query(Prompt)
     if module_id:
         query = query.filter(Prompt.module_id == module_id)
+    if provider_id:
+        query = query.filter(Prompt.provider_id == provider_id)
 
     prompts = query.offset(skip).limit(limit).all()
     return prompts
@@ -100,6 +103,7 @@ async def create_prompt(
         content=prompt_data.model_specific_prompts[0].content if prompt_data.model_specific_prompts else "",  # Use first model's content as main content
         name=prompt_data.name,
         description=prompt_data.description,
+        provider_id=prompt_data.provider_id,
         created_by=current_user["user_id"],
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
@@ -122,8 +126,12 @@ async def create_prompt(
         actor=current_user["user_id"],
         action="create_prompt",
         subject=f"{prompt_data.id}@{prompt_data.version}",
+        subject_type="prompt",
+        subject_id=prompt_data.id,
+        tenant_id=current_user.get("tenant", "default"),
         before_json=None,
-        after_json={"name": prompt_data.name, "target_models": prompt_data.target_models, "mas_risk_level": prompt_data.mas_risk_level}
+        after_json={"name": prompt_data.name, "target_models": prompt_data.target_models, "mas_risk_level": prompt_data.mas_risk_level},
+        result="success"
     )
     db.add(audit_log)
     db.commit()
@@ -175,8 +183,12 @@ async def update_prompt(
         actor=current_user["user_id"],
         action="update_prompt",
         subject=f"{prompt_id}@{version}",
+        subject_type="prompt",
+        subject_id=prompt_id,
+        tenant_id=current_user.get("tenant", "default"),
         before_json=before_data,
-        after_json={"content": prompt.content[:100] + "...", "mas_risk_level": prompt.mas_risk_level, "mas_intent": prompt.mas_intent}
+        after_json={"content": prompt.content[:100] + "...", "mas_risk_level": prompt.mas_risk_level, "mas_intent": prompt.mas_intent},
+        result="success"
     )
     db.add(audit_log)
     db.commit()
@@ -215,8 +227,12 @@ async def delete_prompt(
         actor=current_user["user_id"],
         action="delete_prompt",
         subject=f"{prompt_id}@{version}",
+        subject_type="prompt",
+        subject_id=prompt_id,
+        tenant_id=current_user.get("tenant", "default"),
         before_json=prompt_data,
-        after_json=None
+        after_json=None,
+        result="success"
     )
     db.add(audit_log)
     db.commit()

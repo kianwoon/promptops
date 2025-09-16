@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { usePrompts, useDeletePrompt, useProject, useModule } from '@/hooks/api'
+import { usePrompts, useDeletePrompt, useProject, useModule, useAIAssistantProviders } from '@/hooks/api'
 import { PromptEditor } from './PromptEditor'
 import { formatDistanceToNow } from 'date-fns'
 import type { Prompt } from '@/types/api'
@@ -21,6 +21,7 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
   const { data: project } = useProject(projectId)
   const { data: module } = useModule(moduleId, '1.0.0')
   const { data: prompts, isLoading, refetch } = usePrompts(moduleId)
+  const { data: aiProviders } = useAIAssistantProviders()
   const deletePrompt = useDeletePrompt()
 
   const [isCreatePromptOpen, setIsCreatePromptOpen] = useState(false)
@@ -67,6 +68,17 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
       case 'high': return <Shield className="w-4 h-4" />
       default: return null
     }
+  }
+
+  const getProviderName = (providerId: string | null | undefined) => {
+    if (!providerId) return 'Default for all providers'
+
+    const provider = aiProviders?.find(p => p.id === providerId)
+    if (provider) {
+      return `${provider.name} (${provider.provider_type})`
+    }
+
+    return providerId || 'Default for all providers'
   }
 
   if (isLoading) {
@@ -203,6 +215,14 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
                     <p className="text-sm">
                       {prompt.target_models?.join(', ') || 'None specified'}
                     </p>
+                  </div>
+
+                  {/* AI Provider */}
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">AI Provider</div>
+                    <Badge variant="secondary" className="text-xs">
+                      {getProviderName(prompt.provider_id)}
+                    </Badge>
                   </div>
 
                   {/* MAS Compliance Info */}
