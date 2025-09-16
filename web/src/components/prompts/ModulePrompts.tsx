@@ -26,11 +26,20 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
 
   const [isCreatePromptOpen, setIsCreatePromptOpen] = useState(false)
   const [editingPrompt, setEditingPrompt] = useState<{ prompt: Prompt; version: string } | null>(null)
+  const [deletePromptDialog, setDeletePromptDialog] = useState<{ promptId: string; version: string; promptName: string } | null>(null)
 
-  const handleDeletePrompt = async (promptId: string, version: string) => {
-    if (window.confirm('Are you sure you want to delete this prompt version?')) {
+  const handleDeletePrompt = async (promptId: string, version: string, promptName: string) => {
+    setDeletePromptDialog({ promptId, version, promptName })
+  }
+
+  const confirmDeletePrompt = async () => {
+    if (deletePromptDialog) {
       try {
-        await deletePrompt.mutateAsync({ promptId, version })
+        await deletePrompt.mutateAsync({
+          promptId: deletePromptDialog.promptId,
+          version: deletePromptDialog.version
+        })
+        setDeletePromptDialog(null)
       } catch (error) {
         console.error('Failed to delete prompt:', error)
       }
@@ -52,7 +61,7 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
     setEditingPrompt(null)
   }
 
-  const getRiskLevelColor = (risk: string) => {
+  const getRiskLevelColor = (risk?: string) => {
     switch (risk) {
       case 'low': return 'bg-green-100 text-green-800 border-green-200'
       case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
@@ -61,12 +70,12 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
     }
   }
 
-  const getRiskLevelIcon = (risk: string) => {
+  const getRiskLevelIcon = (risk?: string) => {
     switch (risk) {
       case 'low': return <CheckCircle className="w-4 h-4" />
       case 'medium': return <AlertTriangle className="w-4 h-4" />
       case 'high': return <Shield className="w-4 h-4" />
-      default: return null
+      default: return <CheckCircle className="w-4 h-4" />
     }
   }
 
@@ -114,6 +123,12 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Create New Prompt</DialogTitle>
+              <DialogDescription>
+                Create a new prompt for this module with AI assistant support.
+              </DialogDescription>
+            </DialogHeader>
             <PromptEditor
               projectId={projectId}
               moduleId={moduleId}
@@ -197,7 +212,7 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
                       className={`flex items-center gap-2 ${getRiskLevelColor(prompt.mas_risk_level)}`}
                     >
                       {getRiskLevelIcon(prompt.mas_risk_level)}
-                      {prompt.mas_risk_level.toUpperCase()} Risk
+                      {(prompt.mas_risk_level || 'low').toUpperCase()} Risk
                     </Badge>
                   </div>
 
@@ -271,6 +286,15 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
                       <TestTube className="w-3 h-3 mr-2" />
                       Model Testing
                     </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => handleDeletePrompt(prompt.id, prompt.version, prompt.name || prompt.description || 'Untitled Prompt')}
+                    >
+                      <Trash2 className="w-3 h-3 mr-2" />
+                      Delete Prompt
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -296,6 +320,12 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
       {/* Edit Prompt Dialog */}
       <Dialog open={!!editingPrompt} onOpenChange={() => setEditingPrompt(null)}>
         <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Prompt</DialogTitle>
+            <DialogDescription>
+              Edit existing prompt content and configuration.
+            </DialogDescription>
+          </DialogHeader>
           {editingPrompt && (
             <PromptEditor
               projectId={projectId}
@@ -306,6 +336,27 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
               onCancel={handleCancel}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deletePromptDialog} onOpenChange={() => setDeletePromptDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Prompt</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deletePromptDialog?.promptName}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletePromptDialog(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeletePrompt}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

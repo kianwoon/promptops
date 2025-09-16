@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(DATABASE_URL=postgresql://promptops:promptops@localhost:5432/promptops python3:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(npx typescript:*)",
+      "Bash(xargs kill:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

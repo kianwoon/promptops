@@ -155,6 +155,21 @@ class AIAssistantService:
             logger.error("Error getting provider for edit", provider_id=provider_id, user_id=user_id, error=str(e))
             return None
 
+    def get_provider_model(self, provider_id: str, user_id: str) -> Optional[AIAssistantProvider]:
+        """Get the raw provider model for internal use"""
+        try:
+            provider = self.db.query(AIAssistantProvider).filter(
+                and_(
+                    AIAssistantProvider.id == provider_id,
+                    AIAssistantProvider.user_id == user_id
+                )
+            ).first()
+
+            return provider
+        except Exception as e:
+            logger.error("Error getting provider model", provider_id=provider_id, user_id=user_id, error=str(e))
+            return None
+
     def create_provider(self, user_id: str, provider_data: AIAssistantProviderCreate) -> AIAssistantProviderResponse:
         """Create a new AI assistant provider"""
         try:
@@ -744,6 +759,22 @@ class AIAssistantService:
             )
 
     # System Prompt Operations
+    def get_system_prompt_by_type(self, user_id: str, prompt_type: str) -> Optional[AIAssistantSystemPrompt]:
+        """Get a specific system prompt by type for the user"""
+        try:
+            system_prompt = self.db.query(AIAssistantSystemPrompt).join(
+                AIAssistantProvider, AIAssistantSystemPrompt.provider_id == AIAssistantProvider.id
+            ).filter(
+                AIAssistantProvider.user_id == user_id,
+                AIAssistantSystemPrompt.prompt_type == prompt_type,
+                AIAssistantSystemPrompt.is_active == True
+            ).first()
+
+            return system_prompt
+        except Exception as e:
+            logger.error("Failed to get system prompt by type", error=str(e), user_id=user_id, prompt_type=prompt_type)
+            return None
+
     def get_system_prompts(self, user_id: str) -> List[AIAssistantSystemPromptResponse]:
         """Get all system prompts for user's providers"""
         try:
@@ -1013,6 +1044,228 @@ class AIAssistantService:
             raise
 
     # Health Check
+    async def generate_prompt(self, provider_id: str, user_id: str, description: str, module_info: str = "", requirements: str = "") -> Dict[str, Any]:
+        """Generate a prompt using the configured AI provider"""
+        try:
+            # Get the provider
+            provider = self.get_provider_model(provider_id, user_id)
+            if not provider:
+                raise ValueError(f"Provider {provider_id} not found")
+
+            # Create the prompt for the AI provider
+            ai_prompt = f"""Generate a comprehensive, professional AI prompt based on the following description:
+
+Description: {description}
+Module Info: {module_info}
+Requirements: {requirements}
+
+Generate a detailed prompt that includes:
+1. Role Definition
+2. Core Responsibilities
+3. Communication Guidelines
+4. Quality Standards
+5. Compliance Requirements
+
+The prompt should be specific to the described role and must include MAS FEAT compliance considerations."""
+
+            # Call the appropriate AI provider based on provider type
+            if provider.provider_type == "anthropic":
+                return await self._generate_with_anthropic(provider, ai_prompt)
+            elif provider.provider_type == "openai":
+                return await self._generate_with_openai(provider, ai_prompt)
+            elif provider.provider_type == "openrouter":
+                return await self._generate_with_openrouter(provider, ai_prompt)
+            else:
+                # Fallback to generic generation
+                return await self._generate_with_generic(provider, ai_prompt)
+
+        except Exception as e:
+            logger.error("Failed to generate prompt", error=str(e), provider_id=provider_id, user_id=user_id)
+            raise
+
+    async def _generate_with_anthropic(self, provider: AIAssistantProvider, prompt: str) -> Dict[str, Any]:
+        """Generate prompt using Anthropic provider"""
+        try:
+            import aiohttp
+
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": provider.api_key,
+                "anthropic-version": "2023-06-01"
+            }
+
+            payload = {
+                "model": provider.model_name or "claude-3-sonnet-20240229",
+                "max_tokens": 2000,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            }
+
+            api_base_url = provider.api_base_url or "https://api.anthropic.com"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{api_base_url}/v1/messages",
+                    headers=headers,
+                    json=payload
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        return {
+                            "success": True,
+                            "generated_content": result["content"][0]["text"],
+                            "provider_id": provider.id,
+                            "provider_type": provider.provider_type
+                        }
+                    else:
+                        error_text = await response.text()
+                        logger.error("Anthropic API error", status=response.status, error=error_text)
+                        raise Exception(f"Anthropic API error: {response.status}")
+        except Exception as e:
+            logger.error("Anthropic generation failed", error=str(e))
+            raise
+
+    async def _generate_with_openai(self, provider: AIAssistantProvider, prompt: str) -> Dict[str, Any]:
+        """Generate prompt using OpenAI provider"""
+        try:
+            import aiohttp
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {provider.api_key}"
+            }
+
+            payload = {
+                "model": provider.model_name or "gpt-3.5-turbo",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "max_tokens": 2000
+            }
+
+            api_base_url = provider.api_base_url or "https://api.openai.com"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{api_base_url}/v1/chat/completions",
+                    headers=headers,
+                    json=payload
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        return {
+                            "success": True,
+                            "generated_content": result["choices"][0]["message"]["content"],
+                            "provider_id": provider.id,
+                            "provider_type": provider.provider_type
+                        }
+                    else:
+                        error_text = await response.text()
+                        logger.error("OpenAI API error", status=response.status, error=error_text)
+                        raise Exception(f"OpenAI API error: {response.status}")
+        except Exception as e:
+            logger.error("OpenAI generation failed", error=str(e))
+            raise
+
+    async def _generate_with_openrouter(self, provider: AIAssistantProvider, prompt: str) -> Dict[str, Any]:
+        """Generate prompt using OpenRouter provider"""
+        try:
+            import aiohttp
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {provider.api_key}"
+            }
+
+            payload = {
+                "model": provider.model_name or "openai/gpt-3.5-turbo",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "max_tokens": 2000
+            }
+
+            api_base_url = provider.api_base_url or "https://openrouter.ai/api"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{api_base_url}/v1/chat/completions",
+                    headers=headers,
+                    json=payload
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        return {
+                            "success": True,
+                            "generated_content": result["choices"][0]["message"]["content"],
+                            "provider_id": provider.id,
+                            "provider_type": provider.provider_type
+                        }
+                    else:
+                        error_text = await response.text()
+                        logger.error("OpenRouter API error", status=response.status, error=error_text)
+                        raise Exception(f"OpenRouter API error: {response.status}")
+        except Exception as e:
+            logger.error("OpenRouter generation failed", error=str(e))
+            raise
+
+    async def _generate_with_generic(self, provider: AIAssistantProvider, prompt: str) -> Dict[str, Any]:
+        """Generate prompt using generic JSON-RPC style provider"""
+        try:
+            import aiohttp
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {provider.api_key}"
+            }
+
+            payload = {
+                "jsonrpc": "2.0",
+                "method": "generate",
+                "params": {
+                    "prompt": prompt,
+                    "max_tokens": 2000
+                },
+                "id": 1
+            }
+
+            api_base_url = provider.api_base_url
+
+            if not api_base_url:
+                raise Exception("No API base URL configured for generic provider")
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    api_base_url,
+                    headers=headers,
+                    json=payload
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        return {
+                            "success": True,
+                            "generated_content": result.get("result", {}).get("text", ""),
+                            "provider_id": provider.id,
+                            "provider_type": provider.provider_type
+                        }
+                    else:
+                        error_text = await response.text()
+                        logger.error("Generic API error", status=response.status, error=error_text)
+                        raise Exception(f"Generic API error: {response.status}")
+        except Exception as e:
+            logger.error("Generic generation failed", error=str(e))
+            raise
+
     def health_check(self) -> Dict[str, Any]:
         """Health check for the AI Assistant service"""
         try:

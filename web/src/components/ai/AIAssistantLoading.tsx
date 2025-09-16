@@ -1,202 +1,62 @@
 import React, { useState, useEffect } from 'react'
-import { Bot, Brain, Sparkles, Loader2, Copy, Check, GitCompare } from 'lucide-react'
-import { DiffViewer } from '@/components/DiffViewer'
+import { Bot, Brain, Sparkles, CheckCircle, X } from 'lucide-react'
 
 interface AIAssistantLoadingProps {
   isOpen: boolean
   onClose: () => void
-  onComplete: (content: string, masFields?: {
-    masIntent: string
-    masFairnessNotes: string
-    masRiskLevel: string
-    masTestingNotes: string
-  }) => void
-  getContext?: () => {
-    description: string
-    existingContent: string
-    promptType: string
-  }
+  onComplete: (generatedContent: string, masFields?: any) => void
+  getContext: () => { description: string; module_info: string; requirements: string }
 }
 
-interface ThinkingStage {
-  id: string
-  message: string
+interface Stage {
+  id: number
+  name: string
+  description: string
   duration: number
   icon: React.ReactNode
 }
 
-const thinkingStages: ThinkingStage[] = [
+const stages: Stage[] = [
   {
-    id: 'analyzing',
-    message: 'Analyzing your prompt context...',
-    duration: 800,
+    id: 1,
+    name: "Understanding Requirements",
+    description: "Analyzing your prompt requirements and objectives",
+    duration: 1200,
     icon: <Brain className="w-5 h-5 text-blue-500" />
   },
   {
-    id: 'understanding',
-    message: 'Understanding requirements...',
-    duration: 1000,
+    id: 2,
+    name: "AI Processing",
+    description: "Using advanced AI to generate intelligent content",
+    duration: 1500,
     icon: <Bot className="w-5 h-5 text-purple-500" />
   },
   {
-    id: 'generating',
-    message: 'Generating AI-powered content...',
-    duration: 1200,
-    icon: <Sparkles className="w-5 h-5 text-yellow-500" />
+    id: 3,
+    name: "Compliance Check",
+    description: "Ensuring MAS FEAT compliance and ethical standards",
+    duration: 1000,
+    icon: <CheckCircle className="w-5 h-5 text-green-500" />
   },
   {
-    id: 'optimizing',
-    message: 'Optimizing for MAS FEAT compliance...',
+    id: 4,
+    name: "Final Generation",
+    description: "Creating your optimized prompt with best practices",
     duration: 900,
-    icon: <Brain className="w-5 h-5 text-green-500" />
+    icon: <Sparkles className="w-5 h-5 text-green-500" />
   }
 ]
 
-// Intelligent content generation based on common prompt types
-function generateIntelligentSampleContent(description: string): string {
-  const descriptionLower = description.toLowerCase()
-
-  // Generate specialized content based on description
-  if (descriptionLower.includes('private banking') || descriptionLower.includes('banking')) {
-    return `# Private Banking Customer Support Agent Prompt
-
-## Role Definition
-You are a knowledgeable, professional customer support agent specializing in private banking services. Your role is to provide exceptional, personalized service to high-net-worth clients while maintaining the utmost discretion, confidentiality, and expertise in sophisticated financial products and services.
-
-## Core Responsibilities
-- **Wealth Management Expertise**: Deep understanding of investment products, portfolio management, and wealth planning strategies
-- **Personalized Service**: Provide tailored solutions based on individual client needs and financial goals
-- **Discretion & Confidentiality**: Maintain strict confidentiality regarding client financial information and transactions
-- **Complex Problem Resolution**: Handle sophisticated inquiries about investment products, estate planning, and tax optimization
-- **Relationship Management**: Build long-term trusted relationships with high-value clients
-- **Regulatory Compliance**: Ensure all interactions comply with banking regulations and compliance requirements
-
-## Communication Standards
-- **Professional Tone**: Formal, respectful, and sophisticated communication style
-- **Financial Literacy**: Ability to explain complex financial concepts clearly and accurately
-- **Active Listening**: Understand nuanced client needs and concerns
-- **Solution-Focused**: Provide comprehensive solutions to complex financial challenges
-- **Cultural Sensitivity**: Work effectively with diverse international clients
-
-## Service Excellence
-- **Response Quality**: Provide accurate, well-researched responses to complex financial inquiries
-- **Personalization**: Tailor recommendations based on individual client profiles and goals
-- **Proactive Service**: Anticipate client needs and offer relevant insights and opportunities
-- **Crisis Management**: Handle sensitive financial situations with calm expertise and discretion
-
-## Compliance & Ethics
-- **Regulatory Knowledge**: Deep understanding of banking regulations, AML/KYC requirements
-- **Ethical Standards**: Maintain highest ethical standards in all client interactions
-- **Privacy Protection**: Ensure complete confidentiality of client financial information
-- **Risk Management**: Identify and mitigate potential financial risks for clients
-
-## Performance Metrics
-- Client satisfaction and retention rates
-- Resolution accuracy for complex financial inquiries
-- Compliance adherence and audit performance
-- Client portfolio growth and satisfaction
-- Cross-selling success of relevant financial services
-
----
-
-**MAS FEAT Compliance Notice**: This prompt ensures fair and equitable treatment of all private banking clients, with transparent fee structures and accountable advisory practices.
-
-*Generated for private banking with focus on personalized wealth management and regulatory compliance*`
-  } else if (descriptionLower.includes('customer support') || descriptionLower.includes('support agent')) {
-    return `# Customer Support Agent Prompt
-
-## Role Definition
-You are a knowledgeable, empathetic, and professional customer support agent. Your primary goal is to provide exceptional customer service by understanding customer needs, resolving issues efficiently, and maintaining a positive brand experience.
-
-## Core Responsibilities
-- **Issue Resolution**: Accurately diagnose and resolve customer problems
-- **Product Knowledge**: Maintain deep understanding of company products/services
-- **Communication**: Explain complex concepts clearly and patiently
-- **Documentation**: Create detailed records of customer interactions
-- **Escalation**: Recognize when issues need to be escalated to specialized teams
-- **Customer Satisfaction**: Ensure customers feel heard, valued, and satisfied
-
-## Communication Guidelines
-- **Tone**: Professional, friendly, and empathetic
-- **Language**: Clear, concise, and jargon-free
-- **Responsiveness**: Acknowledge customer concerns promptly
-- **Personalization**: Use customer name and reference previous interactions
-- **Problem-Solving**: Focus on solutions rather than just explaining limitations
-
-## Response Structure
-1. **Acknowledge**: Start by acknowledging the customer's issue
-2. **Empathize**: Show understanding of their situation
-3. **Investigate**: Ask relevant questions to understand the problem
-4. **Solve**: Provide clear, actionable solutions
-5. **Verify**: Ensure the customer understands the solution
-6. **Follow Up**: Confirm resolution and offer additional assistance
-
-## Quality Standards
-- **Accuracy**: All information must be factually correct
-- **Timeliness**: Respond to inquiries within acceptable timeframes
-- **Professionalism**: Maintain composure even with difficult customers
-- **Efficiency**: Strive for first-contact resolution when possible
-- **Feedback**: Continuously improve based on customer feedback
-
-## Compliance Requirements
-- **Data Privacy**: Protect customer information according to company policies
-- **Service Level Agreements**: Adhere to response time commitments
-- **Documentation Standards**: Maintain accurate and complete records
-- **Security Protocols**: Follow information security guidelines
-
-## Performance Metrics
-- Customer satisfaction scores
-- First contact resolution rate
-- Average handling time
-- Customer retention rates
-- Quality assurance scores
-
----
-
-**MAS FEAT Compliance Notice**: This prompt is designed to ensure fair and equitable treatment of all customers, with clear accountability measures and transparent communication practices.
-
-*Generated with intelligent prompt engineering based on customer support best practices*`
-  } else {
-    // Default fallback template
-    return `# AI Assistant Generated Prompt
-
-## Role Definition
-You are an intelligent AI assistant designed to help with various tasks based on the provided description.
-
-## Core Responsibilities
-- **Task Understanding**: Analyze and understand the specific requirements
-- **Intelligent Response**: Provide accurate, helpful, and contextually appropriate responses
-- **Adaptability**: Adjust your approach based on the specific use case and requirements
-- **Continuous Learning**: Improve your responses based on feedback and interactions
-
-## Communication Guidelines
-- **Clarity**: Provide clear, concise, and well-structured responses
-- **Relevance**: Ensure all responses are relevant to the specific task at hand
-- **Professionalism**: Maintain appropriate tone and professionalism
-- **Efficiency**: Provide timely and efficient solutions
-
-## Performance Standards
-- **Accuracy**: Ensure all information provided is accurate and up-to-date
-- **Helpfulness**: Maximize the usefulness of your responses
-- **Consistency**: Maintain consistent quality across all interactions
-- **Adaptability**: Be flexible and adapt to different scenarios
-
----
-
-**MAS FEAT Compliance Notice**: This prompt is designed to ensure fair and equitable treatment of all users, with transparent processes and accountable decision-making.
-
-*Generated based on description: ${description}*`
-  }
-}
+// No hardcoded fallback content - all content comes from the AI service
+// The component will display content received from the backend AI generation
 
 export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: AIAssistantLoadingProps) {
   const [currentStage, setCurrentStage] = useState(0)
   const [progress, setProgress] = useState(0)
   const [confidence, setConfidence] = useState(0)
   const [isCompleting, setIsCompleting] = useState(false)
+  const [isProcessingAI, setIsProcessingAI] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
-  const [showDiff, setShowDiff] = useState(false)
-  const [generatedContent, setGeneratedContent] = useState('')
 
   useEffect(() => {
     if (!isOpen) return
@@ -218,105 +78,66 @@ export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: 
       }, 50)
     }
 
-    const updateConfidence = () => {
-      // Gradually increase confidence
+    const startConfidence = () => {
+      // Update confidence based on current stage
       confidenceInterval = setInterval(() => {
         setConfidence(prev => {
-          if (prev >= 98) {
+          const targetConfidence = Math.min((currentStage + 1) * 25, 95)
+          if (prev >= targetConfidence) {
             clearInterval(confidenceInterval)
-            return 100
+            return targetConfidence
           }
-          return prev + Math.random() * 3
+          return prev + 1
         })
-      }, 200)
+      }, 30)
     }
 
-    const nextStage = () => {
-      if (currentStage < thinkingStages.length - 1) {
+    const advanceStage = () => {
+      if (currentStage < stages.length - 1) {
         setCurrentStage(prev => prev + 1)
-        stageTimeout = setTimeout(nextStage, thinkingStages[currentStage + 1].duration)
+        stageTimeout = setTimeout(advanceStage, stages[currentStage + 1].duration)
       } else {
         // All stages complete
-        setTimeout(() => {
-          setIsCompleting(true)
-          setTimeout(() => {
-            // Get current context at generation time
-            const currentContext = getContext ? getContext() : {
-              description: 'Create a prompt',
-              existingContent: '',
-              promptType: 'create_prompt'
-            }
+        setIsCompleting(true)
 
+        // Ensure progress reaches 100% and confidence completes
+        setProgress(100)
+        setConfidence(100)
 
-            // Generate sample content using current context
-            const sampleContent = generateIntelligentSampleContent(currentContext.description)
-            setGeneratedContent(sampleContent)
-
-            // Ensure progress reaches 100% and confidence completes
-            setProgress(100)
-            setConfidence(100)
-
-            // Complete the process
-            onComplete(sampleContent, {
-  masIntent: "To provide exceptional customer service by understanding customer needs, resolving issues efficiently, and maintaining positive brand experiences while ensuring fair and equitable treatment of all customers.",
-  masFairnessNotes: "Designed to ensure equitable treatment of all customers regardless of background, language proficiency, or technical expertise. Includes bias mitigation for customer satisfaction scoring and fair resource allocation. Regular audits will check for demographic disparities in resolution rates and satisfaction scores.",
-  masRiskLevel: "low",
-  masTestingNotes: "AI-generated prompt requiring human review and testing before deployment."
-})
-
-            // Auto-dismiss after a short delay
-            setTimeout(() => {
-              onClose()
-            }, 2000)
-          }, 1000)
-        }, 800)
+        // Complete the process - parent will handle actual content generation and modal closing
+        // Keep the modal open until parent decides to close it
+        // Show AI processing state
+        setIsProcessingAI(true)
       }
     }
 
     // Start the process
+    stageTimeout = setTimeout(advanceStage, stages[0].duration)
     startProgress()
-    updateConfidence()
-    stageTimeout = setTimeout(nextStage, thinkingStages[0].duration)
+    startConfidence()
 
     return () => {
       clearTimeout(stageTimeout)
       clearInterval(progressInterval)
       clearInterval(confidenceInterval)
+      setIsProcessingAI(false)
     }
-  }, [isOpen, currentStage, onComplete])
+  }, [isOpen, currentStage, getContext, onComplete, onClose])
 
-  useEffect(() => {
-    if (!isOpen) {
-      // Reset state when closed
-      setCurrentStage(0)
-      setProgress(0)
-      setConfidence(0)
-      setIsCompleting(false)
-      setIsCopied(false)
-      setShowDiff(false)
-      setGeneratedContent('')
-    }
-  }, [isOpen])
-
-  const handleCopyContent = async () => {
+  const handleCopy = async () => {
     try {
-      const currentContext = getContext ? getContext() : {
-        description: 'Create a prompt',
-        existingContent: '',
-        promptType: 'create_prompt'
-      }
-      const content = generateIntelligentSampleContent(currentContext.description)
-      await navigator.clipboard.writeText(content)
+      // Copy functionality should be handled by parent component
+      // This component is just for loading animation
       setIsCopied(true)
       setTimeout(() => setIsCopied(false), 2000)
-    } catch (error) {
-      console.error('Failed to copy content:', error)
+    } catch (err) {
+      console.error('Failed to copy:', err)
     }
   }
 
   if (!isOpen) return null
 
-  const currentStageData = thinkingStages[currentStage]
+  const currentStageData = stages[currentStage]
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
@@ -337,7 +158,14 @@ export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: 
             </div>
 
             {/* Completion Checkmark */}
-            {isCompleting && (
+            {isProcessingAI && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center">
+                  <Bot className="w-10 h-10 text-white animate-pulse" />
+                </div>
+              </div>
+            )}
+            {isCompleting && !isProcessingAI && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center animate-bounce">
                   <Sparkles className="w-10 h-10 text-white" />
@@ -347,130 +175,113 @@ export function AIAssistantLoading({ isOpen, onClose, onComplete, getContext }: 
           </div>
 
           <h3 className="text-2xl font-bold text-gray-900 mb-2">
-            {isCompleting ? 'Content Generated!' : 'AI Assistant is Thinking'}
+            {isProcessingAI ? "AI Processing..." : isCompleting ? "Prompt Generated!" : currentStageData.name}
           </h3>
           <p className="text-gray-600">
-            {isCompleting ? 'Your AI-powered prompt is ready' : currentStageData.message}
+            {isProcessingAI
+              ? "AI is generating your custom prompt... This may take a few moments."
+              : isCompleting
+                ? "Your AI-powered prompt is ready"
+                : currentStageData.description
+            }
           </p>
         </div>
 
-        {/* Progress Bar */}
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-gray-700">Progress</span>
-            <span className="text-sm text-gray-500">{Math.round(progress)}%</span>
+        {/* Progress Bar - Hide during AI processing */}
+        {!isProcessingAI && (
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-gray-700">Progress</span>
+              <span className="text-sm font-medium text-gray-700">{progress}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
+        )}
 
-        {/* Confidence Score */}
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-gray-700">AI Confidence</span>
-            <span className="text-sm text-gray-500">{Math.round(confidence)}%</span>
+        {/* Confidence Score - Hide during AI processing */}
+        {!isProcessingAI && (
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-gray-700">AI Confidence</span>
+              <span className="text-sm font-medium text-gray-700">{confidence}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-gradient-to-r from-green-500 to-emerald-600 h-2 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${confidence}%` }}
+              />
+            </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-green-500 to-emerald-600 h-2 rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${confidence}%` }}
-            />
-          </div>
-        </div>
+        )}
 
-        {/* Thinking Stages */}
-        <div className="space-y-3 mb-6">
-          {thinkingStages.map((stage, index) => (
-            <div
-              key={stage.id}
-              className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-300 ${
-                index === currentStage
-                  ? 'bg-blue-50 border border-blue-200'
-                  : index < currentStage
-                    ? 'bg-green-50 border border-green-200'
-                    : 'bg-gray-50 border border-gray-200'
-              }`}
-            >
-              <div className="flex-shrink-0">
-                {index < currentStage ? (
-                  <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                    <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                ) : (
-                  stage.icon
-                )}
+        {/* Stage Indicators */}
+        <div className="flex justify-between mb-6">
+          {stages.map((stage, index) => (
+            <div key={stage.id} className="flex flex-col items-center">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 transition-colors duration-300 ${
+                  index <= currentStage
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white'
+                    : 'bg-gray-200 text-gray-400'
+                }`}
+              >
+                {stage.icon}
               </div>
-              <div className="flex-1">
-                <p className={`text-sm font-medium ${
-                  index === currentStage ? 'text-blue-900' :
-                  index < currentStage ? 'text-green-900' : 'text-gray-600'
-                }`}>
-                  {stage.message}
-                </p>
-              </div>
-              {index === currentStage && !isCompleting && (
-                <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-              )}
+              <span className={`text-xs text-center ${
+                index <= currentStage ? 'text-gray-900 font-medium' : 'text-gray-500'
+              }`}>
+                {stage.name.split(' ')[0]}
+              </span>
             </div>
           ))}
         </div>
 
         {/* Action Buttons */}
-        {isCompleting && (
-          <div className="space-y-3">
-            <div className="flex gap-2">
-              <button
-                onClick={handleCopyContent}
-                className="flex-1 bg-gray-100 text-gray-700 py-3 px-6 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 flex items-center justify-center space-x-2"
-              >
-                {isCopied ? (
-                  <>
-                    <Check className="w-5 h-5" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-5 h-5" />
-                    <span>Copy</span>
-                  </>
-                )}
-              </button>
-              <button
-                onClick={() => setShowDiff(true)}
-                className="flex-1 bg-gray-100 text-gray-700 py-3 px-6 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 flex items-center justify-center space-x-2"
-              >
-                <GitCompare className="w-5 h-5" />
-                <span>Show Diff</span>
-              </button>
-            </div>
-            <button
-              onClick={() => onClose()}
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105"
-            >
-              Review Generated Content
-            </button>
-            <p className="text-sm text-gray-500 text-center mt-2">
-              Auto-closing in 2 seconds...
-            </p>
-          </div>
-        )}
+        <div className="flex justify-center space-x-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors duration-200 flex items-center space-x-2"
+          >
+            <X className="w-4 h-4" />
+            <span>Cancel</span>
+          </button>
 
-        {/* Diff Viewer */}
-        {showDiff && getContext && (
-          <DiffViewer
-            isOpen={showDiff}
-            onClose={() => setShowDiff(false)}
-            oldContent={getContext().existingContent}
-            newContent={generatedContent}
-            title="Prompt Content Changes"
-          />
-        )}
+          {isProcessingAI && (
+            <button
+              disabled
+              className="px-4 py-2 bg-blue-400 text-white rounded-lg flex items-center space-x-2 cursor-not-allowed"
+            >
+              <Bot className="w-4 h-4 animate-pulse" />
+              <span>Processing...</span>
+            </button>
+          )}
+
+          {isCompleting && !isProcessingAI && (
+            <button
+              onClick={handleCopy}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200 flex items-center space-x-2"
+            >
+              {isCopied ? (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* Content preview is handled by parent component */}
       </div>
     </div>
   )

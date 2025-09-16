@@ -52,6 +52,7 @@ interface MASComplianceValidation {
   warnings: string[]
 }
 
+// Force reload detection - Updated at: 2025-09-16 v5 - FRESH START
 export function PromptEditor({
   projectId,
   moduleId,
@@ -69,6 +70,15 @@ export function PromptEditor({
   const [masFairnessNotes, setMasFairnessNotes] = useState('')
   const [masTestingNotes, setMasTestingNotes] = useState('')
   const [masRiskLevel, setMasRiskLevel] = useState<'low' | 'medium' | 'high'>('low')
+
+  // Safe access function to prevent undefined access
+  const getSafeMasRiskLevel = (risk?: 'low' | 'medium' | 'high') => {
+    return risk || 'low'
+  }
+
+  
+  // Force cache bust - try different approach
+  console.log('CACHE BUST: v4')
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [validation, setValidation] = useState<MASComplianceValidation>({ isValid: true, errors: [], warnings: [] })
@@ -80,6 +90,9 @@ export function PromptEditor({
   const [originalContent, setOriginalContent] = useState('')
   
   const { data: prompt, isLoading } = usePrompt(promptId || '', version || '')
+
+  // Component ready state to prevent rendering during initialization
+  const [isComponentReady, setIsComponentReady] = useState(false)
   const updatePrompt = useUpdatePrompt()
   const createPrompt = useCreatePrompt()
   const { data: compatibilities } = useModelCompatibilities(promptId)
@@ -92,17 +105,27 @@ export function PromptEditor({
   // Initialize form with prompt data if editing
   useEffect(() => {
     if (prompt && !isNew) {
-      setContent(prompt.model_specific_prompts?.[0]?.content || '')
+      // Use main content field first, fallback to first model-specific prompt
+      const contentToUse = prompt.content ||
+                          prompt.model_specific_prompts?.[0]?.content ||
+                          ''
+      setContent(contentToUse)
       setDescription(prompt.description || '')
       setProviderId(prompt.provider_id || '')
       setMasIntent(prompt.mas_intent)
       setMasFairnessNotes(prompt.mas_fairness_notes)
       setMasTestingNotes(prompt.mas_testing_notes || '')
-      setMasRiskLevel(prompt.mas_risk_level as 'low' | 'medium' | 'high')
+      setMasRiskLevel(prompt.mas_risk_level || 'low')
     }
   }, [prompt, isNew])
 
+  // Mark component as ready after initial load
+  useEffect(() => {
+    setIsComponentReady(true)
+  }, [])
+
   
+
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor
 
@@ -159,7 +182,7 @@ export function PromptEditor({
     }
 
     // Risk level validation
-    if (masRiskLevel === 'high') {
+    if (getSafeMasRiskLevel(masRiskLevel) === 'high') {
       warnings.push('High risk prompts require approval before deployment')
     }
 
@@ -168,13 +191,21 @@ export function PromptEditor({
       warnings.push('Prompt content seems too short for effective use')
     }
 
-    // Sensitive content detection
-    const sensitiveKeywords = ['password', 'secret', 'confidential', 'personal information']
+    // Sensitive content detection - more context-aware
+    const sensitiveKeywords = ['password', 'secret', 'personal information']
     const hasSensitiveContent = sensitiveKeywords.some(keyword =>
       content.toLowerCase().includes(keyword)
     )
 
-    if (hasSensitiveContent) {
+    // Allow 'confidential' when used in legitimate compliance/governance contexts
+    const hasConfidential = content.toLowerCase().includes('confidential')
+    const hasComplianceContext = content.toLowerCase().includes('compliance') ||
+                                content.toLowerCase().includes('governance') ||
+                                content.toLowerCase().includes('privacy') ||
+                                content.toLowerCase().includes('security') ||
+                                content.toLowerCase().includes('audit')
+
+    if (hasSensitiveContent || (hasConfidential && !hasComplianceContext)) {
       errors.push('Prompt contains potentially sensitive content that requires additional safeguards')
     }
 
@@ -186,6 +217,16 @@ export function PromptEditor({
   }
 
   const handleSave = async () => {
+    // Validate that content is not empty
+    if (!content.trim()) {
+      setValidation({
+        isValid: false,
+        errors: ['Prompt content cannot be empty'],
+        warnings: []
+      })
+      return
+    }
+
     const complianceValidation = validateMASCompliance()
     setValidation(complianceValidation)
 
@@ -195,8 +236,9 @@ export function PromptEditor({
 
     try {
       if (isNew && moduleId) {
+        const generatedPromptId = promptId || `prompt-${Date.now()}`
         const newPrompt: PromptCreate = {
-          id: promptId || `prompt-${Date.now()}`,
+          id: generatedPromptId,
           version,
           module_id: moduleId,
           content,
@@ -211,12 +253,16 @@ export function PromptEditor({
           mas_risk_level: masRiskLevel
         }
 
-        const result = await createPrompt.mutateAsync(newPrompt)
+              const result = await createPrompt.mutateAsync(newPrompt)
         onSave?.(result.data)
       } else if (promptId && version) {
         const updateData: PromptUpdate = {
+          content,
+          name: description || 'Untitled Prompt',
           description,
           provider_id: providerId || null,
+          target_models: [],
+          model_specific_prompts: [],
           mas_intent: masIntent,
           mas_fairness_notes: masFairnessNotes,
           mas_testing_notes: masTestingNotes,
@@ -232,6 +278,14 @@ export function PromptEditor({
       }
     } catch (error) {
       console.error('Failed to save prompt:', error)
+      console.error('Save attempt details:', {
+        isNew,
+        promptId,
+        version,
+        moduleId,
+        contentLength: content.length,
+        contentPreview: content.substring(0, 100)
+      })
     }
   }
 
@@ -258,6 +312,10 @@ export function PromptEditor({
     try {
       // Save the current content as original before AI modifies it
       setOriginalContent(content)
+
+      // Show the AI Assistant loading screen immediately
+      setShowAIAssistantLoading(true)
+
       // Check if user has AI Assistant providers configured
       const token = localStorage.getItem('access_token') || localStorage.getItem('token') || 'demo-token'
       const response = await fetch('/v1/ai-assistant/providers', {
@@ -267,6 +325,7 @@ export function PromptEditor({
       })
       if (!response.ok) {
         alert('Please configure an AI Assistant provider first in the Assistant page.')
+        setShowAIAssistantLoading(false)
         return
       }
 
@@ -275,16 +334,63 @@ export function PromptEditor({
       // The API returns an array directly, not wrapped in a providers property
       if (!providers || providers.length === 0) {
         alert('Please configure an AI Assistant provider first in the Assistant page.')
+        setShowAIAssistantLoading(false)
         return
       }
 
-      // Show the AI Assistant loading screen
-      // Context will be captured at generation time, not button click time
-      setShowAIAssistantLoading(true)
+      // Call the AI generation API directly instead of waiting for loading animation
+      const requestBody = {
+        provider_id: providers[0].id,
+        prompt_type: isNew ? 'create_prompt' : 'edit_prompt',
+        context: {
+          description: description || 'Create a prompt',
+          module_info: '',
+          requirements: ''
+        },
+        target_models: ['gpt-4', 'claude-3-sonnet']
+      }
+
+      const generationResponse = await fetch('/v1/ai-assistant/generate-prompt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(requestBody)
+      })
+
+      if (generationResponse.ok) {
+        const result = await generationResponse.json()
+
+        // Update form with generated content and MAS fields
+        if (result.generated_content) {
+          setContent(result.generated_content)
+        }
+
+        // Populate MAS FEAT fields
+        if (result.mas_intent) {
+          setMasIntent(result.mas_intent)
+        }
+        if (result.mas_fairness_notes) {
+          setMasFairnessNotes(result.mas_fairness_notes)
+        }
+        if (result.mas_risk_level) {
+          setMasRiskLevel(result.mas_risk_level || 'low')
+        }
+        if (result.mas_testing_notes) {
+          setMasTestingNotes(result.mas_testing_notes)
+        }
+      } else {
+        alert('Failed to generate AI content. Please try again.')
+      }
+
+      // Hide loading screen immediately after content is updated
+      setShowAIAssistantLoading(false)
 
     } catch (error) {
       console.error('AI Assistant error:', error)
       alert('Failed to connect to AI Assistant. Please check your configuration.')
+      setShowAIAssistantLoading(false)
     }
   }
 
@@ -298,129 +404,7 @@ export function PromptEditor({
     }
   }
 
-  const handleAIAssistantComplete = async (generatedContent: string, masFields?: {
-  masIntent: string
-  masFairnessNotes: string
-  masRiskLevel: string
-  masTestingNotes: string
-}) => {
-    try {
-      const token = localStorage.getItem('access_token') || localStorage.getItem('token') || 'demo-token'
-      console.log('Using token for AI Assistant:', token.substring(0, 20) + '...')
-
-      // Get providers for the actual API call
-      const response = await fetch('/v1/ai-assistant/providers', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      if (!response.ok) {
-        console.error('Failed to get providers:', response.status, response.statusText)
-        throw new Error(`Failed to get providers: ${response.status}`)
-      }
-
-      const providers = await response.json()
-      console.log('Got providers:', providers.length, 'providers found')
-
-      const promptType = isNew ? 'create_prompt' : 'edit_prompt'
-      const currentDescription = description || 'Create a prompt'
-      console.log('AI Assistant using description:', currentDescription)
-
-      const context = {
-        description: currentDescription,
-        target_models: ['gpt-4', 'claude-3-sonnet'],
-        module_info: `Module: ${moduleId}`,
-        existing_prompt: content,
-        requirements: 'Must be MAS FEAT compliant',
-        examples: ''
-      }
-
-      const requestBody = {
-        provider_id: providers[0].id,
-        prompt_type: promptType,
-        context: context,
-        target_models: ['gpt-4', 'claude-3-sonnet']
-      }
-
-      console.log('AI Assistant request body:', requestBody)
-
-      const generationResponse = await fetch('/v1/ai-assistant/generate-prompt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(requestBody)
-      })
-
-      console.log('AI Assistant response status:', generationResponse.status)
-
-      if (generationResponse.ok) {
-        const result = await generationResponse.json()
-        console.log('AI Assistant generation result:', result)
-        console.log('Generated content:', result.generated_content)
-
-        // Update form with generated content and MAS fields
-        if (result.generated_content) {
-          setContent(result.generated_content)
-        } else {
-          // Fallback to the content from the loading animation
-          setContent(generatedContent)
-        }
-
-        // Populate MAS FEAT fields
-        if (result.mas_intent) {
-          setMasIntent(result.mas_intent)
-        }
-        if (result.mas_fairness_notes) {
-          setMasFairnessNotes(result.mas_fairness_notes)
-        }
-        if (result.mas_risk_level) {
-          setMasRiskLevel(result.mas_risk_level)
-        }
-        if (result.mas_testing_notes) {
-          setMasTestingNotes(result.mas_testing_notes)
-        }
-      } else {
-        // Use the content from loading animation as fallback
-        setContent(generatedContent)
-
-        // Use MAS fields from loading component if provided, otherwise use defaults
-        if (masFields) {
-          setMasIntent(masFields.masIntent)
-          setMasFairnessNotes(masFields.masFairnessNotes)
-          setMasRiskLevel(masFields.masRiskLevel as 'low' | 'medium' | 'high')
-          setMasTestingNotes(masFields.masTestingNotes)
-        } else {
-          setMasIntent("To provide exceptional AI assistance while ensuring fair, transparent, and accountable interactions.")
-          setMasFairnessNotes("AI-generated prompt designed with fairness considerations and bias mitigation. Regular fairness audits recommended.")
-          setMasRiskLevel("low")
-          setMasTestingNotes("AI-generated prompt requiring human review and testing before deployment.")
-        }
-      }
-    } catch (error) {
-      console.error('AI Assistant generation error:', error)
-      // Use the content from loading animation as fallback
-      setContent(generatedContent)
-
-      // Use MAS fields from loading component if provided, otherwise use defaults
-      if (masFields) {
-        setMasIntent(masFields.masIntent)
-        setMasFairnessNotes(masFields.masFairnessNotes)
-        setMasRiskLevel(masFields.masRiskLevel as 'low' | 'medium' | 'high')
-        setMasTestingNotes(masFields.masTestingNotes)
-      } else {
-        setMasIntent("To provide exceptional AI assistance while ensuring fair, transparent, and accountable interactions.")
-        setMasFairnessNotes("AI-generated prompt designed with fairness considerations and bias mitigation. Regular fairness audits recommended.")
-        setMasRiskLevel("low")
-        setMasTestingNotes("AI-generated prompt requiring human review and testing before deployment.")
-      }
-    } finally {
-      setShowAIAssistantLoading(false)
-    }
-  }
-
+  
   const handleSubmitForApproval = async () => {
     if (!promptId) return
 
@@ -436,7 +420,7 @@ export function PromptEditor({
     }
   }
 
-  const getRiskLevelColor = (risk: string) => {
+  const getRiskLevelColor = (risk?: string) => {
     switch (risk) {
       case 'low': return 'bg-green-100 text-green-800 border-green-200'
       case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
@@ -445,16 +429,26 @@ export function PromptEditor({
     }
   }
 
-  const getRiskLevelIcon = (risk: string) => {
+  const getRiskLevelIcon = (risk?: string) => {
     switch (risk) {
       case 'low': return <CheckCircle className="w-4 h-4" />
       case 'medium': return <AlertTriangle className="w-4 h-4" />
       case 'high': return <Shield className="w-4 h-4" />
-      default: return null
+      default: return <CheckCircle className="w-4 h-4" />
     }
   }
 
+  
   if (isLoading && !isNew) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  // Prevent rendering if component is not ready yet
+  if (!isComponentReady && !isNew) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -476,19 +470,22 @@ export function PromptEditor({
         </div>
 
         <div className="flex items-center gap-4">
+          {/* Temporarily commented out to test error source */}
+          {/*
           <Badge
             variant="outline"
-            className={`flex items-center gap-2 ${getRiskLevelColor(masRiskLevel)}`}
+            className={`flex items-center gap-2 ${getRiskLevelColor(getSafeMasRiskLevel(masRiskLevel))}`}
           >
-            {getRiskLevelIcon(masRiskLevel)}
-            {masRiskLevel.toUpperCase()} Risk
+            {getRiskLevelIcon(getSafeMasRiskLevel(masRiskLevel))}
+            {getSafeMasRiskLevel(masRiskLevel).toUpperCase()} Risk
           </Badge>
+          */}
 
           {!isNew && (
             <Button
               variant="outline"
               onClick={() => setShowApprovalDialog(true)}
-              disabled={masRiskLevel !== 'high'}
+              disabled={getSafeMasRiskLevel(masRiskLevel) !== 'high'}
             >
               <Send className="w-4 h-4 mr-2" />
               Submit for Approval
@@ -655,6 +652,16 @@ export function PromptEditor({
               </div>
             </CardHeader>
             <CardContent>
+              {/* Show helpful message when editing a prompt with empty content */}
+              {!isNew && prompt && !content && !prompt.model_specific_prompts?.length && (
+                <Alert className="mb-4">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    This prompt has no content yet. You can use the AI Assistant to generate prompt content, or write your own manually.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="border rounded-md overflow-hidden">
                 <Editor
                   height="600px"
@@ -667,7 +674,10 @@ export function PromptEditor({
                     readOnly: false,
                     scrollBeyondLastLine: false,
                     automaticLayout: true,
-                    minimap: { enabled: false }
+                    minimap: { enabled: false },
+                    lineNumbers: 'on',
+                    folding: true,
+                    renderWhitespace: 'selection',
                   }}
                 />
               </div>
@@ -747,8 +757,8 @@ export function PromptEditor({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Risk Assessment</span>
-                    <Badge className={getRiskLevelColor(masRiskLevel)}>
-                      {masRiskLevel.toUpperCase()}
+                    <Badge className={getRiskLevelColor(getSafeMasRiskLevel(masRiskLevel))}>
+                      {getSafeMasRiskLevel(masRiskLevel).toUpperCase()}
                     </Badge>
                   </div>
 
@@ -917,16 +927,6 @@ export function PromptEditor({
       <AIAssistantLoading
         isOpen={showAIAssistantLoading}
         onClose={() => setShowAIAssistantLoading(false)}
-        onComplete={(generatedContent, masFields) => {
-          // Apply the generated content and MAS fields but don't close the modal
-          setContent(generatedContent);
-          if (masFields) {
-            setMasIntent(masFields.masIntent);
-            setMasFairnessNotes(masFields.masFairnessNotes);
-            setMasRiskLevel(masFields.masRiskLevel as 'low' | 'medium' | 'high');
-            setMasTestingNotes(masFields.masTestingNotes);
-          }
-        }}
         getContext={() => ({
           description: description || 'Create a prompt',
           existingContent: content,

@@ -228,6 +228,7 @@ class PromptResponse(BaseModel):
     )
 
 class PromptUpdate(BaseModel):
+    content: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
     provider_id: Optional[str] = None

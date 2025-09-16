@@ -100,7 +100,7 @@ async def create_prompt(
         id=prompt_data.id,
         version=prompt_data.version,
         module_id=prompt_data.module_id,
-        content=prompt_data.model_specific_prompts[0].content if prompt_data.model_specific_prompts else "",  # Use first model's content as main content
+        content=prompt_data.content,  # Use the content field from the request
         name=prompt_data.name,
         description=prompt_data.description,
         provider_id=prompt_data.provider_id,
