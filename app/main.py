@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import engine
 from app.models import Base
-from app.routers import templates, render, aliases, evals, policies, auth, projects, modules, prompts, model_compatibilities, approval_requests, delivery, dashboard, users, client_api, analytics, governance
+from app.routers import templates, render, aliases, evals, policies, auth, projects, modules, prompts, model_compatibilities, approval_requests, delivery, dashboard, users, client_api, analytics, governance, model_testing
 
 # Configure structured logging
 structlog.configure(
@@ -115,6 +115,9 @@ app.include_router(analytics.router, prefix="/v1/analytics", tags=["analytics"])
 
 # Include Governance endpoints
 app.include_router(governance.router, prefix="/v1/governance", tags=["governance"])
+
+# Include Model Testing endpoints
+app.include_router(model_testing.router, prefix="/v1/model-testing", tags=["model-testing"])
 
 @app.get("/")
 async def root():

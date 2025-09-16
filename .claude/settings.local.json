@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(DATABASE_URL=postgresql://promptops:promptops@localhost:5432/promptops python3 -c \"\nfrom app.database import engine\nfrom sqlalchemy import text\nwith engine.connect() as conn:\n    result = conn.execute(text(\"\"SELECT column_name FROM information_schema.columns WHERE table_name = ''approval_requests''\"\"))\n    columns = [row[0] for row in result]\n    print(''Columns in application database:'', columns)\n\")"
+      "Bash(DATABASE_URL=postgresql://promptops:promptops@localhost:5432/promptops python3:*)"
     ],
     "deny": [],
     "ask": []

@@ -158,17 +158,6 @@ class AIAssistantService:
     def create_provider(self, user_id: str, provider_data: AIAssistantProviderCreate) -> AIAssistantProviderResponse:
         """Create a new AI assistant provider"""
         try:
-            # Check if user already has an active provider of this type
-            existing_provider = self.db.query(AIAssistantProvider).filter(
-                and_(
-                    AIAssistantProvider.user_id == user_id,
-                    AIAssistantProvider.provider_type == provider_data.provider_type,
-                    AIAssistantProvider.status == AIAssistantProviderStatus.active
-                )
-            ).first()
-
-            if existing_provider:
-                raise ValueError(f"User already has an active {provider_data.provider_type.value} provider")
 
             # Create new provider
             provider_id = str(uuid.uuid4())

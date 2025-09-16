@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Edit, Trash2, ArrowLeft, FileText, Shield, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { Plus, Edit, Trash2, ArrowLeft, FileText, Shield, AlertTriangle, CheckCircle, Clock, TestTube } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -241,6 +241,15 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
                     >
                       <Edit className="w-3 h-3 mr-2" />
                       Edit Prompt
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => navigate(`/projects/${projectId}/modules/${moduleId}/prompts/${prompt.id}/${prompt.version}/testing`)}
+                    >
+                      <TestTube className="w-3 h-3 mr-2" />
+                      Model Testing
                     </Button>
                   </div>
                 </div>

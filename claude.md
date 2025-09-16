@@ -57,10 +57,11 @@
 
 ## 📊 Progress Communication
 
-Before each task 
+# 🔴 MUST you do 
+## Before each task 
 - use say command to  share your findings and respond
 
-After each task:
+## After each task:
 - Report: "✅ Completed: [task]"
 - Show: "📋 Progress: [3/7 complete]"
 - Next: "🔄 Starting: [next task]"

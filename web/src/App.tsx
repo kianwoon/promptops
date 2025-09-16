@@ -26,6 +26,7 @@ import { PublicLayoutWrapper } from './components/PublicLayoutWrapper'
 import { DevProtectedRoute as ProtectedRoute } from './components/auth/DevProtectedRoute'
 import { DevAppWrapper } from './components/DevAppWrapper'
 import { ModulePromptsPage } from './pages/ModulePrompts'
+import { ModelTesting } from './pages/ModelTesting'
 
 function App() {
   return (
@@ -75,6 +76,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <ModulePromptsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:projectId/modules/:moduleId/prompts/:promptId/testing"
+            element={
+              <ProtectedRoute>
+                <ModelTesting />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:projectId/modules/:moduleId/prompts/:promptId/:version/testing"
+            element={
+              <ProtectedRoute>
+                <ModelTesting />
               </ProtectedRoute>
             }
           />

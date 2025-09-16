@@ -225,6 +225,7 @@ export interface Prompt {
   id: string
   version: string
   module_id: string
+  content: string
   name: string
   description?: string
   created_by: string
@@ -243,6 +244,7 @@ export interface PromptCreate {
   id: string
   version: string
   module_id: string
+  content: string
   name: string
   description?: string
   target_models: string[]
@@ -257,6 +259,7 @@ export interface PromptCreate {
 export interface PromptUpdate {
   name?: string
   description?: string
+  content?: string
   target_models?: string[]
   model_specific_prompts?: ModelSpecificPrompt[]
   mas_intent?: string

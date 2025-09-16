@@ -186,6 +186,7 @@ class PromptCreate(BaseModel):
     id: str
     version: str
     module_id: str
+    content: str
     name: str
     description: Optional[str] = None
     target_models: List[str] = Field(..., description="List of model providers (e.g., ['openai', 'claude', 'gemini'])")
@@ -204,6 +205,7 @@ class PromptResponse(BaseModel):
     id: str
     version: str
     module_id: str
+    content: str
     name: str
     description: Optional[str] = None
     created_by: str
@@ -1997,3 +1999,30 @@ class ThreatIndicatorResponse(BaseModel):
     expires_at: Optional[datetime] = None
     tags: List[str] = []
     metadata: Dict[str, Any] = {}
+
+
+# Model Testing Schemas
+class ModelTestRequest(BaseModel):
+    system_prompt: str
+    user_message: str
+    providers: List[str] = Field(default_factory=list)  # Optional: specific providers to test
+    test_type: str = Field(default="all", pattern="^(all|selected)$")
+
+
+class ModelTestResult(BaseModel):
+    provider_id: str
+    provider_name: str
+    provider_type: str
+    response_content: str
+    response_time_ms: int
+    tokens_used: Optional[int] = None
+    error: Optional[str] = None
+    status: str = Field(pattern="^(success|error|timeout)$")
+
+
+class ModelTestResponse(BaseModel):
+    results: List[ModelTestResult]
+    total_providers: int
+    successful_tests: int
+    failed_tests: int
+    test_execution_time_ms: int

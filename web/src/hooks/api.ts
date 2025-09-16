@@ -700,3 +700,25 @@ export const useUpdateUser = () => {
     },
   })
 }
+
+// Model Testing Hooks
+export const useUserProviders = () => {
+  return useQuery({
+    queryKey: ['user-providers'],
+    queryFn: () => apiRequest<{ providers: Array<any> }>('/model-testing/user-providers'),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+}
+
+export const useTestPromptAcrossProviders = () => {
+  return useMutation({
+    mutationFn: (requestData: { system_prompt: string; user_message: string; providers?: string[] }) =>
+      apiRequest<any>('/model-testing/test-prompt-across-providers', {
+        method: 'POST',
+        body: JSON.stringify(requestData),
+      }),
+    onError: (error) => {
+      toast.error(`Failed to test prompt: ${error.message}`)
+    },
+  })
+}
