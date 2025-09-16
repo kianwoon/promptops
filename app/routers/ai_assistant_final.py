@@ -625,12 +625,14 @@ async def get_default_provider(
     """Get the user's default AI provider"""
     try:
         service = AIAssistantService(db)
-        default_provider = service.get_default_provider(current_user.get("id"))
+        user_id = current_user.get("id") or current_user.get("user_id")
+        default_provider = service.get_default_provider(user_id)
         if not default_provider:
             raise HTTPException(status_code=404, detail="No default provider found")
         return default_provider
     except Exception as e:
-        logger.error("Error getting default provider", user_id=current_user.get("id"), error=str(e))
+        user_id = current_user.get("id") or current_user.get("user_id")
+        logger.error("Error getting default provider", user_id=user_id, error=str(e))
         raise HTTPException(status_code=500, detail="Failed to get default provider")
 
 @router.post("/default-provider/{provider_id}", response_model=AIAssistantProviderResponse)
@@ -642,13 +644,16 @@ async def set_default_provider(
     """Set the user's default AI provider"""
     try:
         service = AIAssistantService(db)
-        default_provider = service.set_default_provider(current_user.get("id"), provider_id)
+        user_id = current_user.get("id") or current_user.get("user_id")
+        default_provider = service.set_default_provider(user_id, provider_id)
         return default_provider
     except ValueError as e:
-        logger.error("Error setting default provider", user_id=current_user.get("id"), provider_id=provider_id, error=str(e))
+        user_id = current_user.get("id") or current_user.get("user_id")
+        logger.error("Error setting default provider", user_id=user_id, provider_id=provider_id, error=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error("Error setting default provider", user_id=current_user.get("id"), provider_id=provider_id, error=str(e))
+        user_id = current_user.get("id") or current_user.get("user_id")
+        logger.error("Error setting default provider", user_id=user_id, provider_id=provider_id, error=str(e))
         raise HTTPException(status_code=500, detail="Failed to set default provider")
 
 @router.delete("/default-provider")
@@ -659,10 +664,12 @@ async def clear_default_provider(
     """Clear the user's default AI provider"""
     try:
         service = AIAssistantService(db)
-        service.clear_default_provider(current_user.get("id"))
+        user_id = current_user.get("id") or current_user.get("user_id")
+        service.clear_default_provider(user_id)
         return {"message": "Default provider cleared successfully"}
     except Exception as e:
-        logger.error("Error clearing default provider", user_id=current_user.get("id"), error=str(e))
+        user_id = current_user.get("id") or current_user.get("user_id")
+        logger.error("Error clearing default provider", user_id=user_id, error=str(e))
         raise HTTPException(status_code=500, detail="Failed to clear default provider")
 
 # Health Check Endpoint
