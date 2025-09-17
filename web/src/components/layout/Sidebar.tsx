@@ -16,6 +16,7 @@ import {
   Bot
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import { useAuth, usePermission } from '@/contexts/AuthContext'
 
@@ -149,11 +150,12 @@ export function Sidebar({ className }: SidebarProps) {
             "flex items-center",
             !sidebarOpen && "justify-center"
           )}>
-            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-              <span className="text-sm font-medium">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={user?.avatar} alt={user?.name} />
+              <AvatarFallback>
                 {user?.name.split(' ').map(n => n[0]).join('') || 'U'}
-              </span>
-            </div>
+              </AvatarFallback>
+            </Avatar>
             {sidebarOpen && (
               <div className="ml-3 flex-1">
                 <p className="text-sm font-medium truncate">{user?.name}</p>

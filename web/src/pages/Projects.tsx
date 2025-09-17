@@ -12,23 +12,25 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useProjects, useCreateProject, useUpdateProject, useDeleteProject } from '@/hooks/api'
 import type { Project, ProjectCreate, ProjectUpdate } from '@/types/api'
 import { formatDistanceToNow } from 'date-fns'
+import { useAuth } from '@/contexts/AuthContext'
 
 export function Projects() {
   const { data: projects, isLoading, error } = useProjects()
   const createProject = useCreateProject()
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
+  const { user } = useAuth()
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
-  const [createForm, setCreateForm] = useState<ProjectCreate>({ name: '', description: '', owner: 'current-user' })
+  const [createForm, setCreateForm] = useState<ProjectCreate>({ name: '', description: '', owner: user?.id || 'demo-user' })
   const [updateForm, setUpdateForm] = useState<ProjectUpdate>({})
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       await createProject.mutateAsync(createForm)
-      setCreateForm({ name: '', description: '', owner: 'current-user' })
+      setCreateForm({ name: '', description: '', owner: user?.id || 'demo-user' })
       setIsCreateDialogOpen(false)
     } catch (error) {
       console.error('Failed to create project:', error)

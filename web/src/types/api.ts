@@ -40,7 +40,7 @@ export interface TemplateVersion {
 }
 
 export interface TemplateCreate {
-  id: string
+  id?: string
   version: string
   owner: string
   template_yaml: string
@@ -153,6 +153,17 @@ export interface User {
   roles: string[]
   tenant?: string
   createdAt?: string
+  is_active?: boolean
+}
+
+export interface UserCreate {
+  email: string
+  name: string
+  role?: string
+  organization?: string
+  phone?: string
+  companySize?: string
+  hashed_password?: string
 }
 
 export interface UserUpdate {
@@ -162,6 +173,7 @@ export interface UserUpdate {
   organization?: string
   companySize?: string
   role?: string
+  is_active?: boolean
 }
 
 // Project Types

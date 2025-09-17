@@ -35,6 +35,7 @@ import { DiffViewer } from '@/components/DiffViewer'
 import { usePrompt, useUpdatePrompt, useCreatePrompt, useModelCompatibilities, useTestPromptCompatibility, useCompatibilityMatrix, useApprovalRequests, useCreateApprovalRequest, useAIAssistantProviders } from '@/hooks/api'
 import type { Prompt, PromptCreate, PromptUpdate } from '@/types/api'
 import { formatDistanceToNow } from 'date-fns'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface PromptEditorProps {
   projectId?: string
@@ -64,6 +65,7 @@ export function PromptEditor({
   onSave,
   onCancel
 }: PromptEditorProps) {
+  const { user } = useAuth()
   const editorRef = useRef<any>(null)
   const [content, setContent] = useState('')
   const [description, setDescription] = useState('')
@@ -438,7 +440,7 @@ export function PromptEditor({
     try {
       await createApprovalRequest.mutateAsync({
         prompt_id: promptId,
-        requested_by: 'current-user', // This would come from auth context
+        requested_by: user?.id || 'demo-user',
         status: 'pending'
       })
       setShowApprovalDialog(false)

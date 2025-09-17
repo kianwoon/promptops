@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "say 'Claude needs your input' && osascript -e 'display notification \"Claude waiting for response\" with title \"Claude Code\"'"
+            "command": "say 'Claude needs your input'; osascript -e 'display notification \"Claude waiting for response\" with title \"Claude Code\"';"
           }
         ]
       }
@@ -62,15 +62,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "say 'Task completed' && osascript -e 'display notification \"Task completed\" with title \"Claude Code\" sound name \"Submarine\"'"
+            "command": "say 'Task completed'; osascript -e 'display notification \"Task completed\" with title \"Claude Code\" sound name \"Submarine\"';"
           },
           {
             "type": "command",
-            "command": "/usr/bin/python3 /Users/kianwoonwong/claude_cleanup.py"
+            "command": "/usr/bin/python3 /Users/kianwoonwong/claude_cleanup.py;"
           },
           {
             "type": "command",
-            "command": "echo 'Reminder: Read CLAUDE.local.md if present' && if [ -f CLAUDE.local.md ]; then echo 'CLAUDE.local.md found in current directory'; fi"
+            "command": "echo 'Reminder: Project memory ./CLAUDE.md  if present' && if [ -f ./CLAUDE.md  ]; then echo 'CLAUDE.md found in current directory'; fi"
           }
         ]
       }
@@ -80,7 +80,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "say 'Subtask complete' "
+            "command": "say 'Subtask complete';"
           }
         ]
       }
@@ -91,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "say 'Agent starting task'"
+            "command": "say 'Agent starting task';"
           }
         ]
       }
@@ -102,7 +102,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "say 'Agent task complete'"
+            "command": "say 'Agent task complete';"
           }
         ]
       }
@@ -112,7 +112,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Claude Code ready' && say 'Claude ready'"
+            "command": "echo 'Claude Code ready'; say 'Claude ready';"
           },
           {
             "type": "command",
@@ -126,7 +126,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Reminder: Project memory ./CLAUDE.md  if present' && if [ -f ./CLAUDE.md  ]; then echo 'CLAUDE.md found in current directory'; fi"
+        "command": "if [ -f ./CLAUDE.md ]; then echo 'IMPORTANT: Before you begin, please read the entire CLAUDE.md file below to understand the project context, requirements, and coding style. before proceed with my request.'; fi"
           }
         ]
       }

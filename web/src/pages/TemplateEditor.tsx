@@ -34,6 +34,7 @@ import {
   useRenderTemplate 
 } from '@/hooks/api'
 import { Template, TemplateVersion, Alias, EvaluationRun } from '@/types/api'
+import { useAuth } from '@/contexts/AuthContext'
 
 const defaultTemplate = `name: prompt-template
 version: "1.0.0"
@@ -70,16 +71,16 @@ deployment:
 export function TemplateEditor() {
   const { id, version } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('editor')
   const [yamlContent, setYamlContent] = useState(defaultTemplate)
-  const [isLoading, setIsLoading] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [testInput, setTestInput] = useState('')
 
   const { data: template, isLoading: templateLoading, error: templateError } = useTemplate(id || '', version || '')
-  const { data: versions, isLoading: versionsLoading } = useTemplateVersions(id || '')
-  const { data: aliases, isLoading: aliasesLoading } = useAliases()
-  const { data: evaluations, isLoading: evaluationsLoading } = useEvaluations(id)
+  const { data: versions } = useTemplateVersions(id || '')
+  const { data: aliases } = useAliases()
+  const { data: evaluations } = useEvaluations(id)
   const createTemplate = useCreateTemplate()
   const renderTemplate = useRenderTemplate()
 
@@ -99,17 +100,15 @@ export function TemplateEditor() {
   }, [id])
 
   const handleSave = async (content: string) => {
-    setIsLoading(true)
     try {
       const yamlLines = content.split('\n')
-      const name = yamlLines.find(line => line.startsWith('name:'))?.replace('name:', '').trim() || 'untitled'
       const version = yamlLines.find(line => line.startsWith('version:'))?.replace('version:', '').trim() || '1.0.0'
       const description = yamlLines.find(line => line.startsWith('description:'))?.replace('description:', '').trim() || ''
 
       const templateData = {
-        id: id || name,
+        id: id || null, // Let backend generate ID for new templates
         version: version,
-        owner: 'current-user',
+        owner: user?.id || 'demo-user',
         template_yaml: content,
         metadata: {
           description: description,
@@ -118,14 +117,12 @@ export function TemplateEditor() {
       }
 
       await createTemplate.mutateAsync(templateData)
-      
+
       if (!id) {
         navigate('/templates')
       }
     } catch (error) {
       console.error('Failed to save template:', error)
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -304,7 +301,7 @@ export function TemplateEditor() {
                   </div>
                   <div className="flex items-end">
                     <Button 
-                      onClick={() => handleTest(yamlContent)}
+                      onClick={handleTest}
                       disabled={isTesting || !testInput.trim()}
                     >
                       {isTesting ? (
@@ -352,6 +349,7 @@ export function TemplateEditor() {
                 onUpdateAlias={handleUpdateAlias}
                 onDeleteAlias={handleDeleteAlias}
                 onTestAlias={handleTestAlias}
+                userId={user?.id}
               />
             </TabsContent>
 

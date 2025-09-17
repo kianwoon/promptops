@@ -45,6 +45,7 @@ import type {
   ApiResponse,
   PaginatedResponse,
   User,
+  UserCreate,
   UserUpdate
 } from '@/types/api'
 
@@ -94,7 +95,7 @@ export const useTemplate = (templateId: string, version: string) =>
 
 export const useCreateTemplate = () => {
   const queryClient = useQueryClient()
-  
+
   return useMutation({
     mutationFn: (template: TemplateCreate) =>
       apiRequest<ApiResponse<Template>>('/templates', {
@@ -107,6 +108,24 @@ export const useCreateTemplate = () => {
     },
     onError: (error) => {
       toast.error(`Failed to create template: ${error.message}`)
+    },
+  })
+}
+
+export const useDeleteTemplate = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ templateId, version }: { templateId: string; version?: string }) =>
+      apiRequest<ApiResponse<null>>(version ? `/templates/${templateId}/${version}` : `/templates/${templateId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] })
+      toast.success('Template deleted successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete template: ${error.message}`)
     },
   })
 }
@@ -685,6 +704,25 @@ export const useUsers = () =>
     queryFn: () => apiRequest<User[]>('/users'),
   })
 
+export const useCreateUser = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (userData: UserCreate) =>
+      apiRequest<ApiResponse<User>>('/users', {
+        method: 'POST',
+        body: JSON.stringify(userData),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('User created successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to create user: ${error.message}`)
+    },
+  })
+}
+
 export const useUpdateUser = () => {
   const queryClient = useQueryClient()
 
@@ -700,6 +738,24 @@ export const useUpdateUser = () => {
     },
     onError: (error) => {
       toast.error(`Failed to update user: ${error.message}`)
+    },
+  })
+}
+
+export const useDeleteUser = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (userId: string) =>
+      apiRequest<ApiResponse<null>>(`/users/${userId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('User deleted successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete user: ${error.message}`)
     },
   })
 }

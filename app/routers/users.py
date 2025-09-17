@@ -29,7 +29,7 @@ async def list_users(
     current_user: dict = Depends(get_mock_user)  # Using mock user for development
 ):
     """List all users"""
-    users = db.query(User.id, User.email, User.name, User.role, User.organization, User.phone, User.company_size, User.avatar, User.provider, User.provider_id, User.is_verified, User.default_ai_provider_id, User.created_at, User.updated_at, User.last_login).offset(skip).limit(limit).all()
+    users = db.query(User.id, User.email, User.name, User.role, User.organization, User.phone, User.company_size, User.avatar, User.provider, User.provider_id, User.is_verified, User.is_active, User.default_ai_provider_id, User.created_at, User.updated_at, User.last_login).offset(skip).limit(limit).all()
     return users
 
 @router.get("/{user_id}", response_model=UserResponse)
@@ -39,7 +39,7 @@ async def get_user(
     current_user: dict = Depends(get_mock_user)  # Using mock user for development
 ):
     """Get a specific user"""
-    user = db.query(User.id, User.email, User.name, User.role, User.organization, User.phone, User.company_size, User.avatar, User.provider, User.provider_id, User.is_verified, User.default_ai_provider_id, User.created_at, User.updated_at, User.last_login).filter(User.id == user_id).first()
+    user = db.query(User.id, User.email, User.name, User.role, User.organization, User.phone, User.company_size, User.avatar, User.provider, User.provider_id, User.is_verified, User.is_active, User.default_ai_provider_id, User.created_at, User.updated_at, User.last_login).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
@@ -52,7 +52,7 @@ async def create_user(
 ):
     """Create a new user"""
     # Check if user with email already exists
-    existing_user = db.query(User.id, User.email, User.name, User.role, User.organization, User.phone, User.company_size, User.avatar, User.provider, User.provider_id, User.is_verified, User.default_ai_provider_id, User.created_at, User.updated_at, User.last_login).filter(User.email == user_data.email).first()
+    existing_user = db.query(User.id, User.email, User.name, User.role, User.organization, User.phone, User.company_size, User.avatar, User.provider, User.provider_id, User.is_verified, User.is_active, User.default_ai_provider_id, User.created_at, User.updated_at, User.last_login).filter(User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="User with this email already exists")
 
@@ -105,6 +105,8 @@ async def update_user(
         user.role = UserRole(user_data.role)
     if user_data.is_verified is not None:
         user.is_verified = user_data.is_verified
+    if user_data.is_active is not None:
+        user.is_active = user_data.is_active
 
     user.updated_at = datetime.utcnow()
     db.commit()
@@ -135,7 +137,7 @@ async def get_user_by_email(
     current_user: dict = Depends(get_mock_user)  # Using mock user for development
 ):
     """Get a user by email"""
-    user = db.query(User.id, User.email, User.name, User.role, User.organization, User.phone, User.company_size, User.avatar, User.provider, User.provider_id, User.is_verified, User.default_ai_provider_id, User.created_at, User.updated_at, User.last_login).filter(User.email == email).first()
+    user = db.query(User.id, User.email, User.name, User.role, User.organization, User.phone, User.company_size, User.avatar, User.provider, User.provider_id, User.is_verified, User.is_active, User.default_ai_provider_id, User.created_at, User.updated_at, User.last_login).filter(User.email == email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user

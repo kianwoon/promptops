@@ -25,6 +25,7 @@ interface AliasManagementProps {
   onUpdateAlias: (alias: string, updates: Partial<Alias>) => void
   onDeleteAlias: (alias: string) => void
   onTestAlias: (alias: string) => void
+  userId?: string
 }
 
 export function AliasManagement({
@@ -33,7 +34,8 @@ export function AliasManagement({
   onCreateAlias,
   onUpdateAlias,
   onDeleteAlias,
-  onTestAlias
+  onTestAlias,
+  userId
 }: AliasManagementProps) {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingAlias, setEditingAlias] = useState<string | null>(null)
@@ -52,7 +54,7 @@ export function AliasManagement({
         target_version: newAlias.target_version,
         weights: newAlias.weights,
         etag: '',
-        updated_by: 'current-user'
+        updated_by: userId || 'demo-user'
       })
       setNewAlias({ alias: '', target_version: '', weights: {}, description: '' })
       setShowCreateForm(false)

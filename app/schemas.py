@@ -39,7 +39,7 @@ except ImportError:
 
 # Template schemas
 class TemplateCreate(BaseModel):
-    id: str
+    id: Optional[str] = None
     version: str
     owner: str
     template_yaml: str
@@ -329,6 +329,7 @@ class UserResponse(BaseModel):
     provider: Optional[str] = None
     provider_id: Optional[str] = None
     is_verified: bool
+    is_active: bool
     created_at: datetime
     updated_at: datetime
     last_login: Optional[datetime] = None
@@ -344,6 +345,7 @@ class UserUpdate(BaseModel):
     avatar: Optional[str] = None
     role: Optional[str] = None
     is_verified: Optional[bool] = None
+    is_active: Optional[bool] = None
 
 # Client API Schemas
 class ClientApiKeyCreate(BaseModel):

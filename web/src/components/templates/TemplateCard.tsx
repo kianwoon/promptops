@@ -33,7 +33,7 @@ interface TemplateCardProps {
   template: Template
   versions: TemplateVersion[]
   onEdit: (templateId: string, version?: string) => void
-  onDelete: (templateId: string) => void
+  onDelete: (templateId: string, version: string) => void
   onDuplicate: (templateId: string) => void
   onTest: (templateId: string, version: string) => void
   onViewAnalytics: (templateId: string) => void
@@ -48,9 +48,13 @@ export function TemplateCard({
   onTest,
   onViewAnalytics
 }: TemplateCardProps) {
-  const latestVersion = versions.reduce((latest, version) => {
-    return new Date(version.created_at) > new Date(latest.created_at) ? version : latest
-  }, versions[0])
+  const latestVersion = versions.length > 0
+    ? versions.reduce((latest, version) => {
+        return new Date(version.created_at) > new Date(latest.created_at) ? version : latest
+      }, versions[0])
+    : null
+
+  const hasVersions = versions.length > 0
 
   const getStatusColor = (status?: string) => {
     switch (status) {
@@ -85,7 +89,7 @@ export function TemplateCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onEdit(template.id, latestVersion?.version)}>
+              <DropdownMenuItem onClick={() => onEdit(template.id, latestVersion?.version)} disabled={!hasVersions}>
                 <Edit className="h-4 w-4 mr-2" />
                 Edit
               </DropdownMenuItem>
@@ -97,12 +101,12 @@ export function TemplateCard({
                 <BarChart3 className="h-4 w-4 mr-2" />
                 View Analytics
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onTest(template.id, latestVersion?.version)}>
+              <DropdownMenuItem onClick={() => onTest(template.id, latestVersion?.version)} disabled={!hasVersions}>
                 <Play className="h-4 w-4 mr-2" />
                 Test Template
               </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => onDelete(template.id)}
+              <DropdownMenuItem
+                onClick={() => onDelete(template.id, latestVersion?.version)}
                 className="text-red-600"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -117,7 +121,7 @@ export function TemplateCard({
             {template.metadata?.tags?.includes('active') ? 'Active' : 'Draft'}
           </Badge>
           <Badge variant="outline">
-            v{latestVersion?.version || '1.0.0'}
+            v{latestVersion?.version || (hasVersions ? '1.0.0' : 'No versions')}
           </Badge>
           {template.metadata?.tags?.slice(0, 2).map((tag) => (
             <Badge key={tag} variant="secondary">
@@ -145,7 +149,7 @@ export function TemplateCard({
           </div>
           
           <div className="flex gap-2 pt-2">
-            <Button size="sm" onClick={() => onEdit(template.id, latestVersion?.version)}>
+            <Button size="sm" onClick={() => onEdit(template.id, latestVersion?.version)} disabled={!hasVersions}>
               Edit
             </Button>
             <Button size="sm" variant="outline" onClick={() => onViewAnalytics(template.id)}>

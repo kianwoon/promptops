@@ -8,8 +8,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { TemplateCard, TemplateFilters } from '@/components/templates'
-import { useTemplates, useTemplateVersions } from '@/hooks/api'
+import { TemplateCard, TemplateFilters, DeleteConfirmationModal } from '@/components/templates'
+import { useTemplates, useTemplateVersions, useDeleteTemplate } from '@/hooks/api'
 import { Template, TemplateVersion } from '@/types/api'
 
 export function Templates() {
@@ -20,6 +20,17 @@ export function Templates() {
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean
+    templateId: string
+    templateName: string
+    version?: string
+  }>({
+    isOpen: false,
+    templateId: '',
+    templateName: '',
+    version: undefined
+  })
 
   const { data: templatesData, isLoading, error } = useTemplates()
   
@@ -29,6 +40,7 @@ export function Templates() {
   }, [templatesData])
 
   const templatesVersions = useTemplateVersions(templateIds.join(','))
+  const deleteTemplate = useDeleteTemplate()
 
   const filteredAndSortedTemplates = useMemo(() => {
     if (!templatesData) return []
@@ -97,11 +109,31 @@ export function Templates() {
     }
   }
 
-  const handleDelete = async (templateId: string) => {
-    if (confirm('Are you sure you want to delete this template? This action cannot be undone.')) {
-      // TODO: Implement delete functionality
-      console.log('Delete template:', templateId)
+  const handleDelete = (templateId: string, version?: string) => {
+    const template = templatesData?.find(t => t.id === templateId)
+    if (template) {
+      setDeleteModal({
+        isOpen: true,
+        templateId,
+        templateName: template.id,
+        version
+      })
     }
+  }
+
+  const handleConfirmDelete = () => {
+    deleteTemplate.mutate(
+      { templateId: deleteModal.templateId, version: deleteModal.version },
+      {
+        onSuccess: () => {
+          setDeleteModal(prev => ({ ...prev, isOpen: false }))
+        }
+      }
+    )
+  }
+
+  const handleCloseDeleteModal = () => {
+    setDeleteModal(prev => ({ ...prev, isOpen: false }))
   }
 
   const handleDuplicate = (templateId: string) => {
@@ -206,6 +238,15 @@ export function Templates() {
           </CardContent>
         </Card>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        templateName={deleteModal.templateName}
+        isLoading={deleteTemplate.isPending}
+      />
     </div>
   )
 }

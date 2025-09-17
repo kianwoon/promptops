@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react'
 import { generateGoogleAuthUrl, handleGoogleCallback, storeAuthTokens } from '@/lib/googleAuth'
+import { useCurrentUser } from '@/hooks/useCurrentUser'
 
 interface User {
   id: string
@@ -156,16 +157,34 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, dispatch] = useReducer(authReducer, initialState)
+  const { user: dbUser, loading: dbUserLoading, refetch: refetchDbUser } = useCurrentUser()
 
-  // Initialize auth state from localStorage
+  // Initialize auth state from localStorage and sync with database user
   useEffect(() => {
     const storedAuth = localStorage.getItem('isAuthenticated')
     const storedUser = localStorage.getItem('user')
 
     if (storedAuth === 'true' && storedUser) {
       try {
-        const user = JSON.parse(storedUser)
-        dispatch({ type: 'LOGIN_SUCCESS', payload: user })
+        const localStorageUser = JSON.parse(storedUser)
+
+        // If we have a database user, use that data (it's more fresh and includes avatar)
+        if (dbUser && !dbUserLoading) {
+          // Merge localStorage user with database user, prioritizing database fields
+          const mergedUser = {
+            ...localStorageUser,
+            ...dbUser,
+            // Preserve some fields that might not be in database response
+            phone: dbUser.phone || localStorageUser.phone,
+            companySize: dbUser.companySize || localStorageUser.companySize,
+          }
+          dispatch({ type: 'LOGIN_SUCCESS', payload: mergedUser })
+          // Update localStorage with merged user data
+          localStorage.setItem('user', JSON.stringify(mergedUser))
+        } else {
+          // No database user available, use localStorage user
+          dispatch({ type: 'LOGIN_SUCCESS', payload: localStorageUser })
+        }
       } catch (error) {
         console.error('Failed to parse stored user data:', error)
         localStorage.removeItem('isAuthenticated')
@@ -176,12 +195,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Check for Google OAuth callback
     const urlParams = new URLSearchParams(window.location.search)
     const code = urlParams.get('code')
-    
+
     if (code && window.location.pathname === '/auth/google/callback') {
       // Handle Google OAuth callback
       handleGoogleAuthCallback(code)
     }
-  }, [])
+  }, [dbUser, dbUserLoading])
 
   const handleGoogleAuthCallback = async (code: string) => {
     dispatch({ type: 'LOGIN_START' })
@@ -213,9 +232,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       localStorage.setItem('isAuthenticated', 'true')
 
       dispatch({ type: 'LOGIN_SUCCESS', payload: user })
-      
+
       // Clear URL parameters
       window.history.replaceState({}, document.title, '/dashboard')
+
+      // Refetch fresh user data from database
+      refetchDbUser()
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Google authentication failed'
       dispatch({ type: 'LOGIN_ERROR', payload: errorMessage })
@@ -265,6 +287,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       localStorage.setItem('isAuthenticated', 'true')
 
       dispatch({ type: 'LOGIN_SUCCESS', payload: user })
+
+      // Refetch fresh user data from database
+      refetchDbUser()
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Google authentication failed'
       dispatch({ type: 'LOGIN_ERROR', payload: errorMessage })
@@ -394,6 +419,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const updatedUser = { ...state.user, ...userData }
       localStorage.setItem('user', JSON.stringify(updatedUser))
       dispatch({ type: 'UPDATE_USER', payload: userData })
+
+      // After updating user, refetch fresh data from database
+      refetchDbUser()
     }
   }
 
