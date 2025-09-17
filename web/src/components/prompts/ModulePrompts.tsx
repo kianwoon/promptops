@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Edit, Trash2, ArrowLeft, FileText, Shield, AlertTriangle, CheckCircle, Clock, TestTube } from 'lucide-react'
+import { Plus, Edit, Trash2, ArrowLeft, FileText, Shield, AlertTriangle, CheckCircle, Clock, TestTube, Award, Check } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -221,10 +221,31 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
                     </Badge>
                   </div>
 
-                  {/* MAS Compliance Info */}
+                  {/* MAS Compliance Badge */}
                   <div className="space-y-2">
                     <div className="text-sm text-muted-foreground">MAS Compliance</div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={`flex items-center gap-2 ${prompt.mas_intent && prompt.mas_fairness_notes ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}
+                      >
+                        {prompt.mas_intent && prompt.mas_fairness_notes ? (
+                          <Award className="w-4 h-4" />
+                        ) : (
+                          <Shield className="w-4 h-4" />
+                        )}
+                        {prompt.mas_intent && prompt.mas_fairness_notes ? 'Compliant' : 'Partial'}
+                      </Badge>
+                      <div className="flex gap-1">
+                        <div className={`p-1 rounded-full ${prompt.mas_intent ? 'bg-green-100' : 'bg-gray-100'}`}>
+                          <Check className={`w-3 h-3 ${prompt.mas_intent ? 'text-green-600' : 'text-gray-400'}`} />
+                        </div>
+                        <div className={`p-1 rounded-full ${prompt.mas_fairness_notes ? 'bg-green-100' : 'bg-gray-100'}`}>
+                          <Check className={`w-3 h-3 ${prompt.mas_fairness_notes ? 'text-green-600' : 'text-gray-400'}`} />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                       <div className="flex items-center">
                         <CheckCircle className={`w-3 h-3 mr-1 ${prompt.mas_intent ? 'text-green-500' : 'text-gray-300'}`} />
                         Intent
