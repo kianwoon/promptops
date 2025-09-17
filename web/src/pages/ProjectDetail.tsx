@@ -387,12 +387,20 @@ export function ProjectDetail() {
                       <select
                         id="prompt-module"
                         value={createPromptForm.module_id}
-                        onChange={(e) => setCreatePromptForm({ ...createPromptForm, module_id: e.target.value })}
+                        onChange={(e) => {
+                          const selectedModuleId = e.target.value;
+                          const selectedModule = modules?.find(m => m.id === selectedModuleId);
+                          setCreatePromptForm({
+                            ...createPromptForm,
+                            module_id: selectedModuleId,
+                            description: selectedModule?.render_body || ''
+                          });
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
                       >
                         <option value="">Select a module</option>
-                        {modules?.map((module) => (
+                        {[...(modules || [])].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)).map((module) => (
                           <option key={module.id} value={module.id}>
                             {module.slot}
                           </option>
@@ -590,7 +598,7 @@ export function ProjectDetail() {
 
           {modules && modules.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2">
-              {modules.map((module, index) => {
+              {[...modules].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)).map((module, index) => {
                 const modulePromptCount = promptCounts[module.id] || 0;
                 const canDelete = modulePromptCount === 0;
 

@@ -42,6 +42,7 @@ interface PromptEditorProps {
   promptId?: string
   version?: string
   isNew?: boolean
+  moduleData?: any
   onSave?: (prompt: Prompt) => void
   onCancel?: () => void
 }
@@ -59,6 +60,7 @@ export function PromptEditor({
   promptId,
   version = '1.0.0',
   isNew = false,
+  moduleData,
   onSave,
   onCancel
 }: PromptEditorProps) {
@@ -90,6 +92,7 @@ export function PromptEditor({
   const [originalContent, setOriginalContent] = useState('')
   
   const { data: prompt, isLoading } = usePrompt(promptId || '', version || '')
+  const module = moduleData
 
   // Component ready state to prevent rendering during initialization
   const [isComponentReady, setIsComponentReady] = useState(false)
@@ -118,6 +121,13 @@ export function PromptEditor({
       setMasRiskLevel(prompt.mas_risk_level || 'low')
     }
   }, [prompt, isNew])
+
+  // Auto-populate description with module slot when creating new prompt
+  useEffect(() => {
+    if (isNew && moduleId && module && !description) {
+      setDescription(module.slot || '')
+    }
+  }, [isNew, moduleId, module])
 
   // Mark component as ready after initial load
   useEffect(() => {
@@ -191,21 +201,38 @@ export function PromptEditor({
       warnings.push('Prompt content seems too short for effective use')
     }
 
-    // Sensitive content detection - more context-aware
-    const sensitiveKeywords = ['password', 'secret', 'personal information']
+    // Sensitive content detection - improved context-aware validation
+    const sensitiveKeywords = ['password', 'secret']
     const hasSensitiveContent = sensitiveKeywords.some(keyword =>
       content.toLowerCase().includes(keyword)
     )
 
+    // Special handling for 'personal information' - only flag if not in compliance/guideline context
+    const hasPersonalInfo = content.toLowerCase().includes('personal information')
+    const hasComplianceGuidance = content.toLowerCase().includes('do not') ||
+                                content.toLowerCase().includes('avoid') ||
+                                content.toLowerCase().includes('should not') ||
+                                content.toLowerCase().includes('guideline') ||
+                                content.toLowerCase().includes('policy') ||
+                                content.toLowerCase().includes('compliance') ||
+                                content.toLowerCase().includes('privacy') ||
+                                content.toLowerCase().includes('governance') ||
+                                content.toLowerCase().includes('security') ||
+                                content.toLowerCase().includes('protect') ||
+                                content.toLowerCase().includes('collect')
+
     // Allow 'confidential' when used in legitimate compliance/governance contexts
     const hasConfidential = content.toLowerCase().includes('confidential')
-    const hasComplianceContext = content.toLowerCase().includes('compliance') ||
+    const hasConfidentialContext = content.toLowerCase().includes('compliance') ||
                                 content.toLowerCase().includes('governance') ||
                                 content.toLowerCase().includes('privacy') ||
                                 content.toLowerCase().includes('security') ||
                                 content.toLowerCase().includes('audit')
 
-    if (hasSensitiveContent || (hasConfidential && !hasComplianceContext)) {
+    // Only flag personal information if it's not in a compliance/guidance context
+    const shouldFlagPersonalInfo = hasPersonalInfo && !hasComplianceGuidance
+
+    if (hasSensitiveContent || shouldFlagPersonalInfo || (hasConfidential && !hasConfidentialContext)) {
       errors.push('Prompt contains potentially sensitive content that requires additional safeguards')
     }
 

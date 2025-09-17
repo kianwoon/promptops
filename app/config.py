@@ -37,7 +37,10 @@ class Settings(BaseSettings):
     
     # Cache settings
     cache_ttl: int = 3600  # 1 hour
-    
+
+    # API Key Encryption
+    promptops_encryption_key: str = ""
+
     class Config:
         env_file = ".env"
 

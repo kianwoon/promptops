@@ -133,6 +133,7 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
               projectId={projectId}
               moduleId={moduleId}
               isNew={true}
+              moduleData={module}
               onSave={handlePromptSaved}
               onCancel={handleCancel}
             />

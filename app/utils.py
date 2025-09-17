@@ -247,18 +247,47 @@ def get_client_ip(request) -> str:
 
 def get_encryption_key() -> bytes:
     """Get or create encryption key for secret keys"""
-    # In production, this should be stored securely (e.g., environment variable, AWS KMS, etc.)
+    # Try environment variable first (most reliable)
+    env_key = os.getenv('PROMPTOPS_ENCRYPTION_KEY')
+    if env_key:
+        try:
+            # Ensure the key is 32 bytes for Fernet
+            key_bytes = env_key.encode()
+            if len(key_bytes) < 32:
+                # Pad with null bytes
+                key_bytes = key_bytes.ljust(32, b'\0')
+            elif len(key_bytes) > 32:
+                # Truncate to 32 bytes
+                key_bytes = key_bytes[:32]
+            print(f"DEBUG: Using env key, length: {len(key_bytes)}")
+            return key_bytes
+        except Exception as e:
+            print(f"Error using environment variable key: {e}")
+
+    # Fallback to file-based storage
     key_file = "/tmp/promptops_encryption_key"
 
     if os.path.exists(key_file):
-        with open(key_file, 'rb') as f:
-            return f.read()
-    else:
-        # Generate new key
+        try:
+            with open(key_file, 'rb') as f:
+                key = f.read()
+                print(f"DEBUG: Using file key, length: {len(key)}")
+                return key
+        except Exception as e:
+            print(f"Error reading key file: {e}")
+
+    # Generate new key as last resort
+    try:
         key = Fernet.generate_key()
         with open(key_file, 'wb') as f:
             f.write(key)
+        print(f"Generated new encryption key and saved to {key_file}")
+        print(f"Set this key as environment variable for persistence: PROMPTOPS_ENCRYPTION_KEY={key.decode()}")
         return key
+    except Exception as e:
+        print(f"Error generating new key: {e}")
+        # Last resort fallback key - generate proper Fernet key
+        return Fernet.generate_key()
 
 def encrypt_secret_key(secret_key: str) -> str:
     """Encrypt secret key for storage"""
@@ -269,7 +298,15 @@ def encrypt_secret_key(secret_key: str) -> str:
 
 def decrypt_secret_key(encrypted_key: str) -> str:
     """Decrypt secret key for display"""
-    key = get_encryption_key()
-    fernet = Fernet(key)
-    decrypted = fernet.decrypt(encrypted_key.encode())
-    return decrypted.decode()
+    try:
+        key = get_encryption_key()
+        print(f"DEBUG: Using encryption key: {key[:20]}..." if len(key) > 20 else f"DEBUG: Using encryption key: {key}")
+        fernet = Fernet(key)
+        decrypted = fernet.decrypt(encrypted_key.encode())
+        print(f"DEBUG: Successfully decrypted key")
+        return decrypted.decode()
+    except Exception as e:
+        print(f"DEBUG: Decryption failed with error: {str(e)}")
+        print(f"DEBUG: Encrypted key length: {len(encrypted_key)}")
+        print(f"DEBUG: Encrypted key starts with: {encrypted_key[:50]}...")
+        raise

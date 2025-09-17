@@ -209,14 +209,23 @@ async def list_api_keys(
 
     # Decrypt keys for display
     for api_key in api_keys:
-        # Decrypt secret key
+        # Decrypt secret key with error handling
         if api_key.secret_key_encrypted:
-            api_key.secret_key = decrypt_secret_key(api_key.secret_key_encrypted)
+            try:
+                api_key.secret_key = decrypt_secret_key(api_key.secret_key_encrypted)
+                print(f"Successfully decrypted secret key for {api_key.id}")
+            except Exception as e:
+                print(f"Failed to decrypt secret key for {api_key.id}: {str(e)}")
+                api_key.secret_key = None
 
-        # Decrypt API key - simplified approach
+        # Decrypt API key with error handling
         if api_key.api_key_encrypted:
-            api_key.api_key = decrypt_secret_key(api_key.api_key_encrypted)
-            print(f"IMMEDIATE DEBUG: Set {api_key.id} api_key to: {api_key.api_key}")
+            try:
+                api_key.api_key = decrypt_secret_key(api_key.api_key_encrypted)
+                print(f"Successfully decrypted API key for {api_key.id}")
+            except Exception as e:
+                print(f"Failed to decrypt API key for {api_key.id}: {str(e)}")
+                api_key.api_key = None
 
     # Convert to explicit dictionaries to avoid Pydantic filtering
     result = []

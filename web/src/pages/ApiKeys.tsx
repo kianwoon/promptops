@@ -809,7 +809,7 @@ export function ApiKeysPage() {
                         <p className="text-xs text-muted-foreground">Click eye icon to reveal full API key</p>
                       )}
                       {!visibleKeys[`${apiKey.id}-full`] && !apiKey.api_key && (
-                        <p className="text-xs text-muted-foreground">Full API key only available on creation</p>
+                        <p className="text-xs text-muted-foreground">Full API key cannot be retrieved - may require server restart</p>
                       )}
                     </div>
 
@@ -846,7 +846,7 @@ export function ApiKeysPage() {
                         <p className="text-xs text-muted-foreground">Click eye icon to reveal secret key</p>
                       )}
                       {!visibleKeys[`${apiKey.id}-secret`] && !apiKey.secret_key && (
-                        <p className="text-xs text-muted-foreground">Secret key only available on creation</p>
+                        <p className="text-xs text-muted-foreground">Secret key cannot be retrieved - may require server restart</p>
                       )}
                     </div>
                   </div>
@@ -1086,7 +1086,7 @@ export function ApiKeysPage() {
                         <p className="text-xs text-muted-foreground">Click eye icon to reveal full API key</p>
                       )}
                       {!visibleKeys[`${apiKey.id}-full`] && !apiKey.api_key && (
-                        <p className="text-xs text-muted-foreground">Full API key only available on creation</p>
+                        <p className="text-xs text-muted-foreground">Full API key cannot be retrieved - may require server restart</p>
                       )}
                     </div>
 
@@ -1123,7 +1123,7 @@ export function ApiKeysPage() {
                         <p className="text-xs text-muted-foreground">Click eye icon to reveal secret key</p>
                       )}
                       {!visibleKeys[`${apiKey.id}-secret`] && !apiKey.secret_key && (
-                        <p className="text-xs text-muted-foreground">Secret key only available on creation</p>
+                        <p className="text-xs text-muted-foreground">Secret key cannot be retrieved - may require server restart</p>
                       )}
                     </div>
                   </div>
