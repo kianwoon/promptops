@@ -126,7 +126,11 @@
         "hooks": [
           {
             "type": "command",
-        "command": "if [ -f ./CLAUDE.md ]; then echo 'IMPORTANT: Before you begin, please read the entire CLAUDE.md file below to understand the project context, requirements, and coding style. before proceed with my request.'; fi"
+        "command": "if [ -f ./CLAUDE.md ]; then echo 'IMPORTANT: Before you begin, MUST read the entire CLAUDE.md file below to understand the project context, requirements, and coding style. before proceed with my request.'; fi"
+          },
+          {
+            "type": "command",
+            "command": "say 'noted';"
           }
         ]
       }
