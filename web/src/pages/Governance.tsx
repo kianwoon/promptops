@@ -189,12 +189,8 @@ export function Governance() {
       </div>
 
       {/* Main Governance Tabs */}
-      <Tabs defaultValue="roles" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-12">
-          <TabsTrigger value="roles" className="flex items-center gap-2">
-            <Shield className="h-4 w-4" />
-            Roles
-          </TabsTrigger>
+      <Tabs defaultValue="matrix" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-11">
           <TabsTrigger value="matrix" className="flex items-center gap-2">
             <Key className="h-4 w-4" />
             Matrix
@@ -236,28 +232,6 @@ export function Governance() {
             Incidents
           </TabsTrigger>
         </TabsList>
-
-        {/* Roles Management Tab */}
-        <TabsContent value="roles" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Role Management
-              </CardTitle>
-              <CardDescription>
-                Create, edit, and manage custom roles with granular permissions
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                Role management has been moved to its own dedicated page.
-                <br />
-                Use the "Role Management" option in the sidebar navigation.
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         {/* Permission Matrix Tab */}
         <TabsContent value="matrix" className="space-y-6">

@@ -662,8 +662,12 @@ class RBACService:
                 return False, "Role name cannot be empty"
 
             # Check if role already exists
-            if role_name in self.custom_roles or hasattr(UserRole, role_name.upper()):
+            if role_name in self.custom_roles:
                 return False, f"Role '{role_name}' already exists"
+
+            # Only prevent creating custom roles for the admin system role
+            if role_name.upper() == UserRole.ADMIN.value:
+                return False, f"Cannot create custom role for admin system role"
 
             # Validate permissions
             valid_permissions = {p.value for p in Permission}

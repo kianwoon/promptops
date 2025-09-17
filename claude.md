@@ -53,7 +53,7 @@
 8. **the propose solution should not just targeted for specific case. it should serve general cases**
 9. **Forbidden to use REGEX to create pattern for case route**
 10. **Forbidden to use hardcode approach like keywords matching. Go to HELL if you think or do so**
-11. **All the servers supp0ort hot loading, so do not need to start and stop the server for code changes**
+11. **All the servers support hot loading, so do not need to start and stop the server for code changes**
 
 ## 📊 Progress Communication
 
