@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Edit, Trash2, ArrowLeft, Folder, FileText, Code, Clock, Hash, Calendar, User, Eye, AlertTriangle } from 'lucide-react'
+import { Plus, Edit, Trash2, ArrowLeft, Folder, FileText, Code, Clock, Hash, Calendar, User, Eye, AlertTriangle, Search, ArrowUpDown, X } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useProject, useModules, useCreateModule, useUpdateModule, useDeleteModule, usePrompts, useCreatePrompt } from '@/hooks/api'
 import type { ModuleCreate, ModuleUpdate, PromptCreate } from '@/types/api'
 import { formatDistanceToNow } from 'date-fns'
@@ -21,9 +23,56 @@ export function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
   const { data: project, isLoading: projectLoading, error: projectError } = useProject(projectId || '')
-  const { data: modules } = useModules(projectId)
+  const { data: modules, isLoading: modulesLoading } = useModules(projectId)
   // We'll calculate prompt counts per module manually after data is loaded
   const [promptCounts, setPromptCounts] = useState<Record<string, number>>({})
+
+  // Search and filter state for modules
+  const [searchTerm, setSearchTerm] = useState('')
+  const [sortBy, setSortBy] = useState<'slot' | 'created_at' | 'updated_at'>('updated_at')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+
+  // Filter and sort modules
+  const filteredModules = useMemo(() => {
+    if (!modules) return []
+
+    let filtered = modules.filter(module => {
+      const matchesSearch = searchTerm === '' ||
+        module.slot.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        module.id.toLowerCase().includes(searchTerm.toLowerCase())
+
+      return matchesSearch
+    })
+
+    // Sort modules
+    filtered.sort((a, b) => {
+      let comparison = 0
+      switch (sortBy) {
+        case 'slot':
+          comparison = a.slot.localeCompare(b.slot)
+          break
+        case 'created_at':
+          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          break
+        case 'updated_at':
+          comparison = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime()
+          break
+      }
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
+
+    return filtered
+  }, [modules, searchTerm, sortBy, sortOrder])
+
+  const toggleSortOrder = () => {
+    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+  }
+
+  const clearFilters = () => {
+    setSearchTerm('')
+    setSortBy('updated_at')
+    setSortOrder('desc')
+  }
 
   // Load prompts for each module to get accurate counts
   useEffect(() => {
@@ -596,82 +645,202 @@ export function ProjectDetail() {
             </Dialog>
           </div>
 
-          {modules && modules.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              {[...modules].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)).map((module, index) => {
+          {/* Search and Results */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Input
+                placeholder="Search modules..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+              {searchTerm && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6"
+                  onClick={() => setSearchTerm('')}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+
+            {modules && (
+              <div className="text-sm text-muted-foreground whitespace-nowrap">
+                Showing {filteredModules.length} of {modules.length} modules
+              </div>
+            )}
+          </div>
+
+          {modulesLoading ? (
+            // Loading skeleton for modules
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {[...Array(6)].map((_, i) => (
+                <Card key={i} className="animate-pulse">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start space-x-3 flex-1">
+                        <Skeleton className="h-8 w-8 rounded-lg" />
+                        <div className="flex-1 min-w-0">
+                          <Skeleton className="h-6 w-32 mb-2" />
+                          <Skeleton className="h-4 w-24" />
+                        </div>
+                      </div>
+                      <Skeleton className="h-8 w-8" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Skeleton className="h-4 w-4" />
+                          <Skeleton className="h-4 w-16" />
+                        </div>
+                        <Skeleton className="h-6 w-12" />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                      <Skeleton className="h-8 w-full" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : filteredModules.length > 0 ? (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filteredModules.map((module, index) => {
                 const modulePromptCount = promptCounts[module.id] || 0;
                 const canDelete = modulePromptCount === 0;
 
                 return (
-                  <Card key={`${module.id}-${module.version}`} className="hover:shadow-md transition-shadow">
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="text-lg">{module.slot}</CardTitle>
-                          <CardDescription className="flex items-center mt-1">
-                            <Hash className="w-4 h-4 mr-1" />
-                            {module.id} v{module.version}
-                          </CardDescription>
+                  <Card
+                    key={`${module.id}-${module.version}`}
+                    className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden"
+                  >
+                    {/* Decorative accent */}
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60" />
+
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start space-x-3 flex-1">
+                          <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                            <Code className="w-5 h-5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <CardTitle className="text-lg font-semibold truncate group-hover:text-primary transition-colors">
+                              {module.slot}
+                            </CardTitle>
+                            <CardDescription className="flex items-center mt-1 text-sm">
+                              <Hash className="w-4 h-4 mr-1" />
+                              {module.id} v{module.version}
+                            </CardDescription>
+                          </div>
                         </div>
-                        <div className="flex space-x-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => openEditDialog(module)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => handleDeleteModule(module.id, module.version)}
-                            disabled={!canDelete}
-                            title={!canDelete ? `Cannot delete: ${modulePromptCount} prompt${modulePromptCount !== 1 ? 's' : ''}` : "Delete module"}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+
+                        {/* Quick Actions */}
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                          <div className="flex space-x-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => openEditDialog(module)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => handleDeleteModule(module.id, module.version)}
+                              disabled={!canDelete}
+                              title={!canDelete ? `Cannot delete: ${modulePromptCount} prompt${modulePromptCount !== 1 ? 's' : ''}` : "Delete module"}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="text-sm text-muted-foreground">
-                        Module container for organizing related prompts
-                      </div>
-                      <div className="flex items-center justify-between text-sm text-muted-foreground">
-                        <div className="flex items-center">
-                          <Calendar className="w-4 h-4 mr-1" />
-                          {formatDistanceToNow(new Date(module.created_at), { addSuffix: true })}
+
+                    <CardContent className="pt-0">
+                      <div className="space-y-4">
+                        {/* Module Stats */}
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center space-x-2">
+                            <div className="flex items-center text-muted-foreground">
+                              <FileText className="w-4 h-4 mr-1" />
+                              <span className="text-xs">{modulePromptCount} prompts</span>
+                            </div>
+                            <div className="flex items-center text-muted-foreground">
+                              <Badge variant="secondary" className="text-xs">
+                                v{module.version}
+                              </Badge>
+                            </div>
+                          </div>
                         </div>
-                        <Badge variant="secondary">v{module.version}</Badge>
+
+                        {/* Date Information */}
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <div className="flex items-center">
+                            <Calendar className="w-3 h-3 mr-1" />
+                            Created {formatDistanceToNow(new Date(module.created_at), { addSuffix: true })}
+                          </div>
+                          {module.updated_at !== module.created_at && (
+                            <div className="flex items-center">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Updated {formatDistanceToNow(new Date(module.updated_at), { addSuffix: true })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="pt-2 space-y-2">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="w-full group-hover:shadow-md transition-shadow"
+                            onClick={() => navigate(`/projects/${projectId}/modules/${module.id}/prompts`)}
+                          >
+                            <Eye className="w-4 h-4 mr-2" />
+                            View Prompts ({modulePromptCount})
+                          </Button>
+                        </div>
                       </div>
-                      <div className="pt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => navigate(`/projects/${projectId}/modules/${module.id}/prompts`)}
-                        >
-                          <Eye className="w-3 h-3 mr-2" />
-                          View Prompts ({modulePromptCount})
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
               );
             })}
             </div>
           ) : (
-            <Card>
+            <Card className="border-dashed border-2 border-muted-foreground/20">
               <CardContent className="flex flex-col items-center justify-center py-12">
-                <Code className="w-12 h-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No modules yet</h3>
-                <p className="text-muted-foreground mb-4 text-center">
-                  Create your first module to start organizing your prompts.
+                <div className="p-4 rounded-full bg-muted mb-4">
+                  <Code className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">
+                  {searchTerm ? 'No modules found' : 'No modules yet'}
+                </h3>
+                <p className="text-muted-foreground mb-4 text-center max-w-md">
+                  {searchTerm
+                    ? 'Try adjusting your search to find modules.'
+                    : 'Create your first module to start organizing your prompts.'
+                  }
                 </p>
+                {!searchTerm && (
+                  <Dialog open={isCreateModuleOpen} onOpenChange={setIsCreateModuleOpen}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Create Module
+                      </Button>
+                    </DialogTrigger>
+                  </Dialog>
+                )}
               </CardContent>
             </Card>
           )}

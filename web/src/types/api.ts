@@ -154,6 +154,7 @@ export interface User {
   tenant?: string
   createdAt?: string
   is_active?: boolean
+  avatar?: string
 }
 
 export interface UserCreate {
@@ -184,6 +185,8 @@ export interface Project {
   owner: string
   created_at: string
   updated_at: string
+  modules_count?: number
+  prompts_count?: number
 }
 
 export interface ProjectCreate {

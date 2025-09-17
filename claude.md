@@ -60,6 +60,7 @@
 # 🔴 MUST you do 
 ## Before each task 
 - use say command to  share your findings and respond
+- read the ./claude.md file before start anything
 
 ## After each task:
 - Report: "✅ Completed: [task]"
