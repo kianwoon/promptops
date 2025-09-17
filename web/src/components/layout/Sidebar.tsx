@@ -13,7 +13,8 @@ import {
   ChevronRight,
   Grid3X3,
   Key,
-  Bot
+  Bot,
+  UserCog
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -38,6 +39,7 @@ const navigation: NavigationItem[] = [
   { name: 'AI Assistant', href: '/assistant', icon: Bot },
   { name: 'API Keys', href: '/keys', icon: Key },
   { name: 'User Management', href: '/users', icon: Users, permission: 'users:read' },
+  { name: 'Role Management', href: '/roles', icon: UserCog, permission: 'roles:read' },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 

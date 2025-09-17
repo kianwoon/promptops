@@ -59,57 +59,178 @@ import {
   Settings,
   Key,
   GitBranch,
-  Clock
+  Clock,
+  Check,
+  X
 } from 'lucide-react'
-import {
-  CustomRole,
-  CustomRoleCreate,
-  CustomRoleUpdate,
-  PermissionTemplate,
-  Permission,
-  RolePermission,
-  RoleInheritance
-} from '@/types/governance'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
 
-interface RoleManagementProps {
-  roles: CustomRole[]
-  permissionTemplates: PermissionTemplate[]
-  permissions: Permission[]
-  rolePermissions: RolePermission[]
-  inheritances: RoleInheritance[]
-  onCreateRole: (role: CustomRoleCreate) => Promise<CustomRole>
-  onUpdateRole: (roleName: string, role: CustomRoleUpdate) => Promise<CustomRole>
-  onDeleteRole: (roleName: string) => Promise<void>
-  onApplyTemplate: (templateId: string, roleName: string) => Promise<void>
-  onCreateInheritance: (parentRole: string, childRole: string, inheritanceType: string) => Promise<void>
-  onDeleteInheritance: (parentRole: string, childRole: string) => Promise<void>
+// API Types
+interface RoleResponse {
+  name: string
+  description?: string
+  permissions: string[]
+  permission_templates?: string[]
+  inherited_roles?: string[]
+  inheritance_type?: string
+  conditions?: Record<string, any>
+  is_system: boolean
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  created_by?: string
+  tenant_id?: string
 }
 
-export function RoleManagement({
-  roles = [],
-  permissionTemplates = [],
-  permissions = [],
-  rolePermissions = [],
-  inheritances = [],
-  onCreateRole = async () => {},
-  onUpdateRole = async () => {},
-  onDeleteRole = async () => {},
-  onApplyTemplate = async () => {},
-  onCreateInheritance = async () => {},
-  onDeleteInheritance = async () => {}
-}: RoleManagementProps) {
+interface PermissionTemplateResponse {
+  id: string
+  name: string
+  description?: string
+  permissions: Array<{
+    resource_type: string
+    action: string
+    conditions?: Record<string, any>
+  }>
+  category: string
+  is_system: boolean
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  created_by?: string
+  tenant_id?: string
+}
+
+interface PermissionInfo {
+  name: string
+  description: string
+}
+
+export function RoleManagement() {
+  const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [editingRole, setEditingRole] = useState<CustomRole | null>(null)
-  const [createFormData, setCreateFormData] = useState<CustomRoleCreate>({
+  const [editingRole, setEditingRole] = useState<RoleResponse | null>(null)
+  const [createFormData, setCreateFormData] = useState({
     name: '',
     description: '',
-    permissions: [],
-    permission_templates: [],
-    inherited_roles: [],
-    inheritance_type: 'none'
+    permissions: [] as string[],
+    permission_templates: [] as string[],
+    inherited_roles: [] as string[],
+    inheritance_type: 'none' as 'none' | 'hierarchical' | 'conditional'
+  })
+
+  // API Queries
+  const { data: roles = [], isLoading: rolesLoading } = useQuery({
+    queryKey: ['roles'],
+    queryFn: async () => {
+      const response = await fetch('/v1/roles/')
+      if (!response.ok) throw new Error('Failed to fetch roles')
+      return response.json() as Promise<RoleResponse[]>
+    }
+  })
+
+  const { data: permissionTemplates = [], isLoading: templatesLoading } = useQuery({
+    queryKey: ['permission-templates'],
+    queryFn: async () => {
+      const response = await fetch('/v1/roles/templates/')
+      if (!response.ok) throw new Error('Failed to fetch permission templates')
+      return response.json() as Promise<PermissionTemplateResponse[]>
+    }
+  })
+
+  const { data: availablePermissions = [], isLoading: permissionsLoading } = useQuery({
+    queryKey: ['available-permissions'],
+    queryFn: async () => {
+      const response = await fetch('/v1/roles/available-permissions/')
+      if (!response.ok) throw new Error('Failed to fetch available permissions')
+      return response.json() as Promise<PermissionInfo[]>
+    }
+  })
+
+  // API Mutations
+  const createRoleMutation = useMutation({
+    mutationFn: async (roleData: typeof createFormData) => {
+      const response = await fetch('/v1/roles/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(roleData)
+      })
+      if (!response.ok) throw new Error('Failed to create role')
+      return response.json() as Promise<RoleResponse>
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roles'] })
+      setIsCreateDialogOpen(false)
+      setCreateFormData({
+        name: '',
+        description: '',
+        permissions: [],
+        permission_templates: [],
+        inherited_roles: [],
+        inheritance_type: 'none' as 'none' | 'hierarchical' | 'conditional'
+      })
+      console.log('Role created successfully')
+    },
+    onError: (error) => {
+      console.error(`Failed to create role: ${error.message}`)
+    }
+  })
+
+  const updateRoleMutation = useMutation({
+    mutationFn: async ({ roleName, roleData }: { roleName: string; roleData: Partial<RoleResponse> }) => {
+      const response = await fetch(`/v1/roles/${roleName}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(roleData)
+      })
+      if (!response.ok) throw new Error('Failed to update role')
+      return response.json() as Promise<RoleResponse>
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roles'] })
+      setIsEditDialogOpen(false)
+      setEditingRole(null)
+      console.log('Role updated successfully')
+    },
+    onError: (error) => {
+      console.error(`Failed to update role: ${error.message}`)
+    }
+  })
+
+  const deleteRoleMutation = useMutation({
+    mutationFn: async (roleName: string) => {
+      const response = await fetch(`/v1/roles/${roleName}`, {
+        method: 'DELETE'
+      })
+      if (!response.ok) throw new Error('Failed to delete role')
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roles'] })
+      console.log('Role deleted successfully')
+    },
+    onError: (error) => {
+      console.error(`Failed to delete role: ${error.message}`)
+    }
+  })
+
+  const applyTemplateMutation = useMutation({
+    mutationFn: async ({ templateId, roleName }: { templateId: string; roleName: string }) => {
+      const response = await fetch(`/v1/roles/${roleName}/templates/${templateId}`, {
+        method: 'POST'
+      })
+      if (!response.ok) throw new Error('Failed to apply template')
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roles'] })
+      console.log('Template applied successfully')
+    },
+    onError: (error) => {
+      console.error(`Failed to apply template: ${error.message}`)
+    }
   })
 
   // Filter roles based on search query
@@ -117,21 +238,6 @@ export function RoleManagement({
     role.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     role.description?.toLowerCase().includes(searchQuery.toLowerCase())
   )
-
-  // Get role permissions
-  const getRolePermissions = (roleName: string) => {
-    return rolePermissions.filter(rp => rp.role_name === roleName)
-  }
-
-  // Get inherited roles
-  const getInheritedRoles = (roleName: string) => {
-    return inheritances.filter(i => i.child_role === roleName)
-  }
-
-  // Get child roles
-  const getChildRoles = (roleName: string) => {
-    return inheritances.filter(i => i.parent_role === roleName)
-  }
 
   // Handle create role form submission
   const handleCreateRole = async (e: React.FormEvent) => {
@@ -144,7 +250,7 @@ export function RoleManagement({
         permissions: [],
         permission_templates: [],
         inherited_roles: [],
-        inheritance_type: 'none'
+        inheritance_type: 'none' as 'none' | 'hierarchical' | 'conditional'
       })
       setIsCreateDialogOpen(false)
     } catch (error) {
@@ -153,7 +259,7 @@ export function RoleManagement({
   }
 
   // Handle edit role
-  const handleEditRole = (role: CustomRole) => {
+  const handleEditRole = (role: RoleResponse) => {
     setEditingRole(role)
     setIsEditDialogOpen(true)
   }
@@ -163,52 +269,35 @@ export function RoleManagement({
     e.preventDefault()
     if (!editingRole) return
 
-    try {
-      await onUpdateRole(editingRole.name, {
+    updateRoleMutation.mutate({
+      roleName: editingRole.name,
+      roleData: {
         description: editingRole.description,
         permissions: editingRole.permissions,
         permission_templates: editingRole.permission_templates,
         inherited_roles: editingRole.inherited_roles,
         inheritance_type: editingRole.inheritance_type,
         is_active: editingRole.is_active
-      })
-      setIsEditDialogOpen(false)
-      setEditingRole(null)
-    } catch (error) {
-      console.error('Error updating role:', error)
-    }
+      }
+    })
   }
 
   // Handle delete role
   const handleDeleteRole = async (roleName: string) => {
     if (window.confirm('Are you sure you want to delete this role?')) {
-      try {
-        await onDeleteRole(roleName)
-      } catch (error) {
-        console.error('Error deleting role:', error)
-      }
+      deleteRoleMutation.mutate(roleName)
     }
   }
 
   // Handle apply template to role
   const handleApplyTemplate = async (templateId: string, roleName: string) => {
-    try {
-      await onApplyTemplate(templateId, roleName)
-    } catch (error) {
-      console.error('Error applying template:', error)
-    }
+    applyTemplateMutation.mutate({ templateId, roleName })
   }
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold">Role Management</h2>
-          <p className="text-muted-foreground">
-            Create and manage custom roles with granular permissions
-          </p>
-        </div>
+      <div className="flex justify-end">
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -244,6 +333,47 @@ export function RoleManagement({
                 />
               </div>
               <div className="space-y-2">
+                <Label>Permissions</Label>
+                <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                  {availablePermissions && availablePermissions.length > 0 ? (
+                    <div className="space-y-2">
+                      {availablePermissions.map((permission) => (
+                        <div key={permission.name} className="flex items-center justify-between p-2 border rounded">
+                          <div>
+                            <div className="font-medium">{permission.name}</div>
+                            <div className="text-sm text-muted-foreground">{permission.description}</div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={createFormData.permissions.includes(permission.name) ? "default" : "outline"}
+                            onClick={() => {
+                              const currentPermissions = createFormData.permissions;
+                              const updatedPermissions = currentPermissions.includes(permission.name)
+                                ? currentPermissions.filter(p => p !== permission.name)
+                                : [...currentPermissions, permission.name];
+                              setCreateFormData({...createFormData, permissions: updatedPermissions});
+                            }}
+                          >
+                            {createFormData.permissions.includes(permission.name) ? (
+                              <Check className="h-3 w-3" />
+                            ) : (
+                              <Plus className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No available permissions</p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {createFormData.permissions.length} permission{createFormData.permissions.length !== 1 ? 's' : ''} selected
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <Label>Inheritance Type</Label>
                 <Select value={createFormData.inheritance_type} onValueChange={(value) => setCreateFormData({...createFormData, inheritance_type: value})}>
                   <SelectTrigger>
@@ -251,7 +381,7 @@ export function RoleManagement({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No Inheritance</SelectItem>
-                    <SelectItem value="direct">Direct Inheritance</SelectItem>
+                    <SelectItem value="hierarchical">Hierarchical Inheritance</SelectItem>
                     <SelectItem value="conditional">Conditional Inheritance</SelectItem>
                   </SelectContent>
                 </Select>
@@ -313,7 +443,10 @@ export function RoleManagement({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleEditRole(role)}>
+                    <DropdownMenuItem
+                      onClick={() => handleEditRole(role)}
+                      disabled={role.is_system}
+                    >
                       <Edit className="h-4 w-4 mr-2" />
                       Edit Role
                     </DropdownMenuItem>
@@ -327,6 +460,7 @@ export function RoleManagement({
                     <DropdownMenuItem
                       onClick={() => handleDeleteRole(role.name)}
                       className="text-red-600"
+                      disabled={role.is_system}
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete Role
@@ -354,36 +488,31 @@ export function RoleManagement({
                 <div>
                   <div className="flex items-center gap-2 text-sm font-medium mb-1">
                     <Key className="h-4 w-4" />
-                    Permissions ({getRolePermissions(role.name).length})
+                    Permissions ({role.permissions.length})
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    {getRolePermissions(role.name).slice(0, 3).map((permission) => (
-                      <Badge key={permission.id} variant="secondary" className="text-xs">
-                        {permission.action}
+                    {role.permissions.slice(0, 3).map((permission, index) => (
+                      <Badge key={index} variant="secondary" className="text-xs">
+                        {permission}
                       </Badge>
                     ))}
-                    {getRolePermissions(role.name).length > 3 && (
+                    {role.permissions.length > 3 && (
                       <Badge variant="secondary" className="text-xs">
-                        +{getRolePermissions(role.name).length - 3} more
+                        +{role.permissions.length - 3} more
                       </Badge>
                     )}
                   </div>
                 </div>
 
                 {/* Inheritance */}
-                {(role.inherited_roles.length > 0 || getInheritedRoles(role.name).length > 0) && (
+                {role.inherited_roles && role.inherited_roles.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 text-sm font-medium mb-1">
                       <GitBranch className="h-4 w-4" />
                       Inheritance
                     </div>
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      {role.inherited_roles.length > 0 && (
-                        <div>Inherits from: {role.inherited_roles.join(', ')}</div>
-                      )}
-                      {getInheritedRoles(role.name).length > 0 && (
-                        <div>Inherited by: {getInheritedRoles(role.name).map(i => i.parent_role).join(', ')}</div>
-                      )}
+                    <div className="text-xs text-muted-foreground">
+                      Inherits from: {role.inherited_roles.join(', ')}
                     </div>
                   </div>
                 )}
@@ -395,7 +524,10 @@ export function RoleManagement({
                     {formatRelativeTime(role.created_at)}
                   </div>
                   <div>
-                    {role.permission_templates.length} template{role.permission_templates.length !== 1 ? 's' : ''}
+                    {role.permission_templates && role.permission_templates.length > 0
+                      ? `${role.permission_templates.length} template${role.permission_templates.length !== 1 ? 's' : ''}`
+                      : '0 templates'
+                    }
                   </div>
                 </div>
               </div>
@@ -406,7 +538,7 @@ export function RoleManagement({
 
       {/* Edit Role Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Role: {editingRole?.name}</DialogTitle>
             <DialogDescription>
@@ -436,22 +568,60 @@ export function RoleManagement({
                   <div className="space-y-2">
                     <Label>Current Permissions</Label>
                     <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
-                      {getRolePermissions(editingRole.name).length > 0 ? (
+                      {editingRole.permissions && editingRole.permissions.length > 0 ? (
                         <div className="space-y-2">
-                          {getRolePermissions(editingRole.name).map((permission) => (
-                            <div key={permission.id} className="flex items-center justify-between p-2 border rounded">
+                          {editingRole.permissions.map((permission, index) => (
+                            <div key={index} className="flex items-center justify-between p-2 border rounded">
                               <div>
-                                <div className="font-medium">{permission.action}</div>
-                                <div className="text-sm text-muted-foreground">{permission.resource_type}</div>
+                                <div className="font-medium">{permission}</div>
+                                <div className="text-sm text-muted-foreground">System Permission</div>
                               </div>
-                              <Badge variant={permission.is_active ? "default" : "secondary"}>
-                                {permission.is_active ? "Active" : "Inactive"}
-                              </Badge>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const updatedPermissions = editingRole.permissions.filter((_, i) => i !== index);
+                                  setEditingRole({...editingRole, permissions: updatedPermissions});
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
                             </div>
                           ))}
                         </div>
                       ) : (
                         <p className="text-sm text-muted-foreground">No permissions assigned</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Add Permissions</Label>
+                    <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                      {availablePermissions && availablePermissions.length > 0 ? (
+                        <div className="space-y-2">
+                          {availablePermissions
+                            .filter(perm => !editingRole.permissions?.includes(perm.name))
+                            .map((permission) => (
+                              <div key={permission.name} className="flex items-center justify-between p-2 border rounded">
+                                <div>
+                                  <div className="font-medium">{permission.name}</div>
+                                  <div className="text-sm text-muted-foreground">{permission.description}</div>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    const updatedPermissions = [...(editingRole.permissions || []), permission.name];
+                                    setEditingRole({...editingRole, permissions: updatedPermissions});
+                                  }}
+                                >
+                                  <Check className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No available permissions</p>
                       )}
                     </div>
                   </div>
@@ -461,7 +631,7 @@ export function RoleManagement({
                   <div className="space-y-2">
                     <Label>Applied Templates</Label>
                     <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
-                      {editingRole.permission_templates.length > 0 ? (
+                      {editingRole.permission_templates && editingRole.permission_templates.length > 0 ? (
                         <div className="space-y-2">
                           {editingRole.permission_templates.map((templateId) => (
                             <div key={templateId} className="flex items-center justify-between p-2 border rounded">
@@ -481,7 +651,7 @@ export function RoleManagement({
                   <div className="space-y-2">
                     <Label>Inherited Roles</Label>
                     <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
-                      {editingRole.inherited_roles.length > 0 ? (
+                      {editingRole.inherited_roles && editingRole.inherited_roles.length > 0 ? (
                         <div className="space-y-2">
                           {editingRole.inherited_roles.map((parentRole) => (
                             <div key={parentRole} className="flex items-center justify-between p-2 border rounded">
@@ -499,7 +669,7 @@ export function RoleManagement({
                   <div className="space-y-2">
                     <Label>Inheritance Type</Label>
                     <Select
-                      value={editingRole.inheritance_type}
+                      value={editingRole.inheritance_type || 'none'}
                       onValueChange={(value) => setEditingRole({...editingRole, inheritance_type: value})}
                     >
                       <SelectTrigger>
@@ -507,7 +677,7 @@ export function RoleManagement({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">No Inheritance</SelectItem>
-                        <SelectItem value="direct">Direct Inheritance</SelectItem>
+                        <SelectItem value="hierarchical">Hierarchical Inheritance</SelectItem>
                         <SelectItem value="conditional">Conditional Inheritance</SelectItem>
                       </SelectContent>
                     </Select>

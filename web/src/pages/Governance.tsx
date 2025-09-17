@@ -19,7 +19,6 @@ import {
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { RoleManagement } from '@/components/governance/RoleManagement'
 import { PermissionMatrix } from '@/components/governance/PermissionMatrix'
 import { UserRoleAssignmentComponent } from '@/components/governance/UserRoleAssignment'
 import { AccessReviewDashboard } from '@/components/governance/AccessReviewDashboard'
@@ -251,7 +250,11 @@ export function Governance() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <RoleManagement />
+              <div className="text-center py-8 text-muted-foreground">
+                Role management has been moved to its own dedicated page.
+                <br />
+                Use the "Role Management" option in the sidebar navigation.
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

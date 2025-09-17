@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import engine
 from app.models import Base
-from app.routers import templates, render, aliases, evals, policies, auth, projects, modules, prompts, model_compatibilities, approval_requests, delivery, dashboard, users, client_api, analytics, governance, model_testing
+from app.routers import templates, render, aliases, evals, policies, auth, projects, modules, prompts, model_compatibilities, approval_requests, delivery, dashboard, users, client_api, analytics, governance, model_testing, roles
 
 # Configure structured logging
 structlog.configure(
@@ -90,6 +90,7 @@ app.include_router(delivery.router, prefix="/v1", tags=["runtime-delivery"])
 app.include_router(dashboard.router, prefix="/v1", tags=["dashboard"])
 app.include_router(dashboard.router, prefix="/api/v1", tags=["dashboard"])
 app.include_router(users.router, prefix="/v1/users", tags=["users"])
+app.include_router(roles.router, prefix="/v1/roles", tags=["roles"])
 
 # Include Client API endpoints
 app.include_router(client_api.router, prefix="/v1/client", tags=["client-api"])

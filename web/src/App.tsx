@@ -27,6 +27,7 @@ import { DevProtectedRoute as ProtectedRoute } from './components/auth/DevProtec
 import { DevAppWrapper } from './components/DevAppWrapper'
 import { ModulePromptsPage } from './pages/ModulePrompts'
 import { ModelTesting } from './pages/ModelTesting'
+import { RoleManagementPage } from './pages/RoleManagementPage'
 
 function App() {
   return (
@@ -164,6 +165,14 @@ function App() {
             element={
               <ProtectedRoute requiredRoles={['admin']}>
                 <UserManagement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/roles"
+            element={
+              <ProtectedRoute requiredRoles={['admin']}>
+                <RoleManagementPage />
               </ProtectedRoute>
             }
           />
