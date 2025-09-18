@@ -105,12 +105,13 @@ async def get_current_user_dev():
     return {"user_id": "demo-user", "tenant": "demo-tenant", "role": "admin"}
 
 # Add current user dependency for authentication
-@app.middleware("http")
-async def auth_middleware(request: Request, call_next):
-    # Add current user to request state for routes that need it
-    # This is a simplified approach - in production you'd want proper JWT validation middleware
-    request.state.current_user = await get_current_user_dev()
-    return await call_next(request)
+# NOTE: This middleware is commented out to allow proper JWT authentication
+# @app.middleware("http")
+# async def auth_middleware(request: Request, call_next):
+#     # Add current user to request state for routes that need it
+#     # This is a simplified approach - in production you'd want proper JWT validation middleware
+#     request.state.current_user = await get_current_user_dev()
+#     return await call_next(request)
 
 # Include Analytics endpoints
 app.include_router(analytics.router, prefix="/v1/analytics", tags=["analytics"])

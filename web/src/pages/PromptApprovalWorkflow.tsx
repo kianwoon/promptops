@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useQueryClient, useMutation } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -25,7 +26,9 @@ import {
   RotateCcw,
   Trash2,
   AlertTriangle,
-  Layers
+  Layers,
+  Play,
+  Pause
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { FlowDesigner } from '@/components/approval/FlowDesigner'
@@ -55,14 +58,62 @@ import {
 
 
 export function PromptApprovalWorkflow() {
+  console.log('🔍 [DEBUG] PromptApprovalWorkflow: Component rendering')
   const [activeTab, setActiveTab] = useState<'requests' | 'designer'>('requests')
   const [showFlowDesigner, setShowFlowDesigner] = useState(false)
   const [showTemplateSelector, setShowTemplateSelector] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<FlowTemplate | null>(null)
   const [editingFlow, setEditingFlow] = useState<EnhancedApprovalFlow | null>(null)
 
+  // API constants
+  const FLOWS_API_BASE = '/v1/approval-flows'
+  const queryClient = useQueryClient()
+
   // Use the new hooks for enhanced functionality
-  const { data: enhancedFlows = [] } = useApprovalFlows()
+  const { data: enhancedFlows = [], isLoading, error, refetch } = useApprovalFlows()
+
+  // Debug logging
+  console.log('🔍 [DEBUG] PromptApprovalWorkflow: enhancedFlows:', enhancedFlows)
+  console.log('🔍 [DEBUG] PromptApprovalWorkflow: isLoading:', isLoading)
+  console.log('🔍 [DEBUG] PromptApprovalWorkflow: error:', error)
+
+  // Force a refetch to clear stale cache and remove query data
+  useEffect(() => {
+    console.log('🔍 [DEBUG] PromptApprovalWorkflow: useEffect running...')
+
+    // Clear the cached data for this query
+    queryClient.removeQueries(['approval-flows'])
+    console.log('🔍 [DEBUG] PromptApprovalWorkflow: Cache cleared')
+
+    // Force a refetch
+    setTimeout(() => {
+      console.log('🔍 [DEBUG] PromptApprovalWorkflow: Executing refetch...')
+      refetch()
+    }, 100)
+  }, [queryClient, refetch])
+
+  // Also try to force the query to execute with a different approach
+  const handleManualRefetch = () => {
+    console.log('🔍 [DEBUG] PromptApprovalWorkflow: Manual refetch triggered')
+    queryClient.removeQueries(['approval-flows'])
+    refetch()
+  }
+
+  // Check localStorage for auth data
+  const accessToken = localStorage.getItem('access_token')
+  const isAuthenticated = localStorage.getItem('isAuthenticated')
+  const user = localStorage.getItem('user')
+  console.log('🔍 [DEBUG] PromptApprovalWorkflow: localStorage check:')
+  console.log('  - access_token exists:', !!accessToken)
+  console.log('  - isAuthenticated:', isAuthenticated)
+  console.log('  - user exists:', !!user)
+  if (user) {
+    try {
+      console.log('  - user data:', JSON.parse(user))
+    } catch (e) {
+      console.log('  - user data (parse failed):', user)
+    }
+  }
   const { data: roles = [] } = useAvailableRoles()
   const { data: flowStats } = useApprovalFlowStats()
   const { data: approvalRequests = [] } = useApprovalRequests()
@@ -71,6 +122,42 @@ export function PromptApprovalWorkflow() {
   const updateFlowMutation = useUpdateApprovalFlow()
   const deleteFlowMutation = useDeleteApprovalFlow()
   const createFlowFromTemplate = useCreateFlowFromTemplate()
+
+  // Status update mutation
+  const updateFlowStatusMutation = useMutation({
+    mutationFn: async ({ flowId, status }: { flowId: string; status: string }) => {
+      // Get authentication token from localStorage
+      const accessToken = localStorage.getItem('access_token')
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+
+      // Add Authorization header if token exists
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`
+      }
+
+      const response = await fetch(`${FLOWS_API_BASE}/flows/${flowId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ status }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update flow status')
+      }
+
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['approval-flows'] })
+      toast.success('Flow status updated successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to update flow status: ${error.message}`)
+    },
+  })
 
   // State for search and filters
   const [flowsSearchQuery, setFlowsSearchQuery] = useState('')
@@ -177,6 +264,11 @@ export function PromptApprovalWorkflow() {
       setIsDeleteFlowDialogOpen(false)
       setFlowToDelete(null)
     }
+  }
+
+  const handleToggleFlowStatus = (flowId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
+    updateFlowStatusMutation.mutate({ flowId, status: newStatus })
   }
 
   const handleCancelDelete = () => {
@@ -499,6 +591,13 @@ export function PromptApprovalWorkflow() {
                         onChange={(e) => setFlowsSearchQuery(e.target.value)}
                         className="max-w-xs"
                       />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleManualRefetch}
+                      >
+                        Refresh Flows
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>
@@ -553,6 +652,24 @@ export function PromptApprovalWorkflow() {
                             </TableCell>
                             <TableCell>
                               <div className="flex space-x-2">
+                                <Button
+                                  variant={flow.status === 'active' ? 'secondary' : 'default'}
+                                  size="sm"
+                                  onClick={() => handleToggleFlowStatus(flow.id, flow.status)}
+                                  disabled={updateFlowStatusMutation.isPending}
+                                >
+                                  {flow.status === 'active' ? (
+                                    <>
+                                      <Pause className="h-3 w-3 mr-1" />
+                                      Deactivate
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="h-3 w-3 mr-1" />
+                                      Activate
+                                    </>
+                                  )}
+                                </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"

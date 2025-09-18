@@ -54,16 +54,38 @@ const REQUESTS_API_BASE = '/v1/approval-requests'
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}, baseUrl: string = REQUESTS_API_BASE): Promise<T> {
   const url = `${baseUrl}${endpoint}`
 
+  // Get authentication token from localStorage
+  const accessToken = localStorage.getItem('access_token')
+  console.log('🔍 [DEBUG] apiRequest: URL:', url)
+  console.log('🔍 [DEBUG] apiRequest: Access token exists:', !!accessToken)
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...options.headers as Record<string, string>,
+  }
+
+  // Add Authorization header if token exists
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`
+    console.log('🔍 [DEBUG] apiRequest: Authorization header added')
+  } else {
+    console.log('🔍 [DEBUG] apiRequest: No authorization header (no token)')
+  }
+
+  console.log('🔍 [DEBUG] apiRequest: Headers:', headers)
+  console.log('🔍 [DEBUG] apiRequest: Options:', options)
+
   const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
     ...options,
   })
 
+  console.log('🔍 [DEBUG] apiRequest: Response status:', response.status)
+  console.log('🔍 [DEBUG] apiRequest: Response ok:', response.ok)
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Network error' }))
+    console.error('🔍 [DEBUG] apiRequest: Error response:', error)
     let errorMessage = error.message || `HTTP ${response.status}`
 
     // Handle specific error codes with better messages
@@ -80,15 +102,21 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}, baseUr
     throw new Error(errorMessage)
   }
 
-  return response.json()
+  const data = await response.json()
+  console.log('🔍 [DEBUG] apiRequest: Success response data:', data)
+  return data
 }
 
 // ============ APPROVAL FLOW HOOKS ============
 
-export const useApprovalFlows = (filters?: ApprovalFlowFilter, options?: UseQueryOptions<ApprovalFlow[]>) =>
-  useQuery({
+export const useApprovalFlows = (filters?: ApprovalFlowFilter, options?: UseQueryOptions<ApprovalFlow[]>) => {
+  console.log('🔍 [DEBUG] useApprovalFlows: Hook being called with filters:', filters)
+
+  const query = useQuery({
     queryKey: ['approval-flows', filters],
     queryFn: async () => {
+      console.log('🔍 [DEBUG] useApprovalFlows: Fetching approval flows...')
+
       const params = new URLSearchParams()
       if (filters?.search) params.append('search', filters.search)
       if (filters?.flow_type) params.append('flow_type', filters.flow_type)
@@ -102,11 +130,36 @@ export const useApprovalFlows = (filters?: ApprovalFlowFilter, options?: UseQuer
       }
 
       const endpoint = params.toString() ? `/flows?${params.toString()}` : '/flows'
-      const backendFlows = await apiRequest<any[]>(endpoint, {}, FLOWS_API_BASE)
-      return transformBackendFlowsToFlows(backendFlows)
+      console.log('🔍 [DEBUG] useApprovalFlows: Endpoint:', `${FLOWS_API_BASE}${endpoint}`)
+
+      try {
+        const backendFlows = await apiRequest<any[]>(endpoint, {}, FLOWS_API_BASE)
+        console.log('🔍 [DEBUG] useApprovalFlows: Raw backend response:', backendFlows)
+
+        const transformedFlows = transformBackendFlowsToFlows(backendFlows)
+        console.log('🔍 [DEBUG] useApprovalFlows: Transformed flows:', transformedFlows)
+
+        return transformedFlows
+      } catch (error) {
+        console.error('🔍 [DEBUG] useApprovalFlows: Error fetching flows:', error)
+        throw error
+      }
     },
     ...options,
   })
+
+  console.log('🔍 [DEBUG] useApprovalFlows: Query state:', {
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    isSuccess: query.isSuccess,
+    isError: query.isError,
+    error: query.error,
+    data: query.data,
+    isDisabled: query.isDisabled
+  })
+
+  return query
+}
 
 export const useApprovalFlow = (flowId: string, options?: UseQueryOptions<ApprovalFlow>) =>
   useQuery({

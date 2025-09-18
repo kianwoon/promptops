@@ -44,6 +44,8 @@ export function useDevAuthSetup() {
         if (devUser) {
           localStorage.setItem('user', JSON.stringify(devUser))
           localStorage.setItem('isAuthenticated', 'true')
+          // Add a mock access token for API calls
+          localStorage.setItem('access_token', 'dev-mock-token-for-development')
 
           // Only reload if we actually set up the auth
           if (!window.location.search.includes('dev_auth=1')) {
@@ -52,6 +54,11 @@ export function useDevAuthSetup() {
               window.location.reload()
             }, 100)
           }
+        }
+      } else {
+        // Ensure we have an access token even if auth was already set up
+        if (!localStorage.getItem('access_token')) {
+          localStorage.setItem('access_token', 'dev-mock-token-for-development')
         }
       }
     }

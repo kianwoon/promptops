@@ -164,7 +164,12 @@ class AuthService:
             
             # Create JWT tokens
             access_token = self.create_access_token(
-                data={"sub": user.id, "email": user.email, "role": user.role.value}
+                data={
+                    "sub": user.id,
+                    "email": user.email,
+                    "role": user.role.value,
+                    "tenant_id": user.organization or "default-tenant"
+                }
             )
             refresh_token = self.create_refresh_token(
                 data={"sub": user.id, "email": user.email}
@@ -256,7 +261,12 @@ class AuthService:
             
             # Create new access token
             access_token = self.create_access_token(
-                data={"sub": user.id, "email": user.email, "role": user.role.value}
+                data={
+                    "sub": user.id,
+                    "email": user.email,
+                    "role": user.role.value,
+                    "tenant_id": user.organization or "default-tenant"
+                }
             )
             
             return access_token

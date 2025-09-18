@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = "your-secret-key-change-in-production"
     algorithm: str = "HS256"
+    # Uppercase versions for backward compatibility
+    SECRET_KEY: str = "your-secret-key-change-in-production"
+    ALGORITHM: str = "HS256"
     access_token_expire_minutes: int = 1440  # 24 hours instead of 30 minutes
     
     # Google OAuth Configuration

@@ -96,6 +96,8 @@ export function transformBackendStepToStep(
 
 // Transform backend flow to frontend ApprovalFlow
 export function transformBackendFlowToFlow(backendFlow: BackendApprovalFlow): ApprovalFlow {
+  console.log('🔍 [DEBUG] transformBackendFlowToFlow: Input backendFlow:', backendFlow)
+
   // Parse steps from steps_json if it's a string, or use steps array directly
   let steps: BackendApprovalFlowStep[] = []
 
@@ -112,12 +114,16 @@ export function transformBackendFlowToFlow(backendFlow: BackendApprovalFlow): Ap
     steps = backendFlow.steps
   }
 
+  console.log('🔍 [DEBUG] transformBackendFlowToFlow: Parsed steps:', steps)
+
   // Transform each step
   const transformedSteps = steps.map((step, index) =>
     transformBackendStepToStep(step, index)
   )
 
-  return {
+  console.log('🔍 [DEBUG] transformBackendFlowToFlow: Transformed steps:', transformedSteps)
+
+  const result = {
     id: backendFlow.id,
     name: backendFlow.name,
     description: backendFlow.description,
@@ -136,11 +142,17 @@ export function transformBackendFlowToFlow(backendFlow: BackendApprovalFlow): Ap
     updated_at: backendFlow.updated_at || new Date().toISOString(),
     tenant_id: backendFlow.tenant_id || 'default'
   }
+
+  console.log('🔍 [DEBUG] transformBackendFlowToFlow: Result:', result)
+  return result
 }
 
 // Transform multiple backend flows to frontend flows
 export function transformBackendFlowsToFlows(backendFlows: BackendApprovalFlow[]): ApprovalFlow[] {
-  return backendFlows.map(transformBackendFlowToFlow)
+  console.log('🔍 [DEBUG] transformBackendFlowsToFlows: Input:', backendFlows)
+  const result = backendFlows.map(transformBackendFlowToFlow)
+  console.log('🔍 [DEBUG] transformBackendFlowsToFlows: Output:', result)
+  return result
 }
 
 // Transform frontend step to backend format (for API requests)
