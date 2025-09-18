@@ -28,6 +28,7 @@ import { DevAppWrapper } from './components/DevAppWrapper'
 import { ModulePromptsPage } from './pages/ModulePrompts'
 import { ModelTesting } from './pages/ModelTesting'
 import { RoleManagementPage } from './pages/RoleManagementPage'
+import { PromptApprovalWorkflow } from './pages/PromptApprovalWorkflow'
 
 function App() {
   return (
@@ -173,6 +174,14 @@ function App() {
             element={
               <ProtectedRoute requiredRoles={['admin']}>
                 <RoleManagementPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/prompt-approval"
+            element={
+              <ProtectedRoute>
+                <PromptApprovalWorkflow />
               </ProtectedRoute>
             }
           />

@@ -14,7 +14,8 @@ import {
   Grid3X3,
   Key,
   Bot,
-  UserCog
+  UserCog,
+  FileSignature
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -40,6 +41,7 @@ const navigation: NavigationItem[] = [
   { name: 'API Keys', href: '/keys', icon: Key },
   { name: 'User Management', href: '/users', icon: Users, permission: 'users:read' },
   { name: 'Role Management', href: '/roles', icon: UserCog, permission: 'roles:read' },
+  { name: 'Prompt Approval Workflow', href: '/prompt-approval', icon: FileSignature },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
