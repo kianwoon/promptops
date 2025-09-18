@@ -265,10 +265,7 @@ export function AuditTrailViewer({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Audit Trail</h2>
-          <p className="text-muted-foreground">
-            Monitor and analyze system activities and security events
-          </p>
+          {/* Header removed - already shown in parent tab */}
         </div>
         <div className="flex gap-2">
           <Button

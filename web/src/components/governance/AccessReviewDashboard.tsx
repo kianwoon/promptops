@@ -252,10 +252,7 @@ export function AccessReviewDashboard({
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold">Access Reviews</h2>
-          <p className="text-muted-foreground">
-            Manage periodic access reviews and compliance checks
-          </p>
+          {/* Header removed - already shown in parent tab */}
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>

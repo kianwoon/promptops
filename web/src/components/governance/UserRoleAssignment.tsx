@@ -262,10 +262,7 @@ export function UserRoleAssignmentComponent({
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold">User Role Assignment</h2>
-          <p className="text-muted-foreground">
-            Manage user roles and permissions across the system
-          </p>
+          {/* Header removed - already shown in parent tab */}
         </div>
         <div className="flex gap-2">
           <Dialog open={isBulkDialogOpen} onOpenChange={setIsBulkDialogOpen}>

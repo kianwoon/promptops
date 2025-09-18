@@ -246,10 +246,7 @@ export function PermissionMatrix({
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold">Permission Matrix</h2>
-          <p className="text-muted-foreground">
-            Visualize and manage permissions across all roles and resources
-          </p>
+          {/* Header removed - already shown in parent tab */}
         </div>
         <div className="flex gap-2">
           <Dialog open={isBulkDialogOpen} onOpenChange={setIsBulkDialogOpen}>

@@ -274,8 +274,7 @@ export const ApprovalDashboard: React.FC<ApprovalDashboardProps> = ({
       {/* Header with Actions */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Approval Dashboard</h1>
-          <p className="text-gray-600">Manage and monitor approval workflows</p>
+          {/* Header removed - already shown in parent tab */}
         </div>
         <div className="flex space-x-2">
           <Button variant="outline" onClick={() => onRefresh?.()}>

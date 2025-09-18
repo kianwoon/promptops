@@ -401,7 +401,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>Workflow Designer</span>
+            {/* Header removed - already shown in parent tab */}
             <div className="flex space-x-2">
               <Button variant="outline" onClick={handleTest}>
                 <Play className="h-4 w-4 mr-2" />

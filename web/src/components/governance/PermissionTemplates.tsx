@@ -374,10 +374,7 @@ export function PermissionTemplates() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Permission Templates</h1>
-          <p className="text-muted-foreground">
-            Manage and apply permission templates for common scenarios
-          </p>
+          {/* Header removed - already shown in parent tab */}
         </div>
         <Button
           onClick={() => setIsCreateDialogOpen(true)}
