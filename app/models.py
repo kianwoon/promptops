@@ -1012,14 +1012,6 @@ class WorkflowStatus(enum.Enum):
     INACTIVE = "inactive"
     ARCHIVED = "archived"
 
-class WorkflowStepType(enum.Enum):
-    APPROVAL = "approval"
-    NOTIFICATION = "notification"
-    AUTOMATED_ACTION = "automated_action"
-    CONDITIONAL = "conditional"
-    PARALLEL = "parallel"
-    SEQUENTIAL = "sequential"
-
 class WorkflowInstanceStatus(enum.Enum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"

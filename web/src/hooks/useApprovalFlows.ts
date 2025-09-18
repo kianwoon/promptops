@@ -31,6 +31,7 @@ import type {
   FlowExportOptions,
   FlowImportResult,
   StepTemplate,
+  FlowTemplate,
   ValidationError
 } from '@/types/approval-flows'
 
@@ -39,11 +40,19 @@ import type {
   PermissionTemplateResponse
 } from '@/types/governance'
 
-// Base API client for approval flows
-const API_BASE = '/v1/approval-flows'
+// Import transformation utilities
+import {
+  transformBackendFlowToFlow,
+  transformBackendFlowsToFlows,
+  transformFlowToBackend
+} from '../utils/approval-flow-transform'
 
-async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE}${endpoint}`
+// Base API clients for approval flows and requests
+const FLOWS_API_BASE = '/v1/approval-flows'
+const REQUESTS_API_BASE = '/v1/approval-requests'
+
+async function apiRequest<T>(endpoint: string, options: RequestInit = {}, baseUrl: string = REQUESTS_API_BASE): Promise<T> {
+  const url = `${baseUrl}${endpoint}`
 
   const response = await fetch(url, {
     headers: {
@@ -55,7 +64,20 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Network error' }))
-    throw new Error(error.message || `HTTP ${response.status}`)
+    let errorMessage = error.message || `HTTP ${response.status}`
+
+    // Handle specific error codes with better messages
+    if (response.status === 409) {
+      errorMessage = error.detail || 'A duplicate entry was found. Please check your data and try again.'
+    } else if (response.status === 400) {
+      errorMessage = error.detail || 'Invalid request. Please check your input data.'
+    } else if (response.status === 404) {
+      errorMessage = 'Resource not found.'
+    } else if (response.status === 500) {
+      errorMessage = error.detail || 'Server error. Please try again later.'
+    }
+
+    throw new Error(errorMessage)
   }
 
   return response.json()
@@ -66,7 +88,7 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
 export const useApprovalFlows = (filters?: ApprovalFlowFilter, options?: UseQueryOptions<ApprovalFlow[]>) =>
   useQuery({
     queryKey: ['approval-flows', filters],
-    queryFn: () => {
+    queryFn: async () => {
       const params = new URLSearchParams()
       if (filters?.search) params.append('search', filters.search)
       if (filters?.flow_type) params.append('flow_type', filters.flow_type)
@@ -80,7 +102,8 @@ export const useApprovalFlows = (filters?: ApprovalFlowFilter, options?: UseQuer
       }
 
       const endpoint = params.toString() ? `/flows?${params.toString()}` : '/flows'
-      return apiRequest<ApprovalFlow[]>(endpoint)
+      const backendFlows = await apiRequest<any[]>(endpoint, {}, FLOWS_API_BASE)
+      return transformBackendFlowsToFlows(backendFlows)
     },
     ...options,
   })
@@ -88,7 +111,10 @@ export const useApprovalFlows = (filters?: ApprovalFlowFilter, options?: UseQuer
 export const useApprovalFlow = (flowId: string, options?: UseQueryOptions<ApprovalFlow>) =>
   useQuery({
     queryKey: ['approval-flows', flowId],
-    queryFn: () => apiRequest<ApprovalFlow>(`/flows/${flowId}`),
+    queryFn: async () => {
+      const backendFlow = await apiRequest<any>(`/flows/${flowId}`, {}, FLOWS_API_BASE)
+      return transformBackendFlowToFlow(backendFlow)
+    },
     enabled: !!flowId,
     ...options,
   })
@@ -97,14 +123,13 @@ export const useCreateApprovalFlow = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (flow: ApprovalFlowCreate) => {
+    mutationFn: async (flow: ApprovalFlowCreate) => {
       // Transform frontend flow structure to backend structure
       const backendFlow = {
         name: flow.name,
         description: flow.description,
+        category: "approval", // Required field in backend
         trigger_condition: { event: "prompt_created" },
-        flow_type: flow.flow_type,
-        status: flow.status,
         steps: flow.steps?.map(step => ({
           name: step.name,
           description: step.description,
@@ -119,20 +144,41 @@ export const useCreateApprovalFlow = () => {
             in_app_enabled: true,
             webhook_enabled: false
           }
-        })) || []
+        })) || [],
+        timeout_minutes: 1440, // Default 24 hours - required field in backend
+        requires_evidence: false, // Default value - required field in backend
+        auto_approve_threshold: null, // Optional field
+        escalation_rules: null, // Optional field
+        notification_settings: null // Optional field
       }
 
-      return apiRequest<ApprovalFlowResponse>('/flows', {
+      const backendResponse = await apiRequest<any>('/flows', {
         method: 'POST',
         body: JSON.stringify(backendFlow),
-      })
+      }, FLOWS_API_BASE)
+
+      // Transform the response back to frontend format
+      return transformBackendFlowToFlow(backendResponse)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approval-flows'] })
       toast.success('Approval flow created successfully')
     },
     onError: (error) => {
-      toast.error(`Failed to create approval flow: ${error.message}`)
+      let userMessage = error.message
+
+      // Provide more user-friendly messages for common constraint violations
+      if (error.message.includes('uq_workflow_name_version_tenant')) {
+        userMessage = 'An approval flow with this name already exists. Please use a different name.'
+      } else if (error.message.includes('duplicate key value')) {
+        userMessage = 'This approval flow already exists. Please check the name and try again.'
+      } else if (error.message.includes('violates foreign key constraint')) {
+        userMessage = 'Invalid reference to another record. Please check your flow configuration.'
+      } else if (error.message.includes('violates check constraint')) {
+        userMessage = 'Invalid data format. Please check all fields and try again.'
+      }
+
+      toast.error(`Failed to create approval flow: ${userMessage}`)
     },
   })
 }
@@ -142,10 +188,13 @@ export const useUpdateApprovalFlow = () => {
 
   return useMutation({
     mutationFn: async ({ flowId, flow }: { flowId: string; flow: ApprovalFlowUpdate }) => {
-      return apiRequest<ApprovalFlowResponse>(`/flows/${flowId}`, {
+      const backendResponse = await apiRequest<any>(`/flows/${flowId}`, {
         method: 'PUT',
         body: JSON.stringify(flow),
-      })
+      }, FLOWS_API_BASE)
+
+      // Transform the response back to frontend format
+      return transformBackendFlowToFlow(backendResponse)
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['approval-flows'] })
@@ -163,9 +212,9 @@ export const useDeleteApprovalFlow = () => {
 
   return useMutation({
     mutationFn: (flowId: string) =>
-      apiRequest<ApprovalFlowResponse>(`/flows/${flowId}`, {
+      apiRequest<any>(`/flows/${flowId}`, {
         method: 'DELETE',
-      }),
+      }, FLOWS_API_BASE),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approval-flows'] })
       toast.success('Approval flow deleted successfully')
@@ -226,11 +275,15 @@ export const useDuplicateApprovalFlow = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ flowId, newName }: { flowId: string; newName: string }) =>
-      apiRequest<ApprovalFlowResponse>(`/flows/${flowId}/duplicate`, {
+    mutationFn: async ({ flowId, newName }: { flowId: string; newName: string }) => {
+      const backendResponse = await apiRequest<any>(`/flows/${flowId}/duplicate`, {
         method: 'POST',
         body: JSON.stringify({ name: newName }),
-      }),
+      }, FLOWS_API_BASE)
+
+      // Transform the response back to frontend format
+      return transformBackendFlowToFlow(backendResponse)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approval-flows'] })
       toast.success('Approval flow duplicated successfully')
@@ -247,7 +300,7 @@ export const useExportApprovalFlow = () => {
       apiRequest<{ download_url: string; filename: string }>(`/flows/${flowId}/export`, {
         method: 'POST',
         body: JSON.stringify(options),
-      }),
+      }, FLOWS_API_BASE),
     onError: (error) => {
       toast.error(`Failed to export approval flow: ${error.message}`)
     },
@@ -262,7 +315,7 @@ export const useImportApprovalFlow = () => {
       const formData = new FormData()
       formData.append('file', file)
 
-      return fetch(`${API_BASE}/flows/import`, {
+      return fetch(`${FLOWS_API_BASE}/flows/import`, {
         method: 'POST',
         body: formData,
       }).then(response => {
@@ -301,7 +354,7 @@ export const useApprovalRequests = (filters?: ApprovalRequestFilter, options?: U
         params.append('end_date', filters.date_range.end)
       }
 
-      const endpoint = params.toString() ? `/requests?${params.toString()}` : '/requests'
+      const endpoint = params.toString() ? `/?${params.toString()}` : '/'
       return apiRequest<ApprovalRequest[]>(endpoint)
     },
     ...options,
@@ -310,7 +363,7 @@ export const useApprovalRequests = (filters?: ApprovalRequestFilter, options?: U
 export const useApprovalRequest = (requestId: string, options?: UseQueryOptions<ApprovalRequest>) =>
   useQuery({
     queryKey: ['approval-requests', requestId],
-    queryFn: () => apiRequest<ApprovalRequest>(`/requests/${requestId}`),
+    queryFn: () => apiRequest<ApprovalRequest>(`/${requestId}`),
     enabled: !!requestId,
     ...options,
   })
@@ -320,7 +373,7 @@ export const useCreateApprovalRequest = () => {
 
   return useMutation({
     mutationFn: (request: ApprovalRequestCreate) =>
-      apiRequest<ApprovalRequestResponse>('/requests', {
+      apiRequest<ApprovalRequest>('/', {
         method: 'POST',
         body: JSON.stringify(request),
       }),
@@ -342,7 +395,7 @@ export const useUpdateApprovalRequest = () => {
 
   return useMutation({
     mutationFn: ({ requestId, request }: { requestId: string; request: ApprovalRequestUpdate }) =>
-      apiRequest<ApprovalRequestResponse>(`/requests/${requestId}`, {
+      apiRequest<ApprovalRequest>(`/${requestId}`, {
         method: 'PUT',
         body: JSON.stringify(request),
       }),
@@ -362,7 +415,7 @@ export const useDeleteApprovalRequest = () => {
 
   return useMutation({
     mutationFn: (requestId: string) =>
-      apiRequest<ApprovalRequestResponse>(`/requests/${requestId}`, {
+      apiRequest<ApprovalRequest>(`/${requestId}`, {
         method: 'DELETE',
       }),
     onSuccess: () => {
@@ -380,7 +433,7 @@ export const useApproveRequest = () => {
 
   return useMutation({
     mutationFn: ({ requestId, stepId, comments }: { requestId: string; stepId?: string; comments?: string }) =>
-      apiRequest<ApprovalRequestResponse>(`/requests/${requestId}/approve`, {
+      apiRequest<ApprovalRequest>(`/${requestId}/approve`, {
         method: 'POST',
         body: JSON.stringify({ step_id: stepId, comments }),
       }),
@@ -400,7 +453,7 @@ export const useRejectRequest = () => {
 
   return useMutation({
     mutationFn: ({ requestId, stepId, comments }: { requestId: string; stepId?: string; comments: string }) =>
-      apiRequest<ApprovalRequestResponse>(`/requests/${requestId}/reject`, {
+      apiRequest<ApprovalRequest>(`/${requestId}/reject`, {
         method: 'POST',
         body: JSON.stringify({ step_id: stepId, comments }),
       }),
@@ -420,7 +473,7 @@ export const useEscalateRequest = () => {
 
   return useMutation({
     mutationFn: ({ requestId, stepId, reason }: { requestId: string; stepId?: string; reason: string }) =>
-      apiRequest<ApprovalRequestResponse>(`/requests/${requestId}/escalate`, {
+      apiRequest<ApprovalRequest>(`/${requestId}/escalate`, {
         method: 'POST',
         body: JSON.stringify({ step_id: stepId, reason }),
       }),
@@ -435,6 +488,91 @@ export const useEscalateRequest = () => {
   })
 }
 
+// ============ FLOW TEMPLATES HOOKS ============
+
+export const useFlowTemplates = (options?: UseQueryOptions<FlowTemplate[]>) =>
+  useQuery({
+    queryKey: ['flow-templates'],
+    queryFn: async () => {
+      // Import predefined flow templates
+      const { PREDEFINED_FLOW_TEMPLATES } = await import('@/types/approval-flows')
+      return PREDEFINED_FLOW_TEMPLATES
+    },
+    ...options,
+  })
+
+export const useCreateFlowFromTemplate = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ template, customName, customRoles }: {
+      template: FlowTemplate;
+      customName?: string;
+      customRoles?: Record<string, string[]>
+    }) => {
+      // Apply customizations to template
+      const customizedSteps = template.steps.map(step => ({
+        ...step,
+        assigned_roles: customRoles?.[step.step_type] || step.assigned_roles,
+        id: `step-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      }))
+
+      const flowData: ApprovalFlowCreate = {
+        name: customName || template.name,
+        description: template.description,
+        flow_type: 'predefined',
+        steps: customizedSteps,
+        conditions: template.conditions,
+        metadata: {
+          ...template.metadata,
+          template_id: template.id,
+          template_name: template.name
+        }
+      }
+
+      const backendResponse = await apiRequest<any>('/flows', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: flowData.name,
+          description: flowData.description,
+          category: "approval", // Required field in backend
+          trigger_condition: { event: "prompt_created" },
+          steps: flowData.steps?.map(step => ({
+            name: step.name,
+            description: step.description,
+            step_type: step.step_type,
+            order: step.order,
+            required: step.required,
+            approval_roles: step.assigned_roles,
+            min_approvals: 1,
+            is_parallel: step.is_parallel,
+            notification_settings: step.notification_settings || {
+              email_enabled: true,
+              in_app_enabled: true,
+              webhook_enabled: false
+            }
+          })) || [],
+          timeout_minutes: 1440, // Default 24 hours - required field in backend
+          requires_evidence: false, // Default value - required field in backend
+          auto_approve_threshold: null, // Optional field
+          escalation_rules: null, // Optional field
+          notification_settings: null // Optional field
+        }),
+      }, FLOWS_API_BASE)
+
+      // Transform the response back to frontend format
+      return transformBackendFlowToFlow(backendResponse)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['approval-flows'] })
+      toast.success('Flow created from template successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to create flow from template: ${error.message}`)
+    },
+  })
+}
+
 // ============ STEP TEMPLATES HOOKS ============
 
 export const useStepTemplates = (options?: UseQueryOptions<StepTemplate[]>) =>
@@ -444,31 +582,49 @@ export const useStepTemplates = (options?: UseQueryOptions<StepTemplate[]>) =>
       // Return mock step templates for now since backend doesn't exist yet
       return [
         {
-          id: 'review',
-          name: 'Review',
-          description: 'Initial review by team members',
-          step_type: 'review' as const,
+          id: 'manual_approval',
+          name: 'Manual Approval',
+          description: 'Requires manual approval from specified users or roles',
+          step_type: 'manual_approval' as const,
           default_timeout_hours: 24,
-          category: 'review' as const,
-          icon: 'eye'
+          category: 'approval' as const,
+          icon: 'users'
         },
         {
-          id: 'approval',
-          name: 'Approval',
-          description: 'Final approval by managers',
-          step_type: 'approval' as const,
+          id: 'automated_approval',
+          name: 'Automated Approval',
+          description: 'Automated approval based on predefined rules',
+          step_type: 'automated_approval' as const,
+          default_timeout_hours: 1,
+          category: 'approval' as const,
+          icon: 'robot'
+        },
+        {
+          id: 'parallel_approval',
+          name: 'Parallel Approval',
+          description: 'Requires approval from multiple approvers in parallel',
+          step_type: 'parallel_approval' as const,
+          default_timeout_hours: 24,
+          category: 'approval' as const,
+          icon: 'git-branch'
+        },
+        {
+          id: 'sequential_approval',
+          name: 'Sequential Approval',
+          description: 'Requires approval in sequence from multiple approvers',
+          step_type: 'sequential_approval' as const,
           default_timeout_hours: 48,
           category: 'approval' as const,
-          icon: 'check-circle'
+          icon: 'list-ordered'
         },
         {
-          id: 'verification',
-          name: 'Verification',
-          description: 'Technical verification by experts',
-          step_type: 'verification' as const,
-          default_timeout_hours: 72,
+          id: 'conditional_approval',
+          name: 'Conditional Approval',
+          description: 'Approval based on specific conditions',
+          step_type: 'conditional_approval' as const,
+          default_timeout_hours: 24,
           category: 'approval' as const,
-          icon: 'shield'
+          icon: 'code'
         },
         {
           id: 'notification',
@@ -477,6 +633,42 @@ export const useStepTemplates = (options?: UseQueryOptions<StepTemplate[]>) =>
           step_type: 'notification' as const,
           category: 'notification' as const,
           icon: 'bell'
+        },
+        {
+          id: 'data_collection',
+          name: 'Data Collection',
+          description: 'Collect data from users or systems',
+          step_type: 'data_collection' as const,
+          default_timeout_hours: 24,
+          category: 'data' as const,
+          icon: 'database'
+        },
+        {
+          id: 'external_system',
+          name: 'External System',
+          description: 'Integrate with external systems',
+          step_type: 'external_system' as const,
+          default_timeout_hours: 24,
+          category: 'integration' as const,
+          icon: 'external-link'
+        },
+        {
+          id: 'timer',
+          name: 'Timer',
+          description: 'Wait for a specified time period',
+          step_type: 'timer' as const,
+          default_timeout_hours: 24,
+          category: 'timing' as const,
+          icon: 'clock'
+        },
+        {
+          id: 'escalation',
+          name: 'Escalation',
+          description: 'Escalate to higher authorities',
+          step_type: 'escalation' as const,
+          default_timeout_hours: 24,
+          category: 'escalation' as const,
+          icon: 'arrow-up'
         }
       ]
     },
@@ -623,7 +815,7 @@ export const useFlowStepOperations = (flowId?: string) => {
       apiRequest(`/flows/${flowId}/steps`, {
         method: 'POST',
         body: JSON.stringify({ step, order }),
-      }),
+      }, FLOWS_API_BASE),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approval-flows', flowId] })
       toast.success('Step added successfully')
@@ -638,7 +830,7 @@ export const useFlowStepOperations = (flowId?: string) => {
       apiRequest(`/flows/${flowId}/steps/${stepId}`, {
         method: 'PUT',
         body: JSON.stringify(step),
-      }),
+      }, FLOWS_API_BASE),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approval-flows', flowId] })
       toast.success('Step updated successfully')
@@ -652,7 +844,7 @@ export const useFlowStepOperations = (flowId?: string) => {
     mutationFn: (stepId: string) =>
       apiRequest(`/flows/${flowId}/steps/${stepId}`, {
         method: 'DELETE',
-      }),
+      }, FLOWS_API_BASE),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approval-flows', flowId] })
       toast.success('Step removed successfully')
@@ -667,7 +859,7 @@ export const useFlowStepOperations = (flowId?: string) => {
       apiRequest(`/flows/${flowId}/steps/reorder`, {
         method: 'POST',
         body: JSON.stringify({ step_orders: stepOrders }),
-      }),
+      }, FLOWS_API_BASE),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approval-flows', flowId] })
       toast.success('Steps reordered successfully')

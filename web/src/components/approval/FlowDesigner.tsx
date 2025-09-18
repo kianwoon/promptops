@@ -45,7 +45,8 @@ import type {
   ApprovalFlow,
   ApprovalFlowStep,
   StepTemplate,
-  ApprovalStepType
+  ApprovalStepType,
+  FlowTemplate
 } from '@/types/approval-flows'
 
 import { useFlowDesignerState, useAvailableRoles, useStepTemplates, useFlowValidation } from '@/hooks/useApprovalFlows'
@@ -55,20 +56,26 @@ import type { CustomRole } from '@/types/governance'
 // Helper function to get step type labels
 const getStepTypeLabel = (type: ApprovalStepType): string => {
   switch (type) {
-    case 'review':
-      return 'Review'
-    case 'approval':
-      return 'Approval'
-    case 'verification':
-      return 'Verification'
+    case 'manual_approval':
+      return 'Manual Approval'
+    case 'automated_approval':
+      return 'Automated Approval'
+    case 'parallel_approval':
+      return 'Parallel Approval'
+    case 'sequential_approval':
+      return 'Sequential Approval'
+    case 'conditional_approval':
+      return 'Conditional Approval'
     case 'notification':
       return 'Notification'
+    case 'data_collection':
+      return 'Data Collection'
+    case 'external_system':
+      return 'External System'
+    case 'timer':
+      return 'Timer'
     case 'escalation':
       return 'Escalation'
-    case 'automatic':
-      return 'Automatic'
-    case 'conditional':
-      return 'Conditional'
     default:
       return type
   }
@@ -358,13 +365,16 @@ const StepEditorDialog: React.FC<StepEditorDialogProps> = ({ step, roles, open, 
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="review">Review</SelectItem>
-                <SelectItem value="approval">Approval</SelectItem>
-                <SelectItem value="verification">Verification</SelectItem>
+                <SelectItem value="manual_approval">Manual Approval</SelectItem>
+                <SelectItem value="automated_approval">Automated Approval</SelectItem>
+                <SelectItem value="parallel_approval">Parallel Approval</SelectItem>
+                <SelectItem value="sequential_approval">Sequential Approval</SelectItem>
+                <SelectItem value="conditional_approval">Conditional Approval</SelectItem>
                 <SelectItem value="notification">Notification</SelectItem>
+                <SelectItem value="data_collection">Data Collection</SelectItem>
+                <SelectItem value="external_system">External System</SelectItem>
+                <SelectItem value="timer">Timer</SelectItem>
                 <SelectItem value="escalation">Escalation</SelectItem>
-                <SelectItem value="automatic">Automatic</SelectItem>
-                <SelectItem value="conditional">Conditional</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -503,22 +513,54 @@ const StepEditorDialog: React.FC<StepEditorDialogProps> = ({ step, roles, open, 
 // Main FlowDesigner Component
 interface FlowDesignerProps {
   initialFlow?: ApprovalFlow
+  initialTemplate?: FlowTemplate
   onSave: (flow: ApprovalFlow) => void
   onCancel: () => void
 }
 
-export const FlowDesigner: React.FC<FlowDesignerProps> = ({ initialFlow, onSave, onCancel }) => {
+export const FlowDesigner: React.FC<FlowDesignerProps> = ({ initialFlow, initialTemplate, onSave, onCancel }) => {
   // Data fetching
   const { data: roles = [] } = useAvailableRoles()
   const { data: stepTemplates = [] } = useStepTemplates()
 
+  // Create flow from template if provided
+  const createFlowFromTemplate = (template: FlowTemplate): ApprovalFlow => {
+    return {
+      id: `flow-${Date.now()}`,
+      name: template.name,
+      description: template.description,
+      version: 1,
+      flow_type: 'predefined',
+      status: 'draft',
+      steps: template.steps.map((step, index) => ({
+        ...step,
+        id: `step-${Date.now()}-${index}`,
+        order: index,
+      })),
+      conditions: template.conditions || [],
+      metadata: {
+        ...template.metadata,
+        template_id: template.id,
+        template_name: template.name,
+      },
+      created_at: new Date().toISOString(),
+      created_by: 'current-user',
+      updated_at: new Date().toISOString(),
+    }
+  }
+
+  // Initialize flow from template or initial flow
+  const initialFlowState = initialTemplate
+    ? createFlowFromTemplate(initialTemplate)
+    : initialFlow || null
+
   // State management
   const { state, updateState } = useFlowDesignerState({
-    flow: initialFlow || null,
+    flow: initialFlowState,
     availableRoles: roles,
     availableSteps: stepTemplates,
-    isCreating: !initialFlow,
-    isEditing: !!initialFlow,
+    isCreating: !initialFlow && !initialTemplate,
+    isEditing: !!initialFlow || !!initialTemplate,
   })
 
   // DnD sensors
@@ -536,11 +578,11 @@ export const FlowDesigner: React.FC<FlowDesignerProps> = ({ initialFlow, onSave,
 
   // Flow metadata state
   const [flowMetadata, setFlowMetadata] = useState({
-    name: initialFlow?.name || '',
-    description: initialFlow?.description || '',
-    category: initialFlow?.metadata?.category || '',
-    priority: initialFlow?.metadata?.priority || 'medium',
-    tags: initialFlow?.metadata?.tags || [],
+    name: initialFlow?.name || initialTemplate?.name || '',
+    description: initialFlow?.description || initialTemplate?.description || '',
+    category: initialFlow?.metadata?.category || initialTemplate?.metadata?.category || '',
+    priority: initialFlow?.metadata?.priority || initialTemplate?.metadata?.priority || 'medium',
+    tags: initialFlow?.metadata?.tags || initialTemplate?.metadata?.tags || [],
   })
 
   // Validation
@@ -684,8 +726,13 @@ export const FlowDesigner: React.FC<FlowDesignerProps> = ({ initialFlow, onSave,
   const handleSaveFlow = async () => {
     if (!state.flow) return
 
-    // Validate flow before saving
-    const validationResult = await validateFlow(state.flow || undefined)
+    // Validate flow before saving with current metadata
+    const flowToValidate = {
+      ...state.flow,
+      name: flowMetadata.name,
+      description: flowMetadata.description
+    }
+    const validationResult = await validateFlow(flowToValidate)
     if (validationResult && !validationResult.is_valid) {
       updateState({ validationErrors: validationResult.errors })
       return
@@ -721,6 +768,19 @@ export const FlowDesigner: React.FC<FlowDesignerProps> = ({ initialFlow, onSave,
           <p className="text-gray-600">
             {state.isCreating ? 'Create a new approval flow' : 'Edit approval flow'}
           </p>
+          {initialTemplate && (
+            <div className="flex items-center space-x-2 mt-2">
+              <Badge variant="outline" className="text-xs">
+                Template: {initialTemplate.name}
+              </Badge>
+              <Badge variant="secondary" className="text-xs">
+                {initialTemplate.complexity}
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                ⏱️ {initialTemplate.estimated_duration_hours}h
+              </Badge>
+            </div>
+          )}
         </div>
         <div className="flex space-x-2">
           <Button variant="outline" onClick={onCancel}>

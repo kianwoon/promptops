@@ -42,7 +42,12 @@
       "Bash(alembic:*)",
       "Bash(mkdir:*)",
       "Bash(tree:*)",
-      "Bash(open http://localhost:3001/prompt-approval)"
+      "Bash(open http://localhost:3001/prompt-approval)",
+      "Bash(cat:*)",
+      "Bash(tr:*)",
+      "Bash(grep:*)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(./node_modules/typescript/bin/tsc:*)"
     ],
     "deny": [],
     "ask": []

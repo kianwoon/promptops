@@ -12,45 +12,51 @@ export interface ApprovalFlow {
   id: string
   name: string
   description: string
-  version: number
-  flow_type: 'predefined' | 'custom'
-  status: 'active' | 'inactive' | 'draft'
+  version: string
+  status: string
+  category: string
+  trigger_condition: Record<string, any>
   steps: ApprovalFlowStep[]
-  conditions: FlowCondition[]
-  metadata: FlowMetadata
-  created_at: string
+  timeout_minutes: number
+  requires_evidence: boolean
+  auto_approve_threshold?: number | null
+  escalation_rules?: any[] | null
+  notification_settings?: any | null
   created_by: string
+  created_at: string
   updated_at: string
-  updated_by?: string
-  tenant_id?: string
+  tenant_id: string
 }
 
 export interface ApprovalFlowStep {
-  id: string
+  id?: string
   name: string
   description?: string
-  step_type: ApprovalStepType
+  step_type: string
   order: number
   required: boolean
   timeout_hours?: number
-  assigned_roles: string[]
-  assigned_users?: string[]
-  conditions: StepCondition[]
-  actions: StepAction[]
-  notification_settings: NotificationSettings
+  assigned_roles?: string[]
+  approval_roles?: string[]
+  min_approvals?: number
   is_parallel: boolean
-  depends_on?: string[] // step IDs this step depends on
-  metadata?: Record<string, any>
+  notification_settings?: NotificationSettings
+  conditions?: any[]
+  actions?: any[]
+  depends_on?: string[]
 }
 
 export type ApprovalStepType =
-  | 'review'
-  | 'approval'
-  | 'verification'
+  | 'manual_approval'
+  | 'automated_approval'
+  | 'parallel_approval'
+  | 'sequential_approval'
+  | 'conditional_approval'
   | 'notification'
+  | 'data_collection'
+  | 'external_system'
+  | 'timer'
   | 'escalation'
-  | 'automatic'
-  | 'conditional'
 
 export interface FlowCondition {
   id: string
@@ -375,21 +381,177 @@ export interface UserApprovalStats {
 
 // ============ PREDEFINED TEMPLATES ============
 
+export interface FlowTemplate {
+  id: string
+  name: string
+  description: string
+  category: 'basic' | 'advanced' | 'compliance' | 'custom'
+  flow_type: 'predefined' | 'custom'
+  icon: string
+  steps: Omit<ApprovalFlowStep, 'id'>[]
+  conditions?: FlowCondition[]
+  metadata: Partial<FlowMetadata>
+  estimated_duration_hours: number
+  complexity: 'simple' | 'medium' | 'complex'
+  tags: string[]
+}
+
+export const PREDEFINED_FLOW_TEMPLATES: FlowTemplate[] = [
+  {
+    id: 'basic_approval',
+    name: 'Basic Approval',
+    description: 'Simple two-step approval process: Editor review followed by final approval',
+    category: 'basic',
+    flow_type: 'predefined',
+    icon: 'check-circle',
+    estimated_duration_hours: 48,
+    complexity: 'simple',
+    tags: ['quick', 'standard', 'content'],
+    steps: [
+      {
+        name: 'Editor Review',
+        description: 'Initial review and content validation by editors',
+        step_type: 'manual_approval',
+        order: 0,
+        required: true,
+        timeout_hours: 24,
+        assigned_roles: ['editor'],
+        conditions: [],
+        actions: [],
+        notification_settings: {
+          email_enabled: true,
+          in_app_enabled: true,
+          webhook_enabled: false,
+          reminder_hours: 12,
+          escalation_hours: 20
+        },
+        is_parallel: false,
+        depends_on: []
+      },
+      {
+        name: 'Final Approval',
+        description: 'Final approval by designated approvers',
+        step_type: 'manual_approval',
+        order: 1,
+        required: true,
+        timeout_hours: 24,
+        assigned_roles: ['approver'],
+        conditions: [],
+        actions: [],
+        notification_settings: {
+          email_enabled: true,
+          in_app_enabled: true,
+          webhook_enabled: false,
+          reminder_hours: 12,
+          escalation_hours: 20
+        },
+        is_parallel: false,
+        depends_on: []
+      }
+    ],
+    conditions: [],
+    metadata: {
+      category: 'content',
+      priority: 'medium',
+      tags: ['basic', 'content', 'standard']
+    }
+  },
+  {
+    id: 'multi_level_approval',
+    name: 'Multi-Level Approval',
+    description: 'Comprehensive three-step approval process with escalation path',
+    category: 'advanced',
+    flow_type: 'predefined',
+    icon: 'layers',
+    estimated_duration_hours: 72,
+    complexity: 'medium',
+    tags: ['comprehensive', 'escalation', 'critical'],
+    steps: [
+      {
+        name: 'Editor Review',
+        description: 'Initial content review and validation',
+        step_type: 'manual_approval',
+        order: 0,
+        required: true,
+        timeout_hours: 24,
+        assigned_roles: ['editor'],
+        conditions: [],
+        actions: [],
+        notification_settings: {
+          email_enabled: true,
+          in_app_enabled: true,
+          webhook_enabled: false,
+          reminder_hours: 12,
+          escalation_hours: 20
+        },
+        is_parallel: false,
+        depends_on: []
+      },
+      {
+        name: 'Manager Approval',
+        description: 'Manager review and approval',
+        step_type: 'manual_approval',
+        order: 1,
+        required: true,
+        timeout_hours: 24,
+        assigned_roles: ['manager'],
+        conditions: [],
+        actions: [],
+        notification_settings: {
+          email_enabled: true,
+          in_app_enabled: true,
+          webhook_enabled: false,
+          reminder_hours: 12,
+          escalation_hours: 20
+        },
+        is_parallel: false,
+        depends_on: []
+      },
+      {
+        name: 'Admin Review',
+        description: 'Administrative review for high-impact items',
+        step_type: 'manual_approval',
+        order: 2,
+        required: true,
+        timeout_hours: 24,
+        assigned_roles: ['admin'],
+        conditions: [],
+        actions: [],
+        notification_settings: {
+          email_enabled: true,
+          in_app_enabled: true,
+          webhook_enabled: false,
+          reminder_hours: 12,
+          escalation_hours: 20
+        },
+        is_parallel: false,
+        depends_on: []
+      }
+    ],
+    conditions: [],
+    metadata: {
+      category: 'governance',
+      priority: 'high',
+      tags: ['multi-level', 'comprehensive', 'critical']
+    }
+  }
+]
+
 export const PREDEFINED_STEP_TEMPLATES: StepTemplate[] = [
   {
     id: 'editor_review',
     name: 'Editor Review',
     description: 'Initial review by content editors',
-    step_type: 'review',
+    step_type: 'manual_approval',
     default_timeout_hours: 24,
-    category: 'review',
+    category: 'approval',
     icon: 'edit'
   },
   {
     id: 'approver_review',
     name: 'Approver Review',
     description: 'Final approval by designated approvers',
-    step_type: 'approval',
+    step_type: 'manual_approval',
     default_timeout_hours: 48,
     category: 'approval',
     icon: 'check-circle'
@@ -398,10 +560,46 @@ export const PREDEFINED_STEP_TEMPLATES: StepTemplate[] = [
     id: 'admin_review',
     name: 'Admin Review',
     description: 'Administrative review for high-impact items',
-    step_type: 'approval',
+    step_type: 'manual_approval',
     default_timeout_hours: 72,
     category: 'approval',
     icon: 'shield'
+  },
+  {
+    id: 'parallel_approval',
+    name: 'Parallel Approval',
+    description: 'Requires approval from multiple approvers in parallel',
+    step_type: 'parallel_approval',
+    default_timeout_hours: 24,
+    category: 'approval',
+    icon: 'users'
+  },
+  {
+    id: 'sequential_approval',
+    name: 'Sequential Approval',
+    description: 'Requires approval in sequence from multiple approvers',
+    step_type: 'sequential_approval',
+    default_timeout_hours: 48,
+    category: 'approval',
+    icon: 'list-ol'
+  },
+  {
+    id: 'conditional_approval',
+    name: 'Conditional Approval',
+    description: 'Approval based on specific conditions',
+    step_type: 'conditional_approval',
+    default_timeout_hours: 24,
+    category: 'approval',
+    icon: 'code-branch'
+  },
+  {
+    id: 'automated_approval',
+    name: 'Automated Approval',
+    description: 'Automated approval based on predefined rules',
+    step_type: 'automated_approval',
+    default_timeout_hours: 1,
+    category: 'approval',
+    icon: 'robot'
   },
   {
     id: 'notification',
@@ -421,12 +619,31 @@ export const PREDEFINED_STEP_TEMPLATES: StepTemplate[] = [
     icon: 'arrow-up'
   },
   {
-    id: 'automatic',
-    name: 'Automatic',
-    description: 'Automated processing based on conditions',
-    step_type: 'automatic',
-    category: 'automatic',
-    icon: 'cpu'
+    id: 'data_collection',
+    name: 'Data Collection',
+    description: 'Collect data from users or systems',
+    step_type: 'data_collection',
+    default_timeout_hours: 24,
+    category: 'data',
+    icon: 'database'
+  },
+  {
+    id: 'external_system',
+    name: 'External System',
+    description: 'Integrate with external systems',
+    step_type: 'external_system',
+    default_timeout_hours: 24,
+    category: 'integration',
+    icon: 'external-link'
+  },
+  {
+    id: 'timer',
+    name: 'Timer',
+    description: 'Wait for a specified time period',
+    step_type: 'timer',
+    default_timeout_hours: 24,
+    category: 'timing',
+    icon: 'clock'
   }
 ]
 

@@ -26,6 +26,59 @@ async def get_mock_user():
 
 router = APIRouter()
 
+# Enum transformation utilities
+def transform_frontend_step_type_to_backend(step_type: str) -> str:
+    """Transform frontend step type to database enum format"""
+    step_type_mapping = {
+        'manual_approval': 'MANUAL_APPROVAL',
+        'automated_approval': 'AUTOMATED_APPROVAL',
+        'parallel_approval': 'PARALLEL_APPROVAL',
+        'sequential_approval': 'SEQUENTIAL_APPROVAL',
+        'conditional_approval': 'CONDITIONAL_APPROVAL',
+        'notification': 'NOTIFICATION',
+        'data_collection': 'DATA_COLLECTION',
+        'external_system': 'EXTERNAL_SYSTEM',
+        'timer': 'TIMER',
+        'escalation': 'ESCALATION'
+    }
+    return step_type_mapping.get(step_type, step_type)
+
+def transform_backend_step_type_to_frontend(step_type: str) -> str:
+    """Transform database enum format to frontend step type"""
+    step_type_mapping = {
+        'MANUAL_APPROVAL': 'manual_approval',
+        'AUTOMATED_APPROVAL': 'automated_approval',
+        'PARALLEL_APPROVAL': 'parallel_approval',
+        'SEQUENTIAL_APPROVAL': 'sequential_approval',
+        'CONDITIONAL_APPROVAL': 'conditional_approval',
+        'NOTIFICATION': 'notification',
+        'DATA_COLLECTION': 'data_collection',
+        'EXTERNAL_SYSTEM': 'external_system',
+        'TIMER': 'timer',
+        'ESCALATION': 'escalation'
+    }
+    return step_type_mapping.get(step_type, step_type)
+
+def transform_steps_for_database(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Transform steps for database storage with proper enum values"""
+    transformed_steps = []
+    for step in steps:
+        transformed_step = step.copy()
+        if 'step_type' in transformed_step:
+            transformed_step['step_type'] = transform_frontend_step_type_to_backend(transformed_step['step_type'])
+        transformed_steps.append(transformed_step)
+    return transformed_steps
+
+def transform_steps_for_frontend(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Transform steps for frontend response with proper enum values"""
+    transformed_steps = []
+    for step in steps:
+        transformed_step = step.copy()
+        if 'step_type' in transformed_step:
+            transformed_step['step_type'] = transform_backend_step_type_to_frontend(transformed_step['step_type'])
+        transformed_steps.append(transformed_step)
+    return transformed_steps
+
 # Schema definitions for approval flows
 class ApprovalFlowCreate(BaseModel):
     name: str
@@ -142,7 +195,7 @@ async def list_approval_flows(
                 status=flow.status.value,
                 category=flow.category,
                 trigger_condition=flow.trigger_condition,
-                steps=flow.steps_json,
+                steps=transform_steps_for_frontend(flow.steps_json),
                 timeout_minutes=flow.timeout_minutes,
                 requires_evidence=flow.requires_evidence,
                 auto_approve_threshold=flow.auto_approve_threshold,
@@ -157,7 +210,9 @@ async def list_approval_flows(
         ]
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list approval flows: {str(e)}")
+        error_msg = str(e)
+        print(f"ERROR listing approval flows: {error_msg}")
+        raise HTTPException(status_code=500, detail=f"Failed to list approval flows: {error_msg}")
 
 @router.post("/flows", response_model=ApprovalFlowResponse)
 async def create_approval_flow(
@@ -171,6 +226,9 @@ async def create_approval_flow(
         flow_id = str(uuid.uuid4())
         version = "1.0"
 
+        # Transform steps for database storage with proper enum values
+        transformed_steps = transform_steps_for_database(flow_data.steps)
+
         # Create workflow definition
         workflow_def = WorkflowDefinition(
             id=flow_id,
@@ -180,7 +238,7 @@ async def create_approval_flow(
             status=WorkflowStatus.DRAFT,
             category=flow_data.category,
             trigger_condition=flow_data.trigger_condition,
-            steps_json=flow_data.steps,
+            steps_json=transformed_steps,
             timeout_minutes=flow_data.timeout_minutes,
             requires_evidence=flow_data.requires_evidence,
             auto_approve_threshold=flow_data.auto_approve_threshold,
@@ -195,6 +253,9 @@ async def create_approval_flow(
         db.commit()
         db.refresh(workflow_def)
 
+        # Transform steps back to frontend format for response
+        frontend_steps = transform_steps_for_frontend(workflow_def.steps_json)
+
         return ApprovalFlowResponse(
             id=workflow_def.id,
             name=workflow_def.name,
@@ -203,7 +264,7 @@ async def create_approval_flow(
             status=workflow_def.status.value,
             category=workflow_def.category,
             trigger_condition=workflow_def.trigger_condition,
-            steps=workflow_def.steps_json,
+            steps=frontend_steps,
             timeout_minutes=workflow_def.timeout_minutes,
             requires_evidence=workflow_def.requires_evidence,
             auto_approve_threshold=workflow_def.auto_approve_threshold,
@@ -215,9 +276,26 @@ async def create_approval_flow(
             tenant_id=workflow_def.tenant_id
         )
 
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Validation error: {str(e)}")
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to create approval flow: {str(e)}")
+        error_msg = str(e)
+        # Log the full error for debugging
+        print(f"ERROR creating approval flow: {error_msg}")
+        # Provide more specific error messages for common issues
+        if "duplicate key value violates unique constraint" in error_msg:
+            if "uq_workflow_name_version_tenant" in error_msg:
+                raise HTTPException(status_code=409, detail="An approval flow with this name already exists. Please use a different name.")
+            else:
+                raise HTTPException(status_code=409, detail="A duplicate entry was found. Please check your data and try again.")
+        elif "foreign key constraint" in error_msg:
+            raise HTTPException(status_code=400, detail="Invalid reference data. Please check that all referenced items exist.")
+        elif "check constraint" in error_msg:
+            raise HTTPException(status_code=400, detail="Invalid data format. Please check your input values.")
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to create approval flow: {error_msg}")
 
 @router.put("/flows/{flow_id}", response_model=ApprovalFlowResponse)
 async def update_approval_flow(
@@ -245,7 +323,8 @@ async def update_approval_flow(
         if flow_data.trigger_condition is not None:
             workflow_def.trigger_condition = flow_data.trigger_condition
         if flow_data.steps is not None:
-            workflow_def.steps_json = flow_data.steps
+            # Transform steps for database storage with proper enum values
+            workflow_def.steps_json = transform_steps_for_database(flow_data.steps)
         if flow_data.timeout_minutes is not None:
             workflow_def.timeout_minutes = flow_data.timeout_minutes
         if flow_data.requires_evidence is not None:
@@ -264,6 +343,9 @@ async def update_approval_flow(
         db.commit()
         db.refresh(workflow_def)
 
+        # Transform steps back to frontend format for response
+        frontend_steps = transform_steps_for_frontend(workflow_def.steps_json)
+
         return ApprovalFlowResponse(
             id=workflow_def.id,
             name=workflow_def.name,
@@ -272,7 +354,7 @@ async def update_approval_flow(
             status=workflow_def.status.value,
             category=workflow_def.category,
             trigger_condition=workflow_def.trigger_condition,
-            steps=workflow_def.steps_json,
+            steps=frontend_steps,
             timeout_minutes=workflow_def.timeout_minutes,
             requires_evidence=workflow_def.requires_evidence,
             auto_approve_threshold=workflow_def.auto_approve_threshold,
@@ -288,7 +370,21 @@ async def update_approval_flow(
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to update approval flow: {str(e)}")
+        error_msg = str(e)
+        # Log the full error for debugging
+        print(f"ERROR updating approval flow: {error_msg}")
+        # Provide more specific error messages for common issues
+        if "duplicate key value violates unique constraint" in error_msg:
+            if "uq_workflow_name_version_tenant" in error_msg:
+                raise HTTPException(status_code=409, detail="An approval flow with this name already exists. Please use a different name.")
+            else:
+                raise HTTPException(status_code=409, detail="A duplicate entry was found. Please check your data and try again.")
+        elif "foreign key constraint" in error_msg:
+            raise HTTPException(status_code=400, detail="Invalid reference data. Please check that all referenced items exist.")
+        elif "check constraint" in error_msg:
+            raise HTTPException(status_code=400, detail="Invalid data format. Please check your input values.")
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to update approval flow: {error_msg}")
 
 @router.get("/flows/{flow_id}", response_model=ApprovalFlowResponse)
 async def get_approval_flow(
@@ -306,6 +402,9 @@ async def get_approval_flow(
         if not workflow_def:
             raise HTTPException(status_code=404, detail="Approval flow not found")
 
+        # Transform steps back to frontend format for response
+        frontend_steps = transform_steps_for_frontend(workflow_def.steps_json)
+
         return ApprovalFlowResponse(
             id=workflow_def.id,
             name=workflow_def.name,
@@ -314,7 +413,7 @@ async def get_approval_flow(
             status=workflow_def.status.value,
             category=workflow_def.category,
             trigger_condition=workflow_def.trigger_condition,
-            steps=workflow_def.steps_json,
+            steps=frontend_steps,
             timeout_minutes=workflow_def.timeout_minutes,
             requires_evidence=workflow_def.requires_evidence,
             auto_approve_threshold=workflow_def.auto_approve_threshold,
@@ -329,7 +428,9 @@ async def get_approval_flow(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get approval flow: {str(e)}")
+        error_msg = str(e)
+        print(f"ERROR getting approval flow: {error_msg}")
+        raise HTTPException(status_code=500, detail=f"Failed to get approval flow: {error_msg}")
 
 @router.delete("/flows/{flow_id}")
 async def delete_approval_flow(
@@ -365,7 +466,9 @@ async def delete_approval_flow(
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to delete approval flow: {str(e)}")
+        error_msg = str(e)
+        print(f"ERROR deleting approval flow: {error_msg}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete approval flow: {error_msg}")
 
 @router.get("/stats", response_model=ApprovalFlowStats)
 async def get_approval_flow_stats(
