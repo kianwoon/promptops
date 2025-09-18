@@ -63,6 +63,7 @@ import {
   Check,
   X
 } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
 
@@ -112,6 +113,10 @@ export function RoleManagement() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingRole, setEditingRole] = useState<RoleResponse | null>(null)
+  const [permissionSearchQuery, setPermissionSearchQuery] = useState('')
+  const [createPermissionSearchQuery, setCreatePermissionSearchQuery] = useState('')
+  const [selectedTemplateRole, setSelectedTemplateRole] = useState('')
+  const [showTemplateRole, setShowTemplateRole] = useState(false)
   const [createFormData, setCreateFormData] = useState({
     name: '',
     description: '',
@@ -239,6 +244,31 @@ export function RoleManagement() {
     role.description?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  // Handle template role selection and copying
+  const handleTemplateRoleChange = (roleName: string) => {
+    setSelectedTemplateRole(roleName)
+
+    if (roleName) {
+      const templateRole = roles.find(role => role.name === roleName)
+      if (templateRole) {
+        setCreateFormData(prev => ({
+          ...prev,
+          permissions: [...templateRole.permissions],
+          inheritance_type: templateRole.inheritance_type || 'none',
+          inherited_roles: templateRole.inherited_roles || []
+        }))
+      }
+    } else {
+      // Reset to empty if no role selected
+      setCreateFormData(prev => ({
+        ...prev,
+        permissions: [],
+        inheritance_type: 'none',
+        inherited_roles: []
+      }))
+    }
+  }
+
   // Handle create role form submission
   const handleCreateRole = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -252,6 +282,8 @@ export function RoleManagement() {
         inherited_roles: [],
         inheritance_type: 'none' as 'none' | 'hierarchical' | 'conditional'
       })
+      setSelectedTemplateRole('')
+      setShowTemplateRole(false)
       setIsCreateDialogOpen(false)
     } catch (error) {
       console.error('Error creating role:', error)
@@ -333,44 +365,115 @@ export function RoleManagement() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Permissions</Label>
-                <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                <div className="flex items-center justify-between">
+                  <Label>Copy from Existing Role</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowTemplateRole(!showTemplateRole)}
+                  >
+                    <Copy className="h-3 w-3 mr-2" />
+                    {showTemplateRole ? 'Hide' : 'Show'} Templates
+                  </Button>
+                </div>
+                {showTemplateRole && (
+                  <div className="space-y-2">
+                    <Select value={selectedTemplateRole} onValueChange={handleTemplateRoleChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a role to copy permissions from" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.filter(role => role.is_active).map((role) => (
+                          <SelectItem key={role.name} value={role.name}>
+                            <div className="flex items-center gap-2">
+                              <Shield className="h-3 w-3" />
+                              {role.name}
+                              <Badge variant="outline" className="text-xs">
+                                {role.permissions.length} permissions
+                              </Badge>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedTemplateRole && (
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-muted-foreground">
+                          Selected: {selectedTemplateRole} • Permissions copied successfully
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedTemplateRole('')
+                            setCreateFormData(prev => ({
+                              ...prev,
+                              permissions: [],
+                              inheritance_type: 'none',
+                              inherited_roles: []
+                            }))
+                          }}
+                        >
+                          <X className="h-3 w-3 mr-2" />
+                          Clear
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Label>Permissions ({createFormData.permissions.length}/{availablePermissions.length} selected)</Label>
+                    {selectedTemplateRole && (
+                      <Badge variant="secondary" className="text-xs">
+                        <Copy className="h-3 w-3 mr-1" />
+                        Copied from {selectedTemplateRole}
+                      </Badge>
+                    )}
+                  </div>
+                  <Input
+                    placeholder="Search permissions..."
+                    value={createPermissionSearchQuery}
+                    onChange={(e) => setCreatePermissionSearchQuery(e.target.value)}
+                    className="max-w-xs"
+                  />
+                </div>
+                <div className="border rounded-lg p-3 max-h-96 overflow-y-auto">
                   {availablePermissions && availablePermissions.length > 0 ? (
                     <div className="space-y-2">
-                      {availablePermissions.map((permission) => (
-                        <div key={permission.name} className="flex items-center justify-between p-2 border rounded">
-                          <div>
-                            <div className="font-medium">{permission.name}</div>
-                            <div className="text-sm text-muted-foreground">{permission.description}</div>
+                      {availablePermissions
+                        .filter(permission =>
+                          permission.name.toLowerCase().includes(createPermissionSearchQuery.toLowerCase()) ||
+                          permission.description.toLowerCase().includes(createPermissionSearchQuery.toLowerCase())
+                        )
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((permission) => (
+                          <div key={permission.name} className="flex items-start space-x-3 p-3 hover:bg-muted/50 rounded">
+                            <Checkbox
+                              checked={createFormData.permissions.includes(permission.name)}
+                              onCheckedChange={(checked) => {
+                                const currentPermissions = createFormData.permissions;
+                                const updatedPermissions = checked
+                                  ? [...currentPermissions, permission.name]
+                                  : currentPermissions.filter(p => p !== permission.name);
+                                setCreateFormData({...createFormData, permissions: updatedPermissions});
+                              }}
+                            />
+                            <div className="flex-1">
+                              <div className="font-medium">{permission.name}</div>
+                              <div className="text-sm text-muted-foreground">{permission.description}</div>
+                            </div>
                           </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={createFormData.permissions.includes(permission.name) ? "default" : "outline"}
-                            onClick={() => {
-                              const currentPermissions = createFormData.permissions;
-                              const updatedPermissions = currentPermissions.includes(permission.name)
-                                ? currentPermissions.filter(p => p !== permission.name)
-                                : [...currentPermissions, permission.name];
-                              setCreateFormData({...createFormData, permissions: updatedPermissions});
-                            }}
-                          >
-                            {createFormData.permissions.includes(permission.name) ? (
-                              <Check className="h-3 w-3" />
-                            ) : (
-                              <Plus className="h-3 w-3" />
-                            )}
-                          </Button>
-                        </div>
-                      ))}
+                        ))}
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">No available permissions</p>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {createFormData.permissions.length} permission{createFormData.permissions.length !== 1 ? 's' : ''} selected
-                </p>
               </div>
 
               <div className="space-y-2">
@@ -566,57 +669,39 @@ export function RoleManagement() {
 
                 <TabsContent value="permissions" className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Current Permissions</Label>
-                    <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
-                      {editingRole.permissions && editingRole.permissions.length > 0 ? (
-                        <div className="space-y-2">
-                          {editingRole.permissions.map((permission, index) => (
-                            <div key={index} className="flex items-center justify-between p-2 border rounded">
-                              <div>
-                                <div className="font-medium">{permission}</div>
-                                <div className="text-sm text-muted-foreground">System Permission</div>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  const updatedPermissions = editingRole.permissions.filter((_, i) => i !== index);
-                                  setEditingRole({...editingRole, permissions: updatedPermissions});
-                                }}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">No permissions assigned</p>
-                      )}
+                    <div className="flex justify-between items-center">
+                      <Label>Permissions ({editingRole.permissions.length}/{availablePermissions.length} selected)</Label>
+                      <Input
+                        placeholder="Search permissions..."
+                        value={permissionSearchQuery}
+                        onChange={(e) => setPermissionSearchQuery(e.target.value)}
+                        className="max-w-xs"
+                      />
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Add Permissions</Label>
-                    <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                    <div className="border rounded-lg p-3 max-h-96 overflow-y-auto">
                       {availablePermissions && availablePermissions.length > 0 ? (
                         <div className="space-y-2">
                           {availablePermissions
-                            .filter(perm => !editingRole.permissions?.includes(perm.name))
+                            .filter(permission =>
+                              permission.name.toLowerCase().includes(permissionSearchQuery.toLowerCase()) ||
+                              permission.description.toLowerCase().includes(permissionSearchQuery.toLowerCase())
+                            )
+                            .sort((a, b) => a.name.localeCompare(b.name))
                             .map((permission) => (
-                              <div key={permission.name} className="flex items-center justify-between p-2 border rounded">
-                                <div>
+                              <div key={permission.name} className="flex items-start space-x-3 p-3 hover:bg-muted/50 rounded">
+                                <Checkbox
+                                  checked={editingRole.permissions.includes(permission.name)}
+                                  onCheckedChange={(checked) => {
+                                    const updatedPermissions = checked
+                                      ? [...editingRole.permissions, permission.name]
+                                      : editingRole.permissions.filter(p => p !== permission.name);
+                                    setEditingRole({...editingRole, permissions: updatedPermissions});
+                                  }}
+                                />
+                                <div className="flex-1">
                                   <div className="font-medium">{permission.name}</div>
                                   <div className="text-sm text-muted-foreground">{permission.description}</div>
                                 </div>
-                                <Button
-                                  size="sm"
-                                  onClick={() => {
-                                    const updatedPermissions = [...(editingRole.permissions || []), permission.name];
-                                    setEditingRole({...editingRole, permissions: updatedPermissions});
-                                  }}
-                                >
-                                  <Check className="h-3 w-3" />
-                                </Button>
                               </div>
                             ))}
                         </div>
