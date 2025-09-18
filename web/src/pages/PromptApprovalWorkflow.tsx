@@ -18,10 +18,37 @@ import {
   Plus,
   GitBranch,
   Users,
-  Edit
+  Edit,
+  Settings,
+  Palette,
+  Save,
+  RotateCcw,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+import { FlowDesigner } from '@/components/approval/FlowDesigner'
 
+// Import the enhanced types
+import type {
+  ApprovalFlow as EnhancedApprovalFlow,
+  ApprovalFlowStep,
+  CustomRole,
+  ApprovalFlowCreate
+} from '@/types/approval-flows'
+
+// Import hooks
+import {
+  useApprovalFlows,
+  useCreateApprovalFlow,
+  useUpdateApprovalFlow,
+  useDeleteApprovalFlow,
+  useApprovalRequests,
+  useAvailableRoles,
+  useApprovalFlowStats
+} from '@/hooks/useApprovalFlows'
+
+// Keep the existing interface for backward compatibility
 interface ApprovalFlow {
   id: string
   name: string
@@ -58,14 +85,27 @@ interface PromptApprovalRequest {
 }
 
 export function PromptApprovalWorkflow() {
-  const [activeTab, setActiveTab] = useState<'flows' | 'requests'>('flows')
+  const [activeTab, setActiveTab] = useState<'flows' | 'requests' | 'designer'>('flows')
+  const [showFlowDesigner, setShowFlowDesigner] = useState(false)
+  const [editingFlow, setEditingFlow] = useState<EnhancedApprovalFlow | null>(null)
 
-  // Flows state
+  // Use the new hooks for enhanced functionality
+  const { data: enhancedFlows = [] } = useApprovalFlows()
+  const { data: roles = [] } = useAvailableRoles()
+  const { data: flowStats } = useApprovalFlowStats()
+
+  const createFlowMutation = useCreateApprovalFlow()
+  const updateFlowMutation = useUpdateApprovalFlow()
+  const deleteFlowMutation = useDeleteApprovalFlow()
+
+  // Keep existing state for backward compatibility
   const [flowsSearchQuery, setFlowsSearchQuery] = useState('')
   const [selectedFlow, setSelectedFlow] = useState<ApprovalFlow | null>(null)
   const [isCreateFlowDialogOpen, setIsCreateFlowDialogOpen] = useState(false)
   const [isEditFlowDialogOpen, setIsEditFlowDialogOpen] = useState(false)
-  const [editingFlow, setEditingFlow] = useState<ApprovalFlow | null>(null)
+  const [isDeleteFlowDialogOpen, setIsDeleteFlowDialogOpen] = useState(false)
+  const [flowToDelete, setFlowToDelete] = useState<ApprovalFlow | null>(null)
+  const [legacyEditingFlow, setLegacyEditingFlow] = useState<ApprovalFlow | null>(null)
   const [newFlow, setNewFlow] = useState({
     name: '',
     description: '',
@@ -238,14 +278,14 @@ export function PromptApprovalWorkflow() {
   }
 
   const handleEditFlow = (flow: ApprovalFlow) => {
-    setEditingFlow(flow)
+    setLegacyEditingFlow(flow)
     setIsEditFlowDialogOpen(true)
   }
 
   const handleUpdateFlow = () => {
-    if (!editingFlow) return
+    if (!legacyEditingFlow) return
 
-    const steps = editingFlow.flowType === 'editor_approver_admin'
+    const steps = legacyEditingFlow.flowType === 'editor_approver_admin'
       ? [
           { name: 'Editor Review', type: 'editor_review' as const, required: true },
           { name: 'Approver Review', type: 'approver_review' as const, required: true },
@@ -257,14 +297,80 @@ export function PromptApprovalWorkflow() {
         ]
 
     const updatedFlow: ApprovalFlow = {
-      ...editingFlow,
+      ...legacyEditingFlow,
       steps,
       updatedAt: new Date().toISOString()
     }
 
-    setFlows(prev => prev.map(flow => flow.id === editingFlow.id ? updatedFlow : flow))
+    setFlows(prev => prev.map(flow => flow.id === legacyEditingFlow.id ? updatedFlow : flow))
     setIsEditFlowDialogOpen(false)
+    setLegacyEditingFlow(null)
+  }
+
+  // Enhanced flow designer handlers
+  const handleCreateCustomFlow = () => {
     setEditingFlow(null)
+    setShowFlowDesigner(true)
+  }
+
+  const handleEditCustomFlow = (flow: EnhancedApprovalFlow) => {
+    setEditingFlow(flow)
+    setShowFlowDesigner(true)
+  }
+
+  const handleSaveCustomFlow = (flow: EnhancedApprovalFlow) => {
+    if (editingFlow) {
+      // Update existing flow
+      updateFlowMutation.mutate({
+        flowId: editingFlow.id,
+        flow: {
+          name: flow.name,
+          description: flow.description,
+          status: flow.status,
+          steps: flow.steps,
+          conditions: flow.conditions,
+          metadata: flow.metadata,
+        }
+      })
+    } else {
+      // Create new flow
+      createFlowMutation.mutate({
+        name: flow.name,
+        description: flow.description,
+        flow_type: 'custom',
+        steps: flow.steps,
+        conditions: flow.conditions,
+        metadata: flow.metadata,
+      })
+    }
+    setShowFlowDesigner(false)
+    setEditingFlow(null)
+  }
+
+  const handleDeleteCustomFlow = (flowId: string) => {
+    const flow = enhancedFlows.find(f => f.id === flowId)
+    if (flow) {
+      setFlowToDelete(flow)
+      setIsDeleteFlowDialogOpen(true)
+    }
+  }
+
+  const handleCancelFlowDesigner = () => {
+    setShowFlowDesigner(false)
+    setEditingFlow(null)
+  }
+
+  const handleConfirmDelete = () => {
+    if (flowToDelete) {
+      deleteFlowMutation.mutate(flowToDelete.id)
+      setIsDeleteFlowDialogOpen(false)
+      setFlowToDelete(null)
+    }
+  }
+
+  const handleCancelDelete = () => {
+    setIsDeleteFlowDialogOpen(false)
+    setFlowToDelete(null)
   }
 
   return (
@@ -277,10 +383,11 @@ export function PromptApprovalWorkflow() {
       </div>
 
       {/* Main Tabs */}
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'flows' | 'requests')}>
-        <TabsList className="grid w-full grid-cols-2">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'flows' | 'requests' | 'designer')}>
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="flows">Approval Flows</TabsTrigger>
           <TabsTrigger value="requests">Approval Requests</TabsTrigger>
+          <TabsTrigger value="designer">Flow Designer</TabsTrigger>
         </TabsList>
 
         {/* Approval Flows Tab */}
@@ -617,6 +724,185 @@ export function PromptApprovalWorkflow() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Flow Designer Tab */}
+        <TabsContent value="designer" className="space-y-6">
+          {showFlowDesigner ? (
+            <FlowDesigner
+              initialFlow={editingFlow || undefined}
+              onSave={handleSaveCustomFlow}
+              onCancel={handleCancelFlowDesigner}
+            />
+          ) : (
+            <div className="space-y-6">
+              {/* Designer Header */}
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-semibold">Flow Designer</h2>
+                  <p className="text-muted-foreground">
+                    Create custom approval flows with drag-and-drop step designer
+                  </p>
+                </div>
+                <div className="flex space-x-2">
+                  <Button onClick={handleCreateCustomFlow}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create New Flow
+                  </Button>
+                </div>
+              </div>
+
+              {/* Enhanced Flows Overview */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Legacy Flows */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Legacy Flows</CardTitle>
+                    <CardDescription>
+                      Predefined approval workflows (read-only)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {flows.map(flow => (
+                        <div key={flow.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <div className="font-medium">{flow.name}</div>
+                            <div className="text-sm text-muted-foreground">{flow.description}</div>
+                            <Badge variant={flow.isActive ? 'default' : 'secondary'} className="mt-1">
+                              {flow.flowType.replace('_', ' → ')}
+                            </Badge>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedFlow(flow)}
+                          >
+                            <Eye className="h-3 w-3 mr-1" />
+                            View
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Custom Flows */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Custom Flows</CardTitle>
+                    <CardDescription>
+                      Advanced approval flows with role assignments
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {enhancedFlows.length > 0 ? (
+                        enhancedFlows.map(flow => (
+                          <div key={flow.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div>
+                              <div className="font-medium">{flow.name}</div>
+                              <div className="text-sm text-muted-foreground">{flow.description}</div>
+                              <div className="flex items-center space-x-2 mt-1">
+                                <Badge variant={flow.flow_type === 'custom' ? 'default' : 'secondary'}>
+                                  {flow.flow_type}
+                                </Badge>
+                                <Badge variant={flow.status === 'active' ? 'default' : 'secondary'}>
+                                  {flow.status}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  {flow.steps.length} steps
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="flex space-x-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditCustomFlow(flow)}
+                              >
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteCustomFlow(flow.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Palette className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p>No custom flows created yet</p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2"
+                            onClick={handleCreateCustomFlow}
+                          >
+                            Create Your First Flow
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Quick Stats */}
+              {flowStats && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center space-x-2">
+                        <GitBranch className="h-5 w-5 text-blue-500" />
+                        <div>
+                          <p className="text-2xl font-bold">{flowStats.total_flows}</p>
+                          <p className="text-sm text-muted-foreground">Total Flows</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <div>
+                          <p className="text-2xl font-bold">{flowStats.active_flows}</p>
+                          <p className="text-sm text-muted-foreground">Active</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center space-x-2">
+                        <Users className="h-5 w-5 text-purple-500" />
+                        <div>
+                          <p className="text-2xl font-bold">{roles.length}</p>
+                          <p className="text-sm text-muted-foreground">Available Roles</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center space-x-2">
+                        <Clock className="h-5 w-5 text-yellow-500" />
+                        <div>
+                          <p className="text-2xl font-bold">{flowStats.avg_processing_time_hours || 0}h</p>
+                          <p className="text-sm text-muted-foreground">Avg Time</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
 
       {/* Create Flow Dialog */}
@@ -680,27 +966,27 @@ export function PromptApprovalWorkflow() {
               Modify the approval workflow template
             </DialogDescription>
           </DialogHeader>
-          {editingFlow && (
+          {legacyEditingFlow && (
             <div className="space-y-4">
               <div>
                 <Label htmlFor="editFlowName">Flow Name</Label>
                 <Input
                   id="editFlowName"
-                  value={editingFlow.name}
-                  onChange={(e) => setEditingFlow({...editingFlow, name: e.target.value})}
+                  value={legacyEditingFlow.name}
+                  onChange={(e) => setLegacyEditingFlow({...legacyEditingFlow, name: e.target.value})}
                 />
               </div>
               <div>
                 <Label htmlFor="editFlowDescription">Description</Label>
                 <Textarea
                   id="editFlowDescription"
-                  value={editingFlow.description}
-                  onChange={(e) => setEditingFlow({...editingFlow, description: e.target.value})}
+                  value={legacyEditingFlow.description}
+                  onChange={(e) => setLegacyEditingFlow({...legacyEditingFlow, description: e.target.value})}
                 />
               </div>
               <div>
                 <Label htmlFor="editFlowType">Flow Type</Label>
-                <Select value={editingFlow.flowType} onValueChange={(value) => setEditingFlow({...editingFlow, flowType: value as any})}>
+                <Select value={legacyEditingFlow.flowType} onValueChange={(value) => setLegacyEditingFlow({...legacyEditingFlow, flowType: value as any})}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -712,7 +998,7 @@ export function PromptApprovalWorkflow() {
               </div>
               <div>
                 <Label htmlFor="editFlowStatus">Status</Label>
-                <Select value={editingFlow.isActive ? 'active' : 'inactive'} onValueChange={(value) => setEditingFlow({...editingFlow, isActive: value === 'active'})}>
+                <Select value={legacyEditingFlow.isActive ? 'active' : 'inactive'} onValueChange={(value) => setLegacyEditingFlow({...legacyEditingFlow, isActive: value === 'active'})}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -891,6 +1177,44 @@ export function PromptApprovalWorkflow() {
                 </Button>
               </>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Flow Confirmation Dialog */}
+      <Dialog open={isDeleteFlowDialogOpen} onOpenChange={setIsDeleteFlowDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+              <DialogTitle>Delete Approval Flow</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2">
+              Are you sure you want to delete the approval flow "<span className="font-semibold">{flowToDelete?.name}</span>"?
+              This action cannot be undone and will permanently remove the flow from the system.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-red-50 border border-red-200 rounded-md p-3 mt-4">
+            <div className="flex items-center space-x-2 text-red-800">
+              <AlertTriangle className="h-4 w-4" />
+              <span className="text-sm font-medium">Warning</span>
+            </div>
+            <p className="text-sm text-red-700 mt-1">
+              Deleting this flow will affect all pending and future approval requests that use this flow.
+            </p>
+          </div>
+          <DialogFooter className="mt-6">
+            <Button variant="outline" onClick={handleCancelDelete}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={deleteFlowMutation.isPending}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteFlowMutation.isPending ? 'Deleting...' : 'Delete Flow'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

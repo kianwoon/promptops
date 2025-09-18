@@ -53,7 +53,9 @@
 8. **the propose solution should not just targeted for specific case. it should serve general cases**
 9. **Forbidden to use REGEX to create pattern for case route**
 10. **Forbidden to use hardcode approach like keywords matching. Go to HELL if you think or do so**
-11. **All the servers support hot loading**: NEVER start and stop the web and app server.
+11. **NEVER start and stop the web and app server.**: 
+12. **NO MOCK DATA AND NO MOCK FUNCTION**: 
+
 
 ## 📊 Progress Communication
 
