@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react'
-import { generateGoogleAuthUrl, handleGoogleCallback, storeAuthTokens } from '@/lib/googleAuth'
+import { generateGoogleAuthUrl, handleGoogleCallback, storeAuthTokens, getAccessToken, refreshToken, isAccessTokenValid } from '@/lib/googleAuth'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 
 export interface User {
@@ -23,6 +23,11 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
+  tokenStatus: {
+    isValid: boolean
+    isExpired: boolean
+    timeUntilExpiry: number
+  }
 }
 
 interface AuthContextType extends AuthState {
@@ -38,6 +43,7 @@ interface AuthContextType extends AuthState {
   dbUserLoading: boolean
   dbUserError: string | null
   refreshDbUser: () => Promise<void>
+  checkAndRefreshToken: () => Promise<boolean>
 }
 
 type AuthAction =
@@ -50,12 +56,18 @@ type AuthAction =
   | { type: 'REGISTER_ERROR'; payload: string }
   | { type: 'UPDATE_USER'; payload: Partial<User> }
   | { type: 'CLEAR_ERROR' }
+  | { type: 'TOKEN_STATUS_UPDATE'; payload: { isValid: boolean; isExpired: boolean; timeUntilExpiry: number } }
 
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  tokenStatus: {
+    isValid: false,
+    isExpired: true,
+    timeUntilExpiry: 0,
+  },
 }
 
 // Role-based permissions
@@ -152,6 +164,11 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         ...state,
         error: null,
       }
+    case 'TOKEN_STATUS_UPDATE':
+      return {
+        ...state,
+        tokenStatus: action.payload,
+      }
     default:
       return state
   }
@@ -214,6 +231,82 @@ export function AuthProvider({ children }: AuthProviderProps) {
       handleGoogleAuthCallback(code)
     }
   }, [dbUser, dbUserLoading])
+
+  // Token status monitoring
+  useEffect(() => {
+    const updateTokenStatus = () => {
+      const token = getAccessToken()
+      if (!token) {
+        dispatch({
+          type: 'TOKEN_STATUS_UPDATE',
+          payload: { isValid: false, isExpired: true, timeUntilExpiry: 0 }
+        })
+        return
+      }
+
+      try {
+        const payload = token.split('.')[1]
+        const decoded = JSON.parse(atob(payload))
+        const currentTime = Math.floor(Date.now() / 1000)
+        const timeUntilExpiry = Math.max(0, decoded.exp - currentTime)
+        const expirationBuffer = 5 * 60 // 5 minutes buffer
+
+        dispatch({
+          type: 'TOKEN_STATUS_UPDATE',
+          payload: {
+            isValid: timeUntilExpiry > expirationBuffer,
+            isExpired: timeUntilExpiry <= 0,
+            timeUntilExpiry
+          }
+        })
+      } catch (error) {
+        console.error('Error updating token status:', error)
+        dispatch({
+          type: 'TOKEN_STATUS_UPDATE',
+          payload: { isValid: false, isExpired: true, timeUntilExpiry: 0 }
+        })
+      }
+    }
+
+    // Update token status immediately
+    updateTokenStatus()
+
+    // Update token status every minute
+    const interval = setInterval(updateTokenStatus, 60000)
+
+    // Clean up interval on unmount
+    return () => clearInterval(interval)
+  }, [])
+
+  // Auto-refresh token when it's about to expire
+  useEffect(() => {
+    if (state.isAuthenticated && state.tokenStatus.timeUntilExpiry > 0 && state.tokenStatus.timeUntilExpiry < 300) { // 5 minutes
+      const refreshTimeout = setTimeout(async () => {
+        try {
+          await refreshToken()
+        } catch (error) {
+          console.error('Auto token refresh failed:', error)
+          // If refresh fails, logout the user
+          logout()
+        }
+      }, Math.max(0, (state.tokenStatus.timeUntilExpiry - 60) * 1000)) // Refresh 1 minute before expiry
+
+      return () => clearTimeout(refreshTimeout)
+    }
+  }, [state.isAuthenticated, state.tokenStatus.timeUntilExpiry])
+
+  const checkAndRefreshToken = async (): Promise<boolean> => {
+    if (!isAccessTokenValid()) {
+      try {
+        await refreshToken()
+        return true
+      } catch (error) {
+        console.error('Token refresh failed:', error)
+        return false
+      }
+    }
+    return true
+  }
 
   const handleGoogleAuthCallback = async (code: string) => {
     dispatch({ type: 'LOGIN_START' })
@@ -489,6 +582,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     dbUserLoading,
     dbUserError,
     refreshDbUser: refetchDbUser,
+    checkAndRefreshToken,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

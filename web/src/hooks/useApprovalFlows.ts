@@ -8,6 +8,7 @@ import {
   UseQueryOptions,
   UseMutationOptions
 } from '@tanstack/react-query'
+import { authenticatedFetch } from '@/lib/httpInterceptor'
 import toast from 'react-hot-toast'
 
 import type {
@@ -53,58 +54,10 @@ const REQUESTS_API_BASE = '/v1/approval-requests'
 
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}, baseUrl: string = REQUESTS_API_BASE): Promise<T> {
   const url = `${baseUrl}${endpoint}`
-
-  // Get authentication token from localStorage
-  const accessToken = localStorage.getItem('access_token')
   console.log('🔍 [DEBUG] apiRequest: URL:', url)
-  console.log('🔍 [DEBUG] apiRequest: Access token exists:', !!accessToken)
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...options.headers as Record<string, string>,
-  }
-
-  // Add Authorization header if token exists
-  if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`
-    console.log('🔍 [DEBUG] apiRequest: Authorization header added')
-  } else {
-    console.log('🔍 [DEBUG] apiRequest: No authorization header (no token)')
-  }
-
-  console.log('🔍 [DEBUG] apiRequest: Headers:', headers)
-  console.log('🔍 [DEBUG] apiRequest: Options:', options)
-
-  const response = await fetch(url, {
-    headers,
-    ...options,
-  })
-
-  console.log('🔍 [DEBUG] apiRequest: Response status:', response.status)
-  console.log('🔍 [DEBUG] apiRequest: Response ok:', response.ok)
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Network error' }))
-    console.error('🔍 [DEBUG] apiRequest: Error response:', error)
-    let errorMessage = error.message || `HTTP ${response.status}`
-
-    // Handle specific error codes with better messages
-    if (response.status === 409) {
-      errorMessage = error.detail || 'A duplicate entry was found. Please check your data and try again.'
-    } else if (response.status === 400) {
-      errorMessage = error.detail || 'Invalid request. Please check your input data.'
-    } else if (response.status === 404) {
-      errorMessage = 'Resource not found.'
-    } else if (response.status === 500) {
-      errorMessage = error.detail || 'Server error. Please try again later.'
-    }
-
-    throw new Error(errorMessage)
-  }
-
-  const data = await response.json()
-  console.log('🔍 [DEBUG] apiRequest: Success response data:', data)
-  return data
+  // Use the authenticated HTTP client
+  return authenticatedFetch<T>(url, options)
 }
 
 // ============ APPROVAL FLOW HOOKS ============

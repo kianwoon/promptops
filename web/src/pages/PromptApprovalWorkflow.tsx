@@ -33,6 +33,7 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import { FlowDesigner } from '@/components/approval/FlowDesigner'
 import { FlowTemplateSelector } from '@/components/approval/FlowTemplateSelector'
+import { authenticatedFetch } from '@/lib/httpInterceptor'
 
 // Import the enhanced types
 import type {
@@ -99,12 +100,10 @@ export function PromptApprovalWorkflow() {
     refetch()
   }
 
-  // Check localStorage for auth data
-  const accessToken = localStorage.getItem('access_token')
+  // Check localStorage for auth data (for debugging only)
   const isAuthenticated = localStorage.getItem('isAuthenticated')
   const user = localStorage.getItem('user')
-  console.log('🔍 [DEBUG] PromptApprovalWorkflow: localStorage check:')
-  console.log('  - access_token exists:', !!accessToken)
+  console.log('🔍 [DEBUG] PromptApprovalWorkflow: Auth check:')
   console.log('  - isAuthenticated:', isAuthenticated)
   console.log('  - user exists:', !!user)
   if (user) {
@@ -126,29 +125,11 @@ export function PromptApprovalWorkflow() {
   // Status update mutation
   const updateFlowStatusMutation = useMutation({
     mutationFn: async ({ flowId, status }: { flowId: string; status: string }) => {
-      // Get authentication token from localStorage
-      const accessToken = localStorage.getItem('access_token')
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      }
-
-      // Add Authorization header if token exists
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`
-      }
-
-      const response = await fetch(`${FLOWS_API_BASE}/flows/${flowId}`, {
+      // Use the authenticated HTTP client
+      return await authenticatedFetch(`${FLOWS_API_BASE}/flows/${flowId}`, {
         method: 'PUT',
-        headers,
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status })
       })
-
-      if (!response.ok) {
-        throw new Error('Failed to update flow status')
-      }
-
-      return response.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approval-flows'] })

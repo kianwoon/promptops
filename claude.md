@@ -28,7 +28,7 @@
 7. **EMPTY STRING PROTECTION**: NEVER pass empty/null values to subagent_type parameter
 8. **the propose solution should not just targeted for specific case. it should serve general cases**
 9. **Forbidden to use REGEX to create pattern for case route**
-10. **NEVER start and stop the web and app server.**: 
+10. **DO NOT start and stop the web and app server.**: 
 11. **NO MOCK DATA AND NO MOCK FUNCTION**: 
 12. **NEVER USE ALEMBIC**: 
 

@@ -51,7 +51,11 @@
       "Bash(tail:*)",
       "mcp__ide__getDiagnostics",
       "Read(//tmp/**)",
-      "Bash(DATABASE_URL=postgresql://promptops:promptops@localhost:5432/promptops psql:*)"
+      "Bash(DATABASE_URL=postgresql://promptops:promptops@localhost:5432/promptops psql:*)",
+      "WebSearch",
+      "mcp__web-search-prime__webSearchPrime",
+      "WebFetch(domain:docs.claude.com)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []
@@ -140,7 +144,7 @@
           },
           {
             "type": "command",
-            "command": "say 'noted';"
+            "command": "say 'ok';"
           }
         ]
       }

@@ -6,6 +6,7 @@ import {
   UseMutationOptions
 } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { authenticatedFetch } from '@/lib/httpInterceptor'
 import type {
   Template,
   TemplateCreate,
@@ -55,30 +56,8 @@ const API_BASE = '/v1'
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE}${endpoint}`
 
-  // Get authentication token from localStorage
-  const accessToken = localStorage.getItem('access_token')
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...options.headers as Record<string, string>,
-  }
-
-  // Add Authorization header if token exists
-  if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`
-  }
-
-  const response = await fetch(url, {
-    headers,
-    ...options,
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Network error' }))
-    throw new Error(error.message || `HTTP ${response.status}`)
-  }
-
-  return response.json()
+  // Use the authenticated HTTP client
+  return authenticatedFetch<T>(url, options)
 }
 
 // Template APIs
