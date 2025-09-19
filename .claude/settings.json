@@ -41,7 +41,15 @@
       "Bash(say:*)",
       "Bash(alembic:*)",
       "Bash(mkdir:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(open http://localhost:3001/prompt-approval)",
+      "Bash(cat:*)",
+      "Bash(tr:*)",
+      "Bash(grep:*)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(./node_modules/typescript/bin/tsc:*)",
+      "Bash(tail:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": [],
     "ask": []
@@ -126,7 +134,7 @@
         "hooks": [
           {
             "type": "command",
-        "command": "if [ -f ./CLAUDE.md ]; then echo 'IMPORTANT: Before you begin, MUST read the entire CLAUDE.md file below to understand the project context, requirements, and coding style. before proceed with my request.'; fi"
+            "command": "if [ -f ./CLAUDE.md ]; then echo 'IMPORTANT: Before you begin, MUST read the entire CLAUDE.md file below to understand the project context, requirements, and coding style. before proceed with my request.'; fi"
           },
           {
             "type": "command",

@@ -7,22 +7,21 @@ from datetime import datetime
 from app.database import get_db
 from app.models import ModelCompatibility, Prompt, AuditLog
 from app.schemas import ModelCompatibilityCreate, ModelCompatibilityResponse, ModelCompatibilityUpdate
-from fastapi import Request
+from app.auth import get_current_user
 from app.services.compatibility_service import compatibility_service
 
 router = APIRouter()
 
 @router.get("/", response_model=List[ModelCompatibilityResponse])
 async def list_model_compatibilities(
-    request: Request,
     prompt_id: Optional[str] = None,
     provider_type: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """List all model compatibilities, optionally filtered by prompt or provider"""
-    current_user = request.state.current_user
     query = db.query(ModelCompatibility)
     if prompt_id:
         query = query.filter(ModelCompatibility.prompt_id == prompt_id)
@@ -34,12 +33,11 @@ async def list_model_compatibilities(
 
 @router.get("/{compatibility_id}", response_model=ModelCompatibilityResponse)
 async def get_model_compatibility(
-    request: Request,
     compatibility_id: str,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get a specific model compatibility"""
-    current_user = request.state.current_user
     compatibility = db.query(ModelCompatibility).filter(ModelCompatibility.id == compatibility_id).first()
     if not compatibility:
         raise HTTPException(status_code=404, detail="Model compatibility not found")
@@ -47,12 +45,11 @@ async def get_model_compatibility(
 
 @router.post("/", response_model=ModelCompatibilityResponse)
 async def create_model_compatibility(
-    request: Request,
     compatibility_data: ModelCompatibilityCreate = Body(...),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Create a new model compatibility"""
-    current_user = request.state.current_user
     # Verify prompt exists
     prompt = db.query(Prompt).filter(Prompt.id == compatibility_data.prompt_id).first()
     if not prompt:
@@ -94,13 +91,12 @@ async def create_model_compatibility(
 
 @router.put("/{compatibility_id}", response_model=ModelCompatibilityResponse)
 async def update_model_compatibility(
-    request: Request,
     compatibility_id: str,
     compatibility_update: ModelCompatibilityUpdate = Body(...),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Update a model compatibility"""
-    current_user = request.state.current_user
     compatibility = db.query(ModelCompatibility).filter(ModelCompatibility.id == compatibility_id).first()
     if not compatibility:
         raise HTTPException(status_code=404, detail="Model compatibility not found")
@@ -140,12 +136,11 @@ async def update_model_compatibility(
 
 @router.delete("/{compatibility_id}")
 async def delete_model_compatibility(
-    request: Request,
     compatibility_id: str,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Delete a model compatibility"""
-    current_user = request.state.current_user
     compatibility = db.query(ModelCompatibility).filter(ModelCompatibility.id == compatibility_id).first()
     if not compatibility:
         raise HTTPException(status_code=404, detail="Model compatibility not found")
@@ -178,15 +173,14 @@ async def delete_model_compatibility(
 # Compatibility Testing Endpoints
 @router.post("/test/{prompt_id}/{version}")
 async def test_prompt_compatibility(
-    request: Request,
     prompt_id: str,
     version: str,
     providers: Optional[List[str]] = None,
     force_refresh: bool = False,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Test prompt compatibility across model providers"""
-    current_user = request.state.current_user
     try:
         result = await compatibility_service.test_prompt_compatibility(
             prompt_id, version, providers, force_refresh
@@ -199,13 +193,12 @@ async def test_prompt_compatibility(
 
 @router.get("/matrix/{prompt_id}")
 async def get_compatibility_matrix(
-    request: Request,
     prompt_id: str,
     version: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get compatibility matrix for a specific prompt"""
-    current_user = request.state.current_user
     try:
         result = await compatibility_service.get_prompt_compatibility_matrix(prompt_id, version)
         return result
@@ -214,14 +207,13 @@ async def get_compatibility_matrix(
 
 @router.post("/test/batch")
 async def run_batch_compatibility_tests(
-    request: Request,
     prompt_ids: List[str],
     versions: Optional[List[str]] = None,
     providers: Optional[List[str]] = None,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Run compatibility tests for multiple prompts"""
-    current_user = request.state.current_user
     try:
         result = await compatibility_service.run_batch_compatibility_tests(
             prompt_ids, versions, providers
@@ -234,13 +226,12 @@ async def run_batch_compatibility_tests(
 
 @router.get("/trends/{prompt_id}")
 async def get_compatibility_trends(
-    request: Request,
     prompt_id: str,
     days: int = 30,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get compatibility trends over time for a prompt"""
-    current_user = request.state.current_user
     try:
         result = await compatibility_service.get_compatibility_trends(prompt_id, days)
         return result

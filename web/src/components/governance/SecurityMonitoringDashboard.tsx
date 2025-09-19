@@ -22,6 +22,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { makeAuthenticatedRequest } from '@/lib/googleAuth'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface SecurityMetrics {
   total_events: number
@@ -68,6 +70,7 @@ export function SecurityMonitoringDashboard() {
   const [alerts, setAlerts] = useState<SecurityAlert[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTimeRange, setSelectedTimeRange] = useState('24h')
+  const { user } = useAuth()
 
   useEffect(() => {
     loadSecurityData()
@@ -76,27 +79,23 @@ export function SecurityMonitoringDashboard() {
   const loadSecurityData = async () => {
     setLoading(true)
     try {
-      // Mock API calls - replace with real implementations
-      const [metricsResponse, eventsResponse, alertsResponse] = await Promise.all([
-        fetch(`/v1/governance/security/dashboard/metrics?tenant_id=default&time_range=${selectedTimeRange}`),
-        fetch(`/v1/governance/security/events?tenant_id=default&limit=50`),
-        fetch(`/v1/governance/security/alerts?tenant_id=default&limit=20`)
+      const tenantId = user?.organization || 'default-tenant'
+
+      const [metricsData, eventsData, alertsData] = await Promise.all([
+        makeAuthenticatedRequest<SecurityMetrics>(
+          `/v1/governance/security/dashboard/metrics?tenant_id=${encodeURIComponent(tenantId)}&time_range=${selectedTimeRange}`
+        ),
+        makeAuthenticatedRequest<SecurityEvent[]>(
+          `/v1/governance/security/events?tenant_id=${encodeURIComponent(tenantId)}&limit=50`
+        ),
+        makeAuthenticatedRequest<SecurityAlert[]>(
+          `/v1/governance/security/alerts?tenant_id=${encodeURIComponent(tenantId)}&limit=20`
+        )
       ])
 
-      if (metricsResponse.ok) {
-        const metricsData = await metricsResponse.json()
-        setMetrics(metricsData)
-      }
-
-      if (eventsResponse.ok) {
-        const eventsData = await eventsResponse.json()
-        setEvents(eventsData)
-      }
-
-      if (alertsResponse.ok) {
-        const alertsData = await alertsResponse.json()
-        setAlerts(alertsData)
-      }
+      setMetrics(metricsData)
+      setEvents(eventsData)
+      setAlerts(alertsData)
     } catch (error) {
       console.error('Failed to load security data:', error)
     } finally {

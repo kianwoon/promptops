@@ -66,6 +66,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
+import { makeAuthenticatedRequest } from '@/lib/googleAuth'
 
 // API Types
 interface RoleResponse {
@@ -130,40 +131,32 @@ export function RoleManagement() {
   const { data: roles = [], isLoading: rolesLoading } = useQuery({
     queryKey: ['roles'],
     queryFn: async () => {
-      const response = await fetch('/v1/roles/')
-      if (!response.ok) throw new Error('Failed to fetch roles')
-      return response.json() as Promise<RoleResponse[]>
+      return await makeAuthenticatedRequest<RoleResponse[]>('/v1/roles/')
     }
   })
 
   const { data: permissionTemplates = [], isLoading: templatesLoading } = useQuery({
     queryKey: ['permission-templates'],
     queryFn: async () => {
-      const response = await fetch('/v1/roles/templates/')
-      if (!response.ok) throw new Error('Failed to fetch permission templates')
-      return response.json() as Promise<PermissionTemplateResponse[]>
+      return await makeAuthenticatedRequest<PermissionTemplateResponse[]>('/v1/roles/templates/')
     }
   })
 
   const { data: availablePermissions = [], isLoading: permissionsLoading } = useQuery({
     queryKey: ['available-permissions'],
     queryFn: async () => {
-      const response = await fetch('/v1/roles/available-permissions/')
-      if (!response.ok) throw new Error('Failed to fetch available permissions')
-      return response.json() as Promise<PermissionInfo[]>
+      return await makeAuthenticatedRequest<PermissionInfo[]>('/v1/roles/available-permissions/')
     }
   })
 
   // API Mutations
   const createRoleMutation = useMutation({
     mutationFn: async (roleData: typeof createFormData) => {
-      const response = await fetch('/v1/roles/', {
+      return await makeAuthenticatedRequest<RoleResponse>('/v1/roles/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(roleData)
       })
-      if (!response.ok) throw new Error('Failed to create role')
-      return response.json() as Promise<RoleResponse>
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roles'] })
@@ -185,13 +178,11 @@ export function RoleManagement() {
 
   const updateRoleMutation = useMutation({
     mutationFn: async ({ roleName, roleData }: { roleName: string; roleData: Partial<RoleResponse> }) => {
-      const response = await fetch(`/v1/roles/${roleName}`, {
+      return await makeAuthenticatedRequest<RoleResponse>(`/v1/roles/${roleName}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(roleData)
       })
-      if (!response.ok) throw new Error('Failed to update role')
-      return response.json() as Promise<RoleResponse>
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roles'] })
@@ -206,11 +197,9 @@ export function RoleManagement() {
 
   const deleteRoleMutation = useMutation({
     mutationFn: async (roleName: string) => {
-      const response = await fetch(`/v1/roles/${roleName}`, {
+      return await makeAuthenticatedRequest<any>(`/v1/roles/${roleName}`, {
         method: 'DELETE'
       })
-      if (!response.ok) throw new Error('Failed to delete role')
-      return response.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roles'] })
@@ -223,11 +212,9 @@ export function RoleManagement() {
 
   const applyTemplateMutation = useMutation({
     mutationFn: async ({ templateId, roleName }: { templateId: string; roleName: string }) => {
-      const response = await fetch(`/v1/roles/${roleName}/templates/${templateId}`, {
+      return await makeAuthenticatedRequest<any>(`/v1/roles/${roleName}/templates/${templateId}`, {
         method: 'POST'
       })
-      if (!response.ok) throw new Error('Failed to apply template')
-      return response.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roles'] })
@@ -273,7 +260,7 @@ export function RoleManagement() {
   const handleCreateRole = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await onCreateRole(createFormData)
+      await createRoleMutation.mutateAsync(createFormData)
       setCreateFormData({
         name: '',
         description: '',

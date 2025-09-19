@@ -65,7 +65,22 @@ export function PromptEditor({
   onSave,
   onCancel
 }: PromptEditorProps) {
-  const { user } = useAuth()
+  const { user, isAuthenticated } = useAuth()
+
+  // Show error if not authenticated
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="p-6 border border-red-200 bg-red-50 rounded-lg">
+        <div className="flex items-center gap-2 text-red-800">
+          <AlertTriangle className="w-5 h-5" />
+          <span className="font-semibold">Authentication Required</span>
+        </div>
+        <p className="text-red-700 mt-2">
+          Please log in to edit prompts.
+        </p>
+      </div>
+    )
+  }
   const editorRef = useRef<any>(null)
   const [content, setContent] = useState('')
   const [description, setDescription] = useState('')
@@ -440,7 +455,7 @@ export function PromptEditor({
     try {
       await createApprovalRequest.mutateAsync({
         prompt_id: promptId,
-        requested_by: user?.id || 'demo-user',
+        requested_by: user.id,
         status: 'pending'
       })
       setShowApprovalDialog(false)

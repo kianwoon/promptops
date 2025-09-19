@@ -23,17 +23,27 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         )
         
         user_id: str = payload.get("sub")
-        tenant: str = payload.get("tenant")
-        roles: list = payload.get("roles", [])
-        
+        tenant: str = payload.get("tenant") or payload.get("tenant_id")
+
+        roles_claim = payload.get("roles")
+        roles: list[str] = []
+
+        if isinstance(roles_claim, list) and roles_claim:
+            roles = [str(r).lower() for r in roles_claim if r]
+        else:
+            role = payload.get("role")
+            if role:
+                roles = [str(role).lower()]
+
         if user_id is None:
             raise credentials_exception
-            
+
     except JWTError:
         raise credentials_exception
-    
+
     return {
         "user_id": user_id,
         "tenant": tenant,
+        "tenant_id": tenant,
         "roles": roles
     }

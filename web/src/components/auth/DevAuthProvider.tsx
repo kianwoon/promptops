@@ -8,7 +8,8 @@ interface DevAuthProviderProps {
 
 /**
  * Development-only authentication provider that auto-authenticates users
- * This should only be used in development mode for testing purposes
+ * WARNING: This is disabled by default for security reasons
+ * Only activates when explicitly enabled via environment variables
  */
 export function DevAuthProvider({ children }: DevAuthProviderProps) {
   const { isAuthenticated } = useAuth()
@@ -20,6 +21,10 @@ export function DevAuthProvider({ children }: DevAuthProviderProps) {
     }
 
     if (import.meta.env.DEV && !isAuthenticated) {
+      // Security warning when auto-auth is enabled
+      console.warn('⚠️  SECURITY WARNING: DevAuthProvider is auto-authenticating users')
+      console.warn('⚠️  This bypasses real authentication and should only be used for testing')
+
       // Check if user manually logged out
       const manualLogout = localStorage.getItem('logout_manual')
       if (manualLogout === 'true') {
@@ -31,6 +36,7 @@ export function DevAuthProvider({ children }: DevAuthProviderProps) {
       const devUser = getDevelopmentUser()
 
       if (devUser) {
+        console.warn('⚠️  SECURITY WARNING: Auto-authenticating with development user:', devUser.email)
         // Store in localStorage to persist across refreshes
         localStorage.setItem('user', JSON.stringify(devUser))
         localStorage.setItem('isAuthenticated', 'true')
@@ -48,10 +54,13 @@ export function DevAuthProvider({ children }: DevAuthProviderProps) {
 
 /**
  * Simple development bypass component that renders children without authentication
- * This is a quick fix for development refresh issues
+ * WARNING: This component is deprecated and should not be used
+ * Use DevProtectedRoute instead with proper security considerations
  */
 export function DevAuthBypass({ children }: { children: React.ReactNode }) {
   if (import.meta.env.DEV) {
+    console.warn('⚠️  SECURITY WARNING: DevAuthBypass is deprecated and bypasses authentication')
+    console.warn('⚠️  This should not be used in production')
     return <>{children}</>
   }
 

@@ -15,6 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useProject, useModules, useCreateModule, useUpdateModule, useDeleteModule, usePrompts, useCreatePrompt } from '@/hooks/api'
+import { useAuth } from '@/contexts/AuthContext'
 import type { ModuleCreate, ModuleUpdate, PromptCreate } from '@/types/api'
 import { formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -22,6 +23,7 @@ import toast from 'react-hot-toast'
 export function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
+  const { isAuthenticated, user } = useAuth()
   const { data: project, isLoading: projectLoading, error: projectError } = useProject(projectId || '')
   const { data: modules, isLoading: modulesLoading } = useModules(projectId)
   // We'll calculate prompt counts per module manually after data is loaded
@@ -76,26 +78,40 @@ export function ProjectDetail() {
 
   // Load prompts for each module to get accurate counts
   useEffect(() => {
-    if (modules && modules.length > 0) {
+    if (modules && modules.length > 0 && isAuthenticated) {
       const loadPromptCounts = async () => {
         const counts: Record<string, number> = {}
 
         for (const module of modules) {
           try {
-            const token = localStorage.getItem('access_token') || localStorage.getItem('token') || 'demo-token'
+            const accessToken = localStorage.getItem('access_token')
+            if (!accessToken) {
+              throw new Error('No authentication token found')
+            }
+
             const response = await fetch(`/v1/prompts?module_id=${module.id}`, {
               headers: {
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${accessToken}`
               }
             })
+
             if (response.ok) {
               const prompts = await response.json()
               counts[module.id] = prompts.length
+            } else if (response.status === 401) {
+              // Token expired or invalid
+              toast.error('Authentication expired. Please login again.')
+              navigate('/login')
+              counts[module.id] = 0
             } else {
               counts[module.id] = 0
             }
           } catch (error) {
             console.error(`Failed to load prompts for module ${module.id}:`, error)
+            if (error instanceof Error && error.message === 'No authentication token found') {
+              toast.error('Authentication required. Please login.')
+              navigate('/login')
+            }
             counts[module.id] = 0
           }
         }
@@ -104,8 +120,11 @@ export function ProjectDetail() {
       }
 
       loadPromptCounts()
+    } else if (!isAuthenticated) {
+      // Redirect to login if not authenticated
+      navigate('/login')
     }
-  }, [modules])
+  }, [modules, isAuthenticated, navigate])
   const createModule = useCreateModule()
   const updateModule = useUpdateModule()
   const deleteModule = useDeleteModule()
@@ -140,6 +159,11 @@ export function ProjectDetail() {
 
   const handleCreateModule = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isAuthenticated) {
+      toast.error('Authentication required to create modules.')
+      return
+    }
+
     try {
       // Auto-generate module ID from slot name
       const moduleId = createForm.slot.toLowerCase().replace(/[^a-z0-9]+/g, '-')
@@ -156,13 +180,25 @@ export function ProjectDetail() {
         render_body: ''
       })
       setIsCreateModuleOpen(false)
+      toast.success('Module created successfully')
     } catch (error) {
       console.error('Failed to create module:', error)
+      if (error instanceof Error && error.message.includes('401')) {
+        toast.error('Authentication expired. Please login again.')
+        navigate('/login')
+      } else {
+        toast.error('Failed to create module. Please try again.')
+      }
     }
   }
 
   const handleCreatePrompt = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isAuthenticated) {
+      toast.error('Authentication required to create prompts.')
+      return
+    }
+
     try {
       await createPrompt.mutateAsync(createPromptForm)
       setCreatePromptForm({
@@ -180,8 +216,15 @@ export function ProjectDetail() {
       })
       setIsCreatePromptOpen(false)
       setActiveModelTab('openai')
+      toast.success('Prompt created successfully')
     } catch (error) {
       console.error('Failed to create prompt:', error)
+      if (error instanceof Error && error.message.includes('401')) {
+        toast.error('Authentication expired. Please login again.')
+        navigate('/login')
+      } else {
+        toast.error('Failed to create prompt. Please try again.')
+      }
     }
   }
 
@@ -196,7 +239,7 @@ export function ProjectDetail() {
 
   const handleUpdateModule = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editingModule) return
+    if (!editingModule || !isAuthenticated) return
 
     try {
       await updateModule.mutateAsync({
@@ -206,8 +249,15 @@ export function ProjectDetail() {
       })
       setEditingModule(null)
       setUpdateForm({})
+      toast.success('Module updated successfully')
     } catch (error) {
       console.error('Failed to update module:', error)
+      if (error instanceof Error && error.message.includes('401')) {
+        toast.error('Authentication expired. Please login again.')
+        navigate('/login')
+      } else {
+        toast.error('Failed to update module. Please try again.')
+      }
     }
   }
 
@@ -235,7 +285,7 @@ export function ProjectDetail() {
   }
 
   const confirmDeleteModule = async () => {
-    if (!deleteModuleInfo) return;
+    if (!deleteModuleInfo || !isAuthenticated) return;
 
     try {
       await deleteModule.mutateAsync({
@@ -243,9 +293,15 @@ export function ProjectDetail() {
         version: deleteModuleInfo.version
       })
       setDeleteModuleInfo(null); // Close the modal
+      toast.success('Module deleted successfully')
     } catch (error) {
       console.error('Failed to delete module:', error)
-      // The API hook will handle error display and data refresh
+      if (error instanceof Error && error.message.includes('401')) {
+        toast.error('Authentication expired. Please login again.')
+        navigate('/login')
+      } else {
+        toast.error('Failed to delete module. Please try again.')
+      }
     }
   }
 
@@ -256,6 +312,15 @@ export function ProjectDetail() {
       render_body: module.render_body,
       metadata: module.metadata
     })
+  }
+
+  // Check authentication status
+  if (!isAuthenticated) {
+    return (
+      <Alert>
+        <AlertDescription>Authentication required. Please login to access project details.</AlertDescription>
+      </Alert>
+    )
   }
 
   if (projectLoading) {

@@ -782,15 +782,7 @@ export const useAvailableRoles = (options?: UseQueryOptions<CustomRole[]>) =>
   useQuery({
     queryKey: ['roles'],
     queryFn: async () => {
-      const response = await fetch('/v1/roles/', {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-      if (!response.ok) {
-        throw new Error('Failed to fetch roles')
-      }
-      return response.json()
+      return apiRequest<CustomRole[]>('/', {}, '/v1/roles')
     },
     ...options,
   })
@@ -799,15 +791,7 @@ export const useAvailablePermissionTemplates = (options?: UseQueryOptions<Permis
   useQuery({
     queryKey: ['permission-templates'],
     queryFn: async () => {
-      const response = await fetch('/v1/roles/templates/', {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-      if (!response.ok) {
-        throw new Error('Failed to fetch permission templates')
-      }
-      return response.json()
+      return apiRequest<PermissionTemplateResponse[]>('/templates/', {}, '/v1/roles')
     },
     ...options,
   })

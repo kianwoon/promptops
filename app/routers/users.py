@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -9,24 +9,15 @@ from app.models import User, UserRole, AuthProvider
 from app.auth import get_current_user
 from app.schemas import UserResponse, UserCreate, UserUpdate
 
-# Temporary: Create a mock user dependency for development
-async def get_mock_user():
-    """Mock user for development purposes"""
-    return {
-        "user_id": "demo-user",
-        "email": "demo@example.com",
-        "roles": ["admin"],
-        "tenant": "demo-tenant"
-    }
-
 router = APIRouter()
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("", response_model=List[UserResponse])
 async def list_users(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """List all users"""
     users = db.query(User.id, User.email, User.name, User.role, User.organization, User.phone, User.company_size, User.avatar, User.provider, User.provider_id, User.is_verified, User.is_active, User.default_ai_provider_id, User.created_at, User.updated_at, User.last_login).offset(skip).limit(limit).all()
@@ -34,9 +25,10 @@ async def list_users(
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
+    request: Request,
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific user"""
     user = db.query(User.id, User.email, User.name, User.role, User.organization, User.phone, User.company_size, User.avatar, User.provider, User.provider_id, User.is_verified, User.is_active, User.default_ai_provider_id, User.created_at, User.updated_at, User.last_login).filter(User.id == user_id).first()
@@ -44,11 +36,12 @@ async def get_user(
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-@router.post("/", response_model=UserResponse)
+@router.post("", response_model=UserResponse)
 async def create_user(
+    request: Request,
     user_data: UserCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new user"""
     # Check if user with email already exists
@@ -80,10 +73,11 @@ async def create_user(
 
 @router.put("/{user_id}", response_model=UserResponse)
 async def update_user(
+    request: Request,
     user_id: str,
     user_data: UserUpdate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a user"""
     user = db.query(User).filter(User.id == user_id).first()
@@ -116,9 +110,10 @@ async def update_user(
 
 @router.delete("/{user_id}")
 async def delete_user(
+    request: Request,
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete a user"""
     user = db.query(User).filter(User.id == user_id).first()
@@ -132,9 +127,10 @@ async def delete_user(
 
 @router.get("/email/{email}", response_model=UserResponse)
 async def get_user_by_email(
+    request: Request,
     email: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a user by email"""
     user = db.query(User.id, User.email, User.name, User.role, User.organization, User.phone, User.company_size, User.avatar, User.provider, User.provider_id, User.is_verified, User.is_active, User.default_ai_provider_id, User.created_at, User.updated_at, User.last_login).filter(User.email == email).first()

@@ -531,6 +531,7 @@ class AIAssistantProviderCreate(BaseModel):
     organization: Optional[str] = None
     project: Optional[str] = None
     config_json: Optional[Dict[str, Any]] = None
+    is_default: Optional[bool] = False
 
     model_config = ConfigDict(
         protected_namespaces=()
@@ -545,6 +546,7 @@ class AIAssistantProviderUpdate(BaseModel):
     organization: Optional[str] = None
     project: Optional[str] = None
     config_json: Optional[Dict[str, Any]] = None
+    is_default: Optional[bool] = None
 
     model_config = ConfigDict(
         protected_namespaces=()
@@ -565,6 +567,7 @@ class AIAssistantProviderResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_used_at: Optional[datetime] = None
+    is_default: bool = False
 
     model_config = ConfigDict(
         protected_namespaces=(),
@@ -588,6 +591,7 @@ class AIAssistantProviderEditResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_used_at: Optional[datetime] = None
+    is_default: bool = False
 
     model_config = ConfigDict(
         protected_namespaces=(),

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from typing import List
 import hashlib
@@ -12,23 +12,15 @@ from app.database import get_db
 from app.models import Template, AuditLog
 from app.schemas import TemplateCreate, TemplateResponse
 from app.auth import get_current_user
-
-# Temporary: Create a mock user dependency for development
-async def get_mock_user():
-    """Mock user for development purposes"""
-    return {
-        "user_id": "demo-user",
-        "email": "demo@example.com",
-        "roles": ["admin"],
-        "tenant": "demo-tenant"
-    }
+from app.config import settings
 
 router = APIRouter()
 
-@router.get("/", response_model=List[TemplateResponse])
+@router.get("", response_model=List[TemplateResponse])
 async def list_all_templates(
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """List all templates"""
     templates = db.query(Template).all()
@@ -48,8 +40,9 @@ async def list_all_templates(
 @router.get("/{template_id}", response_model=List[TemplateResponse])
 async def list_template_versions(
     template_id: str,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """List all versions of a template"""
     templates = db.query(Template).filter(Template.id == template_id).all()
@@ -70,8 +63,9 @@ async def list_template_versions(
 async def get_template_version(
     template_id: str,
     version: str,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Get specific version of a template"""
     template = db.query(Template).filter(
@@ -92,11 +86,12 @@ async def get_template_version(
         created_at=template.created_at
     )
 
-@router.post("/", response_model=TemplateResponse)
+@router.post("", response_model=TemplateResponse)
 async def create_template(
     template_data: TemplateCreate = Body(...),
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new template version"""
     # Parse YAML and validate
@@ -173,8 +168,9 @@ async def create_template(
 async def delete_template(
     template_id: str,
     version: str,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete a template version"""
     template = db.query(Template).filter(
@@ -217,8 +213,9 @@ async def delete_template(
 @router.delete("/{template_id}")
 async def delete_template_all_versions(
     template_id: str,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete all versions of a template and its aliases"""
     # Find all template versions

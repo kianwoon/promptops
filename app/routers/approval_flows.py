@@ -24,100 +24,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-async def get_current_user_or_demo(request: Request = None):
-    """
-    Get current user from JWT token or fall back to demo user for development.
-    This provides a smooth transition between development and production authentication.
-    """
-    try:
-        # Try to get the real user from JWT authentication first
-        if request:
-            from fastapi.security import HTTPAuthorizationCredentials
-            from fastapi import Depends
-            from app.database import get_db
-            import jwt
-            from app.config import settings
-
-            # Try to extract Authorization header manually
-            auth_header = request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                token = auth_header.split(" ")[1]
-
-                logger.info(f"🔐 JWT token validation attempt for request to {request.url.path}")
-                logger.info(f"🔐 Using secret key: {settings.secret_key[:10]}...")
-
-                # First, try to extract tenant_id from JWT token (more efficient)
-                try:
-                    payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-                    user_id = payload.get("sub")
-                    tenant_id = payload.get("tenant_id")
-                    email = payload.get("email")
-                    role = payload.get("role", "user")
-
-                    logger.info(f"🔐 JWT token successfully decoded for user: {user_id}")
-
-                    if tenant_id:
-                        # Get user info from token
-                        return {
-                            "user_id": user_id,
-                            "tenant": tenant_id,
-                            "tenant_id": tenant_id,
-                            "email": email,
-                            "name": "",  # Name not in token, would need DB query
-                            "roles": [role]
-                        }
-                    else:
-                        logger.warning(f"🔐 JWT token missing tenant_id for user: {user_id}")
-
-                except jwt.ExpiredSignatureError:
-                    logger.warning("🔐 JWT token expired")
-                except jwt.InvalidTokenError as e:
-                    logger.warning(f"🔐 Invalid JWT token: {e}")
-                except Exception as e:
-                    logger.error(f"🔐 Unexpected error in JWT decoding: {e}")
-
-                # Fallback: Get database session and query user
-                db = next(get_db())
-
-                try:
-                    logger.info("🔐 Attempting database query for user authentication")
-                    # Use AuthService to get the full user object with tenant information
-                    auth_service = AuthService()
-                    user = await auth_service.get_current_user(token, db)
-
-                    if user:
-                        logger.info(f"🔐 Successfully retrieved user from database: {user.id}")
-                        # Return user object with tenant_id (using organization as tenant_id)
-                        return {
-                            "user_id": user.id,
-                            "tenant": user.organization or "default-tenant",
-                            "tenant_id": user.organization or "default-tenant",
-                            "email": user.email,
-                            "name": user.name,
-                            "roles": [user.role.value] if user.role else ["user"]
-                        }
-                    else:
-                        logger.warning("🔐 Database query returned no user")
-                except Exception as e:
-                    logger.error(f"🔐 Database query failed: {e}")
-                finally:
-                    db.close()
-    except Exception as e:
-        logger.error(f"🔐 Authentication system error: {e}")
-
-    # If JWT authentication fails, check for demo user in request state (development mode)
-    if request and hasattr(request.state, 'current_user') and request.state.current_user:
-        logger.info("🔐 Using request state demo user")
-        return request.state.current_user
-
-    # Ultimate fallback for development
-    logger.warning("🔐 Using ultimate fallback demo user - authentication failed completely")
-    return {
-        "user_id": "demo-user",
-        "tenant": "demo-tenant",
-        "tenant_id": "demo-tenant",
-        "roles": ["admin"]
-    }
 
 # Enum transformation utilities
 def transform_frontend_step_type_to_backend(step_type: str) -> str:
@@ -251,7 +157,7 @@ async def list_approval_flows(
     category: Optional[str] = Query(None),
     tenant_id: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
-    current_user: dict = Depends(get_current_user_or_demo),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """List all approval flows with pagination and filtering"""
@@ -319,7 +225,7 @@ async def create_approval_flow(
     """Create a new approval flow"""
     try:
         # Get current user using our helper function
-        current_user = await get_current_user_or_demo(request)
+        current_user = await get_current_user(request)
 
         # Generate unique ID and version
         flow_id = str(uuid.uuid4())
@@ -409,7 +315,7 @@ async def create_approval_flow(
 async def update_approval_flow(
     flow_id: str,
     flow_data: ApprovalFlowUpdate,
-    current_user: dict = Depends(get_current_user_or_demo),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Update an existing approval flow"""
@@ -497,7 +403,7 @@ async def update_approval_flow(
 @router.get("/flows/{flow_id}", response_model=ApprovalFlowResponse)
 async def get_approval_flow(
     flow_id: str,
-    current_user: dict = Depends(get_current_user_or_demo),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get a specific approval flow by ID"""
@@ -543,7 +449,7 @@ async def get_approval_flow(
 @router.delete("/flows/{flow_id}")
 async def delete_approval_flow(
     flow_id: str,
-    current_user: dict = Depends(get_current_user_or_demo),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Delete an approval flow"""
@@ -582,7 +488,7 @@ async def delete_approval_flow(
 async def get_approval_flow_stats(
     tenant_id: Optional[str] = Query(None),
     days: int = Query(30, ge=1, le=365),
-    current_user: dict = Depends(get_current_user_or_demo),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get approval flow statistics"""
@@ -682,7 +588,7 @@ async def get_approval_flow_stats(
 @router.post("/flows/validate", response_model=ValidationResponse)
 async def validate_approval_flow(
     flow_data: Dict[str, Any] = Body(...),
-    current_user: dict = Depends(get_current_user_or_demo),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Validate an approval flow configuration"""
@@ -754,7 +660,7 @@ async def validate_approval_flow(
 async def get_step_templates(
     category: Optional[str] = Query(None),
     is_system: Optional[bool] = Query(None),
-    current_user: dict = Depends(get_current_user_or_demo),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get available step templates for creating approval flows"""
@@ -868,7 +774,7 @@ async def get_step_templates(
 @router.post("/flows/{flow_id}/activate")
 async def activate_approval_flow(
     flow_id: str,
-    current_user: dict = Depends(get_current_user_or_demo),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Activate an approval flow"""
@@ -897,7 +803,7 @@ async def activate_approval_flow(
 @router.post("/flows/{flow_id}/deactivate")
 async def deactivate_approval_flow(
     flow_id: str,
-    current_user: dict = Depends(get_current_user_or_demo),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Deactivate an approval flow"""
@@ -929,7 +835,7 @@ async def get_flow_instances(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     status: Optional[str] = Query(None),
-    current_user: dict = Depends(get_current_user_or_demo),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get instances of a specific approval flow"""

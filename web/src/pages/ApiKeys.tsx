@@ -52,6 +52,7 @@ import { useAuth, usePermission } from '@/contexts/AuthContext'
 import { formatDate } from '@/lib/utils'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { makeAuthenticatedRequest } from '@/lib/googleAuth'
 
 // API interfaces
 interface Project {
@@ -114,87 +115,36 @@ interface ClientApiKeyCreateResponse {
 
 // API service functions
 const fetchApiKeys = async (): Promise<ClientApiKey[]> => {
-  const response = await fetch('/v1/client/web/auth/api-keys', {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  })
-  if (!response.ok) {
-    throw new Error('Failed to fetch API keys')
-  }
-  return response.json()
+  return makeAuthenticatedRequest<ClientApiKey[]>('/v1/client/web/auth/api-keys')
 }
 
 const createApiKey = async (data: any): Promise<ClientApiKeyCreateResponse> => {
   console.log('Sending API key creation data:', JSON.stringify(data, null, 2))
-  const response = await fetch('/v1/client/auth/api-keys', {
+  return makeAuthenticatedRequest<ClientApiKeyCreateResponse>('/v1/client/auth/api-keys', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify(data)
   })
-  if (!response.ok) {
-    const errorData = await response.json()
-    console.error('API key creation error:', JSON.stringify(errorData, null, 2))
-    const errorMessage = errorData.detail && Array.isArray(errorData.detail)
-      ? errorData.detail.map((err: any) => {
-          console.log('Validation error item:', JSON.stringify(err, null, 2))
-          return err.msg || err.loc?.join('.') || JSON.stringify(err)
-        }).join(', ')
-      : errorData.detail || JSON.stringify(errorData)
-    throw new Error(errorMessage || 'Failed to create API key')
-  }
-  return response.json()
 }
 
 const revokeApiKey = async (apiKeyId: string): Promise<void> => {
-  const response = await fetch(`/v1/client/web/auth/api-keys/${apiKeyId}`, {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
+  await makeAuthenticatedRequest<{ message: string }>(`/v1/client/web/auth/api-keys/${apiKeyId}`, {
+    method: 'DELETE'
   })
-  if (!response.ok) {
-    throw new Error('Failed to revoke API key')
-  }
 }
 
 const fetchUsageStats = async (): Promise<UsageStats> => {
-  const response = await fetch('/v1/client/usage/stats', {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  })
-  if (!response.ok) {
-    throw new Error('Failed to fetch usage stats')
-  }
-  return response.json()
+  return makeAuthenticatedRequest<UsageStats>('/v1/client/usage/stats')
 }
 
 const fetchUsageLimits = async (): Promise<UsageLimits> => {
-  const response = await fetch('/v1/client/web/usage/limits', {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  })
-  if (!response.ok) {
-    throw new Error('Failed to fetch usage limits')
-  }
-  return response.json()
+  return makeAuthenticatedRequest<UsageLimits>('/v1/client/web/usage/limits')
 }
 
 const fetchProjects = async (): Promise<Project[]> => {
-  const response = await fetch('/v1/projects', {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  })
-  if (!response.ok) {
-    throw new Error('Failed to fetch projects')
-  }
-  return response.json()
+  return makeAuthenticatedRequest<Project[]>('/v1/projects')
 }
 
 export function ApiKeysPage() {

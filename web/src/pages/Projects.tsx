@@ -21,11 +21,38 @@ export function Projects() {
   const createProject = useCreateProject()
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
-  const { user } = useAuth()
+  const { user, isAuthenticated } = useAuth()
+
+  // Redirect if not authenticated
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
+            <p className="text-muted-foreground">
+              Please log in to view your projects.
+            </p>
+          </div>
+        </div>
+        <Card className="border-dashed border-2 border-muted-foreground/20">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <div className="p-4 rounded-full bg-muted mb-4">
+              <Folder className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Authentication Required</h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              Please log in to access your projects and create new ones.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
-  const [createForm, setCreateForm] = useState<ProjectCreate>({ name: '', description: '', owner: user?.id || 'demo-user' })
+  const [createForm, setCreateForm] = useState<ProjectCreate>({ name: '', description: '', owner: user.id })
   const [updateForm, setUpdateForm] = useState<ProjectUpdate>({})
 
   // Search and filter state
@@ -78,7 +105,7 @@ export function Projects() {
     e.preventDefault()
     try {
       await createProject.mutateAsync(createForm)
-      setCreateForm({ name: '', description: '', owner: user?.id || 'demo-user' })
+      setCreateForm({ name: '', description: '', owner: user.id })
       setIsCreateDialogOpen(false)
     } catch (error) {
       console.error('Failed to create project:', error)

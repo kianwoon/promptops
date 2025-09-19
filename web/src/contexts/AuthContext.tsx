@@ -305,60 +305,52 @@ export function AuthProvider({ children }: AuthProviderProps) {
     dispatch({ type: 'LOGIN_START' })
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Make API call to backend for authentication
+      const response = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      })
 
-      // Mock user database
-      const mockUsers: User[] = [
-        {
-          id: '1',
-          email: 'admin@company.com',
-          name: 'John Admin',
-          role: 'admin',
-          organization: 'Acme Corp',
-          phone: '+1 (555) 123-4567',
-          companySize: '201-1000',
-          createdAt: '2024-01-15T10:30:00Z',
-          lastLogin: new Date().toISOString(),
-        },
-        {
-          id: '2',
-          email: 'user@company.com',
-          name: 'Jane User',
-          role: 'user',
-          organization: 'Acme Corp',
-          phone: '+1 (555) 234-5678',
-          companySize: '201-1000',
-          createdAt: '2024-02-01T14:20:00Z',
-          lastLogin: new Date().toISOString(),
-        },
-        {
-          id: '3',
-          email: 'viewer@company.com',
-          name: 'Bob Viewer',
-          role: 'viewer',
-          organization: 'Acme Corp',
-          phone: '+1 (555) 345-6789',
-          companySize: '201-1000',
-          createdAt: '2024-02-15T09:45:00Z',
-          lastLogin: new Date().toISOString(),
-        },
-      ]
-
-      const user = mockUsers.find(u => u.email === email)
-      
-      if (!user) {
-        throw new Error('User not found')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Login failed')
       }
 
-      // Update last login
-      const updatedUser = { ...user, lastLogin: new Date().toISOString() }
-      
-      // Store in localStorage
-      localStorage.setItem('user', JSON.stringify(updatedUser))
+      const data = await response.json()
+
+      // Transform the user data to match the User interface
+      const user: User = {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        role: data.user.role as 'admin' | 'user' | 'viewer',
+        organization: data.user.organization || '',
+        avatar: data.user.avatar,
+        phone: data.user.phone,
+        companySize: data.user.company_size,
+        createdAt: data.user.created_at,
+        lastLogin: data.user.last_login,
+        provider: 'local',
+        isVerified: data.user.is_verified,
+      }
+
+      // Store auth tokens
+      storeAuthTokens({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      })
+
+      // Store user data
+      localStorage.setItem('user', JSON.stringify(user))
       localStorage.setItem('isAuthenticated', 'true')
 
-      dispatch({ type: 'LOGIN_SUCCESS', payload: updatedUser })
+      dispatch({ type: 'LOGIN_SUCCESS', payload: user })
+
+      // Refetch fresh user data from database
+      refetchDbUser()
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed'
       dispatch({ type: 'LOGIN_ERROR', payload: errorMessage })
@@ -370,26 +362,60 @@ export function AuthProvider({ children }: AuthProviderProps) {
     dispatch({ type: 'REGISTER_START' })
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Make API call to backend for registration
+      const response = await fetch('/api/v1/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: userData.email,
+          password: userData.password,
+          first_name: userData.firstName,
+          last_name: userData.lastName,
+          company: userData.company,
+          phone: userData.phone,
+          company_size: userData.companySize,
+        }),
+      })
 
-      const newUser: User = {
-        id: Date.now().toString(),
-        email: userData.email,
-        name: `${userData.firstName} ${userData.lastName}`,
-        role: 'user', // Default role for new users
-        organization: userData.company,
-        phone: userData.phone,
-        companySize: userData.companySize,
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Registration failed')
       }
 
-      // Store in localStorage
+      const data = await response.json()
+
+      // Transform the user data to match the User interface
+      const newUser: User = {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        role: data.user.role as 'admin' | 'user' | 'viewer',
+        organization: data.user.organization || '',
+        avatar: data.user.avatar,
+        phone: data.user.phone,
+        companySize: data.user.company_size,
+        createdAt: data.user.created_at,
+        lastLogin: data.user.last_login,
+        provider: 'local',
+        isVerified: data.user.is_verified,
+      }
+
+      // Store auth tokens
+      storeAuthTokens({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      })
+
+      // Store user data
       localStorage.setItem('user', JSON.stringify(newUser))
       localStorage.setItem('isAuthenticated', 'true')
 
       dispatch({ type: 'REGISTER_SUCCESS', payload: newUser })
+
+      // Refetch fresh user data from database
+      refetchDbUser()
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Registration failed'
       dispatch({ type: 'REGISTER_ERROR', payload: errorMessage })

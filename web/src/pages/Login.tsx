@@ -53,30 +53,7 @@ export function Login() {
     }
   }, [isAuthenticated, navigate])
 
-  const mockUsers: User[] = [
-    {
-      id: '1',
-      email: 'admin@company.com',
-      name: 'John Admin',
-      role: 'admin',
-      organization: 'Acme Corp'
-    },
-    {
-      id: '2',
-      email: 'user@company.com',
-      name: 'Jane User',
-      role: 'user',
-      organization: 'Acme Corp'
-    },
-    {
-      id: '3',
-      email: 'viewer@company.com',
-      name: 'Bob Viewer',
-      role: 'viewer',
-      organization: 'Acme Corp'
-    }
-  ]
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -255,21 +232,6 @@ export function Login() {
                   Sign up
                 </Link>
               </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Demo Credentials */}
-        <Card className="mt-6 border-blue-200 bg-blue-50">
-          <CardContent className="p-4">
-            <div className="flex items-center mb-2">
-              <Shield className="w-4 h-4 text-blue-600 mr-2" />
-              <span className="font-medium text-blue-900">Demo Credentials</span>
-            </div>
-            <div className="space-y-1 text-sm text-blue-700">
-              <div><strong>Admin:</strong> admin@company.com / any password</div>
-              <div><strong>User:</strong> user@company.com / any password</div>
-              <div><strong>Viewer:</strong> viewer@company.com / any password</div>
             </div>
           </CardContent>
         </Card>

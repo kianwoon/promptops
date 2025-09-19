@@ -37,6 +37,7 @@ import {
   AuditLogExportRequest,
   AuditLogExportResponse
 } from '@/types/governance'
+import { makeAuthenticatedRequest } from '@/lib/googleAuth'
 
 export function Governance() {
   return (
@@ -182,41 +183,36 @@ export function Governance() {
             <CardContent>
               <AuditTrailViewer
                 onFetchLogs={async (filters: AuditLogFilter) => {
-                  // Mock API call - replace with real implementation
+                  // Real API call to governance service
                   const params = new URLSearchParams()
                   Object.entries(filters).forEach(([key, value]) => {
                     if (value !== undefined && value !== null) {
                       params.append(key, value.toString())
                     }
                   })
-                  const response = await fetch(`/v1/governance/audit-logs?${params}`)
-                  if (!response.ok) throw new Error('Failed to fetch audit logs')
-                  return response.json()
+                  return makeAuthenticatedRequest<AuditLog[]>(`/v1/governance/audit-logs?${params}`)
                 }}
                 onFetchStats={async (startDate?: string, endDate?: string) => {
-                  // Mock API call - replace with real implementation
+                  // Real API call to governance service
                   const params = new URLSearchParams()
                   if (startDate) params.append('start_date', startDate)
                   if (endDate) params.append('end_date', endDate)
-                  const response = await fetch(`/v1/governance/audit-logs/stats?${params}`)
-                  if (!response.ok) throw new Error('Failed to fetch audit stats')
-                  return response.json()
+                  return makeAuthenticatedRequest<AuditLogStats>(`/v1/governance/audit-logs/stats?${params}`)
                 }}
                 onExportLogs={async (request: AuditLogExportRequest) => {
-                  // Mock API call - replace with real implementation
-                  const response = await fetch('/v1/governance/audit-logs/export', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(request)
-                  })
-                  if (!response.ok) throw new Error('Failed to export audit logs')
-                  return response.json()
+                  // Real API call to governance service
+                  return makeAuthenticatedRequest<AuditLogExportResponse>(
+                    '/v1/governance/audit-logs/export',
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(request)
+                    }
+                  )
                 }}
                 onGetLogDetails={async (logId: string) => {
-                  // Mock API call - replace with real implementation
-                  const response = await fetch(`/v1/governance/audit-logs/${logId}`)
-                  if (!response.ok) throw new Error('Failed to fetch audit log details')
-                  return response.json()
+                  // Real API call to governance service
+                  return makeAuthenticatedRequest<AuditLog>(`/v1/governance/audit-logs/${logId}`)
                 }}
               />
             </CardContent>

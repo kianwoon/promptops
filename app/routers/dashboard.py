@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Dict, Any, Optional
@@ -8,25 +8,17 @@ import structlog
 from app.database import get_db
 from app.models import Project, Module, Prompt, Template, ModelCompatibility, ApprovalRequest, AuditLog
 from app.auth import get_current_user
-
-# Temporary: Create a mock user dependency for development
-async def get_mock_user():
-    """Mock user for development purposes"""
-    return {
-        "user_id": "demo-user",
-        "email": "demo@example.com",
-        "roles": ["admin"],
-        "tenant": "demo-tenant"
-    }
+from app.config import settings
 
 logger = structlog.get_logger()
 router = APIRouter()
 
 @router.get("/dashboard/usage")
 async def get_dashboard_usage(
+    request: Request,
     time_range: str = Query("7d", description="Time range: 7d, 30d, 90d"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Get usage statistics for dashboard"""
     try:
@@ -130,9 +122,10 @@ async def get_dashboard_usage(
 
 @router.get("/dashboard/recent-activity")
 async def get_recent_activity(
+    request: Request,
     limit: int = Query(10, description="Number of recent activities to return"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Get recent system activity"""
     try:
@@ -167,8 +160,9 @@ async def get_recent_activity(
 
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(
+    request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Get overall dashboard statistics"""
     try:

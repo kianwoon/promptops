@@ -109,7 +109,8 @@ async def create_provider(
             config_json=provider.config_json or {},
             created_at=datetime.now(),
             updated_at=datetime.now(),
-            last_used_at=None
+            last_used_at=None,
+            is_default=False
         )
         mock_providers.append(mock_provider)
         return mock_provider

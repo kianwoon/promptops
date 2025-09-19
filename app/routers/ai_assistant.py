@@ -148,7 +148,8 @@ async def create_provider(
                 config_json=provider.config_json,
                 created_at=db_provider.created_at,
                 updated_at=db_provider.updated_at,
-                last_used_at=db_provider.last_used_at
+                last_used_at=db_provider.last_used_at,
+                is_default=getattr(db_provider, "is_default", False)
             )
         except Exception as e:
             logger.error(f"Error processing created provider {provider_id}: {e}")
@@ -216,7 +217,8 @@ async def get_providers(
                     config_json=p.config_json,
                     created_at=p.created_at,
                     updated_at=p.updated_at,
-                    last_used_at=p.last_used_at
+                    last_used_at=p.last_used_at,
+                    is_default=getattr(p, "is_default", False)
                 ))
             except Exception as e:
                 logger.error(f"Error processing provider {p.id}: {e}")
@@ -292,7 +294,8 @@ async def get_provider(
             config_json=provider.config_json,
             created_at=provider.created_at,
             updated_at=provider.updated_at,
-            last_used_at=provider.last_used_at
+            last_used_at=provider.last_used_at,
+            is_default=getattr(provider, "is_default", False)
         )
     except Exception as e:
         logger.error(f"Error processing provider {provider_id}: {e}")
@@ -372,7 +375,8 @@ async def update_provider(
         config_json=provider.config_json,
         created_at=provider.created_at,
         updated_at=provider.updated_at,
-        last_used_at=provider.last_used_at
+        last_used_at=provider.last_used_at,
+        is_default=getattr(provider, "is_default", False)
     )
 
 @router.delete("/providers/{provider_id}")

@@ -14,6 +14,7 @@ class UserRole(Enum):
     EDITOR = "editor"
     APPROVER = "approver"
     VIEWER = "viewer"
+    USER = "user"
 
 class ResourceType(Enum):
     PROJECT = "project"
@@ -301,6 +302,9 @@ class RBACService:
                 # Policy permissions (read-only)
                 Permission.READ_POLICY.value,
                 Permission.EVALUATE_POLICY.value,
+
+                # Role visibility
+                Permission.VIEW_ROLE_HIERARCHY.value,
             },
             UserRole.APPROVER: {
                 # Read permissions for all resources
@@ -317,6 +321,9 @@ class RBACService:
 
                 # Policy permissions
                 Permission.EVALUATE_POLICY.value,
+
+                # Role visibility
+                Permission.VIEW_ROLE_HIERARCHY.value,
             },
             UserRole.VIEWER: {
                 # Read-only permissions
@@ -325,7 +332,21 @@ class RBACService:
                 Permission.READ_PROMPT.value,
                 Permission.READ_TEMPLATE.value,
                 Permission.READ_POLICY.value,
-            }
+
+                # Role visibility
+                Permission.VIEW_ROLE_HIERARCHY.value,
+            },
+            UserRole.USER: {
+                # Basic user permissions (same as viewer for now)
+                Permission.READ_PROJECT.value,
+                Permission.READ_MODULE.value,
+                Permission.READ_PROMPT.value,
+                Permission.READ_TEMPLATE.value,
+                Permission.READ_POLICY.value,
+
+                # Role visibility
+                Permission.VIEW_ROLE_HIERARCHY.value,
+            },
         }
 
         # Define resource hierarchy
@@ -378,14 +399,20 @@ class RBACService:
         Check if user can perform action on resource
         """
         try:
-            # Convert role strings to enums
+            # Convert role strings to enums with case-insensitive matching
             user_role_enums = []
             for role in user_roles:
                 try:
+                    # Try direct conversion first
                     user_role_enums.append(UserRole(role))
                 except ValueError:
-                    logger.warning("Invalid user role", role=role)
-                    continue
+                    # Try case-insensitive matching
+                    try:
+                        normalized_role = role.lower() if role else role
+                        user_role_enums.append(UserRole(normalized_role))
+                    except ValueError:
+                        logger.warning("Invalid user role", role=role)
+                        continue
 
             if not user_role_enums:
                 return False
@@ -448,11 +475,19 @@ class RBACService:
 
         for role_str in user_roles:
             try:
+                # Try direct conversion first
                 role = UserRole(role_str)
                 role_permissions = self.role_permissions.get(role, set())
                 permissions.update(role_permissions)
             except ValueError:
-                continue
+                # Try case-insensitive matching
+                try:
+                    normalized_role = role_str.lower() if role_str else role_str
+                    role = UserRole(normalized_role)
+                    role_permissions = self.role_permissions.get(role, set())
+                    permissions.update(role_permissions)
+                except ValueError:
+                    continue
 
         return permissions
 
@@ -620,7 +655,8 @@ class RBACService:
             UserRole.ADMIN: "Full system access with all permissions",
             UserRole.EDITOR: "Can create and manage projects, modules, and prompts",
             UserRole.APPROVER: "Can review and approve prompts, view audit logs",
-            UserRole.VIEWER: "Read-only access to all resources"
+            UserRole.VIEWER: "Read-only access to all resources",
+            UserRole.USER: "Basic user with read-only access to resources"
         }
         return descriptions.get(role, "Unknown role")
 
@@ -1369,12 +1405,21 @@ class RBACService:
             for role_name in user_roles:
                 # Check system roles
                 try:
+                    # Try direct conversion first
                     role_enum = UserRole(role_name)
                     role_permissions = self.role_permissions.get(role_enum, set())
                     effective_permissions.update(role_permissions)
                     inheritance_chain.append(f"system:{role_name}")
                 except ValueError:
-                    pass
+                    # Try case-insensitive matching
+                    try:
+                        normalized_role = role_name.lower() if role_name else role_name
+                        role_enum = UserRole(normalized_role)
+                        role_permissions = self.role_permissions.get(role_enum, set())
+                        effective_permissions.update(role_permissions)
+                        inheritance_chain.append(f"system:{normalized_role}")
+                    except ValueError:
+                        pass
 
                 # Check custom roles
                 if role_name in self.custom_roles:

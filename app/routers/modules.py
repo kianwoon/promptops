@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -8,27 +8,19 @@ from app.database import get_db
 from app.models import Module, Project, AuditLog, Prompt
 from app.schemas import ModuleCreate, ModuleResponse, ModuleUpdate
 from app.auth import get_current_user
-
-# Temporary: Create a mock user dependency for development
-async def get_mock_user():
-    """Mock user for development purposes"""
-    return {
-        "user_id": "demo-user",
-        "email": "demo@example.com",
-        "roles": ["admin"],
-        "tenant": "demo-tenant"
-    }
+from app.config import settings
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[ModuleResponse])
+@router.get("", response_model=List[ModuleResponse])
 async def list_modules(
     project_id: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """List all modules, optionally filtered by project"""
     try:
@@ -45,8 +37,9 @@ async def list_modules(
 @router.get("/{module_id}", response_model=List[ModuleResponse])
 async def get_module_versions(
     module_id: str,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Get all versions of a module"""
     modules = db.query(Module).filter(Module.id == module_id).all()
@@ -58,8 +51,9 @@ async def get_module_versions(
 async def get_module_version(
     module_id: str,
     version: str,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Get specific version of a module"""
     module = db.query(Module).filter(
@@ -72,11 +66,12 @@ async def get_module_version(
 
     return module
 
-@router.post("/", response_model=ModuleResponse)
+@router.post("", response_model=ModuleResponse)
 async def create_module(
     module_data: ModuleCreate = Body(...),
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new module version"""
     try:
@@ -132,8 +127,9 @@ async def update_module(
     module_id: str,
     version: str,
     module_update: ModuleUpdate = Body(...),
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a module version"""
     module = db.query(Module).filter(
@@ -179,8 +175,9 @@ async def update_module(
 async def delete_module(
     module_id: str,
     version: str,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete a module version - only allowed if module has no prompts"""
     module = db.query(Module).filter(

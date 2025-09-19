@@ -228,7 +228,7 @@ class AuthService:
                 provider_id=id_token_payload["sub"],
                 is_verified=True,
                 avatar=user_info.get("picture"),
-                role=UserRole.USER,  # Default role for new users
+                role=UserRole.VIEWER,  # Default role for new users
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow(),
             )
@@ -280,13 +280,31 @@ class AuthService:
         try:
             payload = self.verify_token(token, "access")
             user_id = payload.get("sub")
-            
+
             if not user_id:
+                logger.warning("🔐 JWT token missing user_id (sub)")
                 return None
-            
+
+            logger.info(f"🔐 Looking for user with ID: {user_id}")
             user = db.query(User).filter(User.id == user_id).first()
-            return user
-            
+
+            if user:
+                logger.info(f"🔐 Found user: {user.email} with organization: {user.organization}")
+            else:
+                logger.warning(f"🔐 User with ID {user_id} not found in database")
+
+            if user:
+                return {
+                    "user_id": user.id,
+                    "tenant": user.organization or "default-tenant",
+                    "tenant_id": user.organization or "default-tenant",
+                    "email": user.email,
+                    "name": user.name,
+                    "roles": [user.role.value] if user.role else ["user"]
+                }
+            else:
+                return None
+
         except Exception as e:
             logger.error("Error getting current user", error=str(e))
             return None

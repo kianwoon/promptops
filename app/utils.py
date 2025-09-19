@@ -11,6 +11,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import os
 
+from app.config import settings
+
 logger = structlog.get_logger()
 
 def generate_id() -> str:
@@ -245,24 +247,47 @@ def get_client_ip(request) -> str:
 
     return request.client.host if request.client else "unknown"
 
+def _load_candidate_key(raw_key: str, source: str) -> Optional[bytes]:
+    """Validate and normalize a potential encryption key from the given source."""
+    if not raw_key:
+        return None
+
+    candidate = raw_key.strip()
+    if not candidate:
+        return None
+
+    key_bytes = candidate.encode()
+
+    try:
+        Fernet(key_bytes)
+        print(f"DEBUG: Using {source} key, length: {len(key_bytes)}")
+        return key_bytes
+    except Exception as e:
+        print(f"Error using {source} key: {e}")
+        if len(key_bytes) == 32:
+            try:
+                import base64
+                encoded_key = base64.urlsafe_b64encode(key_bytes)
+                Fernet(encoded_key)
+                print(f"DEBUG: Converted raw 32-byte {source} key to Fernet format")
+                return encoded_key
+            except Exception as convert_error:
+                print(f"Error converting raw {source} key: {convert_error}")
+
+    return None
+
+
 def get_encryption_key() -> bytes:
     """Get or create encryption key for secret keys"""
-    # Try environment variable first (most reliable)
-    env_key = os.getenv('PROMPTOPS_ENCRYPTION_KEY')
+    # Try environment variable first (most reliable when exported)
+    env_key = _load_candidate_key(os.getenv('PROMPTOPS_ENCRYPTION_KEY'), "environment variable")
     if env_key:
-        try:
-            # Ensure the key is 32 bytes for Fernet
-            key_bytes = env_key.encode()
-            if len(key_bytes) < 32:
-                # Pad with null bytes
-                key_bytes = key_bytes.ljust(32, b'\0')
-            elif len(key_bytes) > 32:
-                # Truncate to 32 bytes
-                key_bytes = key_bytes[:32]
-            print(f"DEBUG: Using env key, length: {len(key_bytes)}")
-            return key_bytes
-        except Exception as e:
-            print(f"Error using environment variable key: {e}")
+        return env_key
+
+    # Fallback to settings-derived key (supports .env files loaded via pydantic settings)
+    settings_key = _load_candidate_key(settings.promptops_encryption_key, "application settings")
+    if settings_key:
+        return settings_key
 
     # Fallback to file-based storage
     key_file = "/tmp/promptops_encryption_key"

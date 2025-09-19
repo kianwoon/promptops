@@ -1,7 +1,7 @@
 import React from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
-import { getDevelopmentUser, shouldSkipAuth, logDevConfig } from '@/lib/devConfig'
+import { shouldSkipAuth, logDevConfig, isDevelopmentAutoAuthEnabled } from '@/lib/devConfig'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -9,8 +9,8 @@ interface ProtectedRouteProps {
 }
 
 /**
- * Development-friendly ProtectedRoute that handles auth state gracefully
- * This version provides better support for development workflows
+ * Development-aware ProtectedRoute that respects security settings
+ * Auto-authentication is disabled by default for security
  */
 export function DevProtectedRoute({ children, requiredRoles }: ProtectedRouteProps) {
   const { isAuthenticated, user, hasRole, isLoading } = useAuth()
@@ -23,39 +23,17 @@ export function DevProtectedRoute({ children, requiredRoles }: ProtectedRoutePro
   React.useEffect(() => {
     if (isDevelopment) {
       logDevConfig()
+      // Security warning if auto-auth is enabled
+      if (isDevelopmentAutoAuthEnabled()) {
+        console.warn('⚠️  SECURITY WARNING: Auto-authentication is enabled in development mode')
+        console.warn('⚠️  This bypasses real authentication and should only be used for testing')
+      }
     }
   }, [])
 
-  // Development mode: Auto-authenticate if needed
-  React.useEffect(() => {
-    if (isDevelopment && !isAuthenticated && !isLoading) {
-      const storedAuth = localStorage.getItem('isAuthenticated')
-      const storedUser = localStorage.getItem('user')
-      const manualLogout = localStorage.getItem('logout_manual')
-
-      // Don't auto-authenticate if user manually logged out
-      if (manualLogout === 'true') {
-        localStorage.removeItem('logout_manual')
-        return
-      }
-
-      if (!storedAuth || storedAuth !== 'true' || !storedUser) {
-        // Set up a default development user
-        const devUser = getDevelopmentUser()
-
-        if (devUser) {
-          localStorage.setItem('user', JSON.stringify(devUser))
-          localStorage.setItem('isAuthenticated', 'true')
-
-          // Reload the page to apply the new auth state
-          window.location.reload()
-        }
-      }
-    }
-  }, [isDevelopment, isAuthenticated, isLoading])
-
-  // Check if we should skip authentication entirely (development mode)
+  // Check if we should skip authentication entirely (development mode with explicit setting)
   if (shouldSkipAuth()) {
+    console.warn('⚠️  SECURITY WARNING: Authentication checks are being skipped')
     return <>{children}</>
   }
 
@@ -68,20 +46,9 @@ export function DevProtectedRoute({ children, requiredRoles }: ProtectedRoutePro
     )
   }
 
-  // For development, if we have auth data, consider it valid
-  if (isDevelopment) {
-    const storedAuth = localStorage.getItem('isAuthenticated')
-    const storedUser = localStorage.getItem('user')
-
-    if (storedAuth === 'true' && storedUser) {
-      // In development, if we have stored auth, proceed
-      return <>{children}</>
-    }
-  }
-
-  // Normal authentication logic for production
+  // Normal authentication logic for both development and production
   if (!isAuthenticated) {
-    // Check if we have stored auth data
+    // Check if we have stored auth data that might need context sync
     const storedAuth = localStorage.getItem('isAuthenticated')
     const storedUser = localStorage.getItem('user')
 

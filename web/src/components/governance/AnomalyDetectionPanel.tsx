@@ -33,6 +33,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { makeAuthenticatedRequest } from '@/lib/googleAuth'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface AnomalyDetectionRule {
   id: string
@@ -89,6 +91,7 @@ export function AnomalyDetectionPanel() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
+  const { user } = useAuth()
 
   useEffect(() => {
     loadAnomalyDetectionData()
@@ -97,21 +100,19 @@ export function AnomalyDetectionPanel() {
   const loadAnomalyDetectionData = async () => {
     setLoading(true)
     try {
-      // Mock API calls - replace with real implementations
-      const [rulesResponse, resultsResponse] = await Promise.all([
-        fetch('/v1/governance/security/anomaly-rules?tenant_id=default'),
-        fetch('/v1/governance/security/anomaly-results?tenant_id=default&limit=50')
+      const tenantId = user?.organization || 'default-tenant'
+
+      const [rulesData, resultsData] = await Promise.all([
+        makeAuthenticatedRequest<AnomalyDetectionRule[]>(
+          `/v1/governance/security/anomaly-rules?tenant_id=${encodeURIComponent(tenantId)}`
+        ),
+        makeAuthenticatedRequest<AnomalyDetectionResult[]>(
+          `/v1/governance/security/anomaly-results?tenant_id=${encodeURIComponent(tenantId)}&limit=50`
+        )
       ])
 
-      if (rulesResponse.ok) {
-        const rulesData = await rulesResponse.json()
-        setRules(rulesData)
-      }
-
-      if (resultsResponse.ok) {
-        const resultsData = await resultsResponse.json()
-        setResults(resultsData)
-      }
+      setRules(rulesData)
+      setResults(resultsData)
     } catch (error) {
       console.error('Failed to load anomaly detection data:', error)
     } finally {

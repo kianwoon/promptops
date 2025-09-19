@@ -33,8 +33,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useAuth, usePermission } from '@/contexts/AuthContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { makeAuthenticatedRequest } from '@/lib/googleAuth'
 import {
   Alert,
   AlertDescription,
@@ -54,11 +56,13 @@ interface AIProvider {
   name: string
   provider_type: string
   status: string
+  user_id: string
   api_key?: string
   api_key_prefix?: string
   api_base_url?: string
   model_name?: string
   organization?: string
+  is_default?: boolean
   created_at: string
   last_used_at?: string
 }
@@ -77,7 +81,7 @@ interface SystemPrompt {
 }
 
 export function AssistantPage() {
-  const { user } = useAuth()
+  const { user, isAuthenticated } = useAuth()
   const [providers, setProviders] = useState<AIProvider[]>([])
   const [systemPrompts, setSystemPrompts] = useState<SystemPrompt[]>([])
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
@@ -93,20 +97,16 @@ export function AssistantPage() {
   const [testResult, setTestResult] = useState<any>(null)
   const [showApiKey, setShowApiKey] = useState(false)
 
-  // Helper function to get authentication token
-  const getAuthToken = () => {
-    return localStorage.getItem('access_token') || localStorage.getItem('token') || 'demo-token'
-  }
-
   // Form states
   const [providerForm, setProviderForm] = useState({
     name: '',
-    provider_type: '',
+    provider_type: 'openai',
     api_key: '',
     api_base_url: '',
     model_name: '',
     organization: '',
-    project: ''
+    project: '',
+    is_default: false
   })
 
   const [promptForm, setPromptForm] = useState({
@@ -119,82 +119,94 @@ export function AssistantPage() {
 
   // Load providers and prompts
   useEffect(() => {
-    loadProviders()
-    loadSystemPrompts()
-    loadDefaultProvider()
-  }, [])
+    if (user && isAuthenticated) {
+      loadProviders()
+      loadSystemPrompts()
+      loadDefaultProvider()
+    }
+  }, [user, isAuthenticated])
+
+  useEffect(() => {
+    if (providers.length === 0) {
+      setSelectedProvider(null)
+      return
+    }
+
+    setSelectedProvider((current) => {
+      if (current && providers.some((provider) => provider.id === current)) {
+        return current
+      }
+
+      const defaultEntry = providers.find((provider) => provider.is_default)
+      return (defaultEntry ?? providers[0])?.id ?? null
+    })
+  }, [providers])
 
   const loadProviders = async () => {
+    if (!isAuthenticated || !user) {
+      setError({ type: 'error', message: 'Authentication required. Please login to access AI Assistant features.' })
+      return
+    }
+
     setIsLoading(true)
     try {
-      const response = await fetch('/v1/ai-assistant/providers', {
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        // Backend returns array directly, not wrapped in providers property
-        setProviders(Array.isArray(data) ? data : data.providers || [])
+      const data = await makeAuthenticatedRequest<AIProvider[]>('/v1/ai-assistant/providers')
+      const providerList = Array.isArray(data) ? data : []
+      setProviders(providerList)
+
+      const defaultFromList = providerList.find((provider) => provider.is_default)
+      if (defaultFromList) {
+        setDefaultProvider(defaultFromList)
       } else {
-        setError({ type: 'error', message: "Failed to load AI providers" })
+        setDefaultProvider(null)
       }
-    } catch (error) {
-      setError({ type: 'error', message: "Failed to load providers" })
+    } catch (error: any) {
+      const message = error?.message || 'Failed to load providers'
+      setError({ type: 'error', message })
     } finally {
       setIsLoading(false)
     }
   }
 
   const loadDefaultProvider = async () => {
+    if (!isAuthenticated || !user) return
+
     try {
-      const response = await fetch('/v1/ai-assistant/default-provider', {
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setDefaultProvider(data)
-      } else if (response.status === 404) {
-        // No default provider set
-        setDefaultProvider(null)
-      } else {
-        console.error("Failed to load default provider")
+      const data = await makeAuthenticatedRequest<AIProvider | null>('/v1/ai-assistant/default-provider')
+      setDefaultProvider(data ?? null)
+    } catch (error: any) {
+      const message = error?.message
+      if (message) {
+        setError({ type: 'error', message })
       }
-    } catch (error) {
-      console.error("Failed to load default provider")
     }
   }
 
   const loadSystemPrompts = async () => {
+    if (!isAuthenticated || !user) return
+
     try {
-      const response = await fetch('/v1/ai-assistant/system-prompts', {
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        // Backend returns array directly, not wrapped in system_prompts property
-        setSystemPrompts(Array.isArray(data) ? data : data.system_prompts || [])
-      }
-    } catch (error) {
-      console.error('Failed to load system prompts:', error)
+      const data = await makeAuthenticatedRequest<SystemPrompt[]>('/v1/ai-assistant/system-prompts')
+      setSystemPrompts(Array.isArray(data) ? data : [])
+    } catch (error: any) {
+      const message = error?.message || 'Failed to load system prompts'
+      setError({ type: 'error', message })
     }
   }
 
   const handleProviderSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user?.id) return
+    if (!isAuthenticated || !user?.id) {
+      setError({ type: 'error', message: 'Authentication required. Please login to add AI providers.' })
+      return
+    }
 
     setIsLoading(true)
     try {
-      const response = await fetch('/v1/ai-assistant/providers', {
+      await makeAuthenticatedRequest('/v1/ai-assistant/providers', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAuthToken()}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           ...providerForm,
@@ -202,24 +214,21 @@ export function AssistantPage() {
         })
       })
 
-      if (response.ok) {
-        setError({ type: 'success', message: "AI provider added successfully" })
-        setProviderForm({
-          name: '',
-          provider_type: '',
-          api_key: '',
-          api_base_url: '',
-          model_name: '',
-          organization: '',
-          project: ''
-        })
-        loadProviders()
-      } else {
-        const error = await response.json()
-        setError({ type: 'error', message: error.detail || "Failed to add provider" })
-      }
-    } catch (error) {
-      setError({ type: 'error', message: "Failed to add provider" })
+      setError({ type: 'success', message: "AI provider added successfully" })
+      setProviderForm({
+        name: '',
+        provider_type: 'openai',
+        api_key: '',
+        api_base_url: '',
+        model_name: '',
+        organization: '',
+        project: '',
+        is_default: false
+      })
+      loadProviders()
+    } catch (error: any) {
+      const message = error?.message || 'Failed to add provider'
+      setError({ type: 'error', message })
     } finally {
       setIsLoading(false)
     }
@@ -230,56 +239,48 @@ export function AssistantPage() {
   }
 
   const handleProviderDeleteConfirm = async () => {
-    if (!deleteProviderInfo) return
+    if (!deleteProviderInfo || !isAuthenticated || !user) return
 
     try {
-      const response = await fetch(`/v1/ai-assistant/providers/${deleteProviderInfo.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`
-        }
+      await makeAuthenticatedRequest(`/v1/ai-assistant/providers/${deleteProviderInfo.id}`, {
+        method: 'DELETE'
       })
 
-      if (response.ok) {
-        setError({ type: 'success', message: "Provider deleted successfully" })
-        loadProviders()
-      } else {
-        setError({ type: 'error', message: "Failed to delete provider" })
-      }
-    } catch (error) {
-      setError({ type: 'error', message: "Failed to delete provider" })
+      setError({ type: 'success', message: "Provider deleted successfully" })
+      loadProviders()
+    } catch (error: any) {
+      const message = error?.message || 'Failed to delete provider'
+      setError({ type: 'error', message })
     } finally {
       setDeleteProviderInfo(null)
     }
   }
 
   const handleProviderEdit = async (provider: AIProvider) => {
-    try {
-      // Fetch full provider details including API key
-      const response = await fetch(`/v1/ai-assistant/providers/${provider.id}/edit`, {
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`
-        }
-      })
+    if (!isAuthenticated || !user) {
+      setError({ type: 'error', message: 'Authentication required. Please login to edit providers.' })
+      return
+    }
 
-      if (response.ok) {
-        const fullProvider = await response.json()
-        setProviderForm({
-          name: fullProvider.name,
-          provider_type: fullProvider.provider_type,
-          api_key: fullProvider.api_key || '', // Show existing API key for editing
-          api_base_url: fullProvider.api_base_url || '',
-          model_name: fullProvider.model_name || '',
-          organization: fullProvider.organization || '',
-          project: ''
-        })
-        setEditingProvider(provider.id)
-        setTestResult(null) // Clear test results when editing
-      } else {
-        setError({ type: 'error', message: "Failed to load provider details for editing" })
-      }
-    } catch (error) {
-      setError({ type: 'error', message: "Failed to load provider details for editing" })
+    try {
+      const fullProvider = await makeAuthenticatedRequest<any>(
+        `/v1/ai-assistant/providers/${provider.id}/edit`
+      )
+      setProviderForm({
+        name: fullProvider.name,
+        provider_type: fullProvider.provider_type,
+        api_key: fullProvider.api_key || '',
+        api_base_url: fullProvider.api_base_url || '',
+        model_name: fullProvider.model_name || '',
+        organization: fullProvider.organization || '',
+        project: '',
+        is_default: !!fullProvider.is_default
+      })
+      setEditingProvider(provider.id)
+      setTestResult(null)
+    } catch (error: any) {
+      const message = error?.message || 'Failed to load provider details for editing'
+      setError({ type: 'error', message })
     }
   }
 
@@ -294,7 +295,8 @@ export function AssistantPage() {
       api_base_url: '',
       model_name: '',
       organization: '',
-      project: ''
+      project: '',
+      is_default: false
     })
   }
 
@@ -304,29 +306,27 @@ export function AssistantPage() {
 
   const handleProviderUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editingProvider || !user?.id) return
+    if (!isAuthenticated || !editingProvider || !user?.id) {
+      setError({ type: 'error', message: 'Authentication required. Please login to update providers.' })
+      return
+    }
 
     setIsLoading(true)
     try {
-      const response = await fetch(`/v1/ai-assistant/providers/${editingProvider}`, {
+      await makeAuthenticatedRequest(`/v1/ai-assistant/providers/${editingProvider}`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAuthToken()}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(providerForm)
       })
 
-      if (response.ok) {
-        setError({ type: 'success', message: "Provider updated successfully" })
-        handleCancelEdit()
-        loadProviders()
-      } else {
-        const error = await response.json()
-        setError({ type: 'error', message: error.detail || "Failed to update provider" })
-      }
-    } catch (error) {
-      setError({ type: 'error', message: "Failed to update provider" })
+      setError({ type: 'success', message: "Provider updated successfully" })
+      handleCancelEdit()
+      loadProviders()
+    } catch (error: any) {
+      const message = error?.message || 'Failed to update provider'
+      setError({ type: 'error', message })
     } finally {
       setIsLoading(false)
     }
@@ -334,15 +334,17 @@ export function AssistantPage() {
 
   const handlePromptSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedProvider || !user?.id) return
+    if (!isAuthenticated || !selectedProvider || !user?.id) {
+      setError({ type: 'error', message: 'Authentication required. Please login to add system prompts.' })
+      return
+    }
 
     setIsSavingPrompt(true)
     try {
-      const response = await fetch('/v1/ai-assistant/system-prompts', {
+      await makeAuthenticatedRequest('/v1/ai-assistant/system-prompts', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAuthToken()}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           ...promptForm,
@@ -351,22 +353,18 @@ export function AssistantPage() {
         })
       })
 
-      if (response.ok) {
-        setError({ type: 'success', message: "System prompt added successfully" })
-        setPromptForm({
-          name: '',
-          content: '',
-          description: '',
-          prompt_type: 'create_prompt',
-          is_mas_feat_compliant: true
-        })
-        loadSystemPrompts()
-      } else {
-        const error = await response.json()
-        setError({ type: 'error', message: error.detail || "Failed to add prompt" })
-      }
-    } catch (error) {
-      setError({ type: 'error', message: "Failed to add prompt" })
+      setError({ type: 'success', message: "System prompt added successfully" })
+      setPromptForm({
+        name: '',
+        content: '',
+        description: '',
+        prompt_type: 'create_prompt',
+        is_mas_feat_compliant: true
+      })
+      loadSystemPrompts()
+    } catch (error: any) {
+      const message = error?.message || 'Failed to add prompt'
+      setError({ type: 'error', message })
     } finally {
       setIsSavingPrompt(false)
     }
@@ -386,36 +384,34 @@ export function AssistantPage() {
 
   const handlePromptUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editingPrompt || !user?.id) return
+    if (!isAuthenticated || !editingPrompt || !user?.id) {
+      setError({ type: 'error', message: 'Authentication required. Please login to update system prompts.' })
+      return
+    }
 
     setIsSavingPrompt(true)
     try {
-      const response = await fetch(`/v1/ai-assistant/system-prompts/${editingPrompt}`, {
+      await makeAuthenticatedRequest(`/v1/ai-assistant/system-prompts/${editingPrompt}`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAuthToken()}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(promptForm)
       })
 
-      if (response.ok) {
-        setError({ type: 'success', message: "System prompt updated successfully" })
-        setEditingPrompt(null)
-        setPromptForm({
-          name: '',
-          content: '',
-          description: '',
-          prompt_type: 'create_prompt',
-          is_mas_feat_compliant: true
-        })
-        loadSystemPrompts()
-      } else {
-        const error = await response.json()
-        setError({ type: 'error', message: error.detail || "Failed to update prompt" })
-      }
-    } catch (error) {
-      setError({ type: 'error', message: "Failed to update prompt" })
+      setError({ type: 'success', message: "System prompt updated successfully" })
+      setEditingPrompt(null)
+      setPromptForm({
+        name: '',
+        content: '',
+        description: '',
+        prompt_type: 'create_prompt',
+        is_mas_feat_compliant: true
+      })
+      loadSystemPrompts()
+    } catch (error: any) {
+      const message = error?.message || 'Failed to update prompt'
+      setError({ type: 'error', message })
     } finally {
       setIsSavingPrompt(false)
     }
@@ -426,44 +422,43 @@ export function AssistantPage() {
   }
 
   const handlePromptDeleteConfirm = async () => {
-    if (!deletePromptInfo) return
+    if (!deletePromptInfo || !isAuthenticated || !user) return
 
     try {
-      const response = await fetch(`/v1/ai-assistant/system-prompts/${deletePromptInfo.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`
-        }
+      await makeAuthenticatedRequest(`/v1/ai-assistant/system-prompts/${deletePromptInfo.id}`, {
+        method: 'DELETE'
       })
 
-      if (response.ok) {
-        setError({ type: 'success', message: "System prompt deleted successfully" })
-        loadSystemPrompts()
-      } else {
-        setError({ type: 'error', message: "Failed to delete system prompt" })
-      }
-    } catch (error) {
-      setError({ type: 'error', message: "Failed to delete system prompt" })
+      setError({ type: 'success', message: "System prompt deleted successfully" })
+      loadSystemPrompts()
+    } catch (error: any) {
+      const message = error?.message || 'Failed to delete system prompt'
+      setError({ type: 'error', message })
     } finally {
       setDeletePromptInfo(null)
     }
   }
 
   const handleProviderTest = async (id: string) => {
+    if (!isAuthenticated || !user) {
+      setError({ type: 'error', message: 'Authentication required. Please login to test providers.' })
+      return
+    }
+
     setIsTesting(true)
     setTestResult(null) // Clear previous test results
     setError(null) // Clear previous errors
     try {
-      const response = await fetch(`/v1/ai-assistant/providers/${id}/test`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAuthToken()}`
-        },
-        body: JSON.stringify({ test_message: 'hi' })
-      })
-
-      const result = await response.json()
+      const result = await makeAuthenticatedRequest<any>(
+        `/v1/ai-assistant/providers/${id}/test`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ test_message: 'hi' })
+        }
+      )
 
       if (result.success) {
         setTestResult(result)
@@ -475,50 +470,62 @@ export function AssistantPage() {
         }
         setError({ type: 'error', message: errorMessage })
       }
-    } catch (error) {
-      setError({ type: 'error', message: "Failed to test provider - connection error" })
+    } catch (error: any) {
+      const message = error?.message || 'Failed to test provider - connection error'
+      setError({ type: 'error', message })
     } finally {
       setIsTesting(false)
     }
   }
 
   const handleSetDefaultProvider = async (providerId: string) => {
+    if (!isAuthenticated || !user) {
+      setError({ type: 'error', message: 'Authentication required. Please login to set default provider.' })
+      return
+    }
+
     try {
-      const response = await fetch(`/v1/ai-assistant/default-provider/${providerId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setDefaultProvider(data)
-        setError({ type: 'success', message: 'Default provider updated successfully' })
-      } else {
-        const errorData = await response.json()
-        setError({ type: 'error', message: errorData.detail || 'Failed to set default provider' })
-      }
-    } catch (error) {
-      setError({ type: 'error', message: 'Failed to set default provider' })
+      const data = await makeAuthenticatedRequest<AIProvider>(
+        `/v1/ai-assistant/default-provider/${providerId}`,
+        { method: 'POST' }
+      )
+      setDefaultProvider(data)
+      setError({ type: 'success', message: 'Default provider updated successfully' })
+      await loadProviders()
+    } catch (error: any) {
+      const message = error?.message || 'Failed to set default provider'
+      setError({ type: 'error', message })
     }
   }
 
-  const handleClearDefaultProvider = async () => {
+  const handleClearDefaultProvider = async (provider?: AIProvider) => {
+    if (!isAuthenticated || !user) {
+      setError({ type: 'error', message: 'Authentication required. Please login to clear default provider.' })
+      return
+    }
+
     try {
-      const response = await fetch('/v1/ai-assistant/default-provider', {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`
-        }
-      })
-      if (response.ok) {
-        setDefaultProvider(null)
-        setError({ type: 'success', message: 'Default provider cleared successfully' })
+      const isAdminUser = (user.role || '').toLowerCase() === 'admin'
+      if (provider && provider.user_id !== user.id && isAdminUser) {
+        await makeAuthenticatedRequest(`/v1/ai-assistant/providers/${provider.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ is_default: false })
+        })
+        await loadProviders()
       } else {
-        setError({ type: 'error', message: 'Failed to clear default provider' })
+        await makeAuthenticatedRequest(`/v1/ai-assistant/default-provider`, {
+          method: 'DELETE'
+        })
+        setDefaultProvider(null)
+        await loadProviders()
       }
-    } catch (error) {
-      setError({ type: 'error', message: 'Failed to clear default provider' })
+      setError({ type: 'success', message: 'Default provider cleared successfully' })
+    } catch (error: any) {
+      const message = error?.message || 'Failed to clear default provider'
+      setError({ type: 'error', message })
     }
   }
 
@@ -532,6 +539,37 @@ export function AssistantPage() {
   ]
 
   const selectedProviderData = providers.find(p => p.id === selectedProvider)
+  const isAdmin = (user?.role || '').toLowerCase() === 'admin'
+  const filteredPrompts = selectedProvider
+    ? systemPrompts.filter((prompt) => prompt.provider_id === selectedProvider)
+    : systemPrompts
+
+  // Show authentication required message if not authenticated
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="flex items-center justify-center gap-2">
+              <AlertCircle className="h-5 w-5" />
+              Authentication Required
+            </CardTitle>
+            <CardDescription>
+              Please login to access AI Assistant features
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              className="w-full"
+              onClick={() => window.location.href = '/login'}
+            >
+              Go to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -791,6 +829,17 @@ export function AssistantPage() {
                       />
                     </div>
 
+                    <div className="flex items-center justify-between rounded border px-3 py-2">
+                      <div>
+                        <Label className="text-sm font-medium">Default Provider</Label>
+                        <p className="text-xs text-muted-foreground">Use this provider as the default for assistant actions.</p>
+                      </div>
+                      <Switch
+                        checked={providerForm.is_default}
+                        onCheckedChange={(checked) => setProviderForm(prev => ({ ...prev, is_default: checked }))}
+                      />
+                    </div>
+
                     <div className="flex space-x-2">
                       <Button type="submit" className="flex-1" disabled={isLoading}>
                         {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : (editingProvider ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />)}
@@ -838,97 +887,113 @@ export function AssistantPage() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {providers.map((provider) => (
-                        <div
-                          key={provider.id}
-                          className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                            selectedProvider === provider.id
-                              ? 'border-primary bg-primary/5'
-                              : 'border-border hover:bg-accent'
-                          }`}
-                          onClick={() => setSelectedProvider(provider.id)}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2 mb-2">
-                                <h3 className="font-medium">{provider.name}</h3>
-                                {defaultProvider?.id === provider.id && (
-                                  <Badge variant="default" className="bg-yellow-500 text-white">
-                                    <Star className="w-3 h-3 mr-1 fill-current" />
-                                    Default
+                      {providers.map((provider) => {
+                        const isOwner = provider.user_id === user?.id
+                        const isDefault = !!(provider.is_default || defaultProvider?.id === provider.id)
+                        const canModifyProvider = isOwner || isAdmin
+
+                        return (
+                          <div
+                            key={provider.id}
+                            className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                              selectedProvider === provider.id
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border hover:bg-accent'
+                            }`}
+                            onClick={() => setSelectedProvider(provider.id)}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-2 mb-2">
+                                  <h3 className="font-medium">{provider.name}</h3>
+                                  {isDefault && (
+                                    <Badge variant="default" className="bg-yellow-500 text-white">
+                                      <Star className="w-3 h-3 mr-1 fill-current" />
+                                      Default
+                                    </Badge>
+                                  )}
+                                  <Badge variant={
+                                    provider.status === 'active' ? 'default' :
+                                    provider.status === 'error' ? 'destructive' : 'secondary'
+                                  }>
+                                    {provider.status}
                                   </Badge>
+                                  <Badge variant="outline">
+                                    {provider.provider_type}
+                                  </Badge>
+                                </div>
+                                <div className="text-sm text-muted-foreground space-y-1">
+                                  <div>API Key: {provider.api_key_prefix ? `••••••••${provider.api_key_prefix.slice(-4)}` : 'Not set'}</div>
+                                  {provider.model_name && <div>Model: {provider.model_name}</div>}
+                                  {provider.organization && <div>Organization: {provider.organization}</div>}
+                                  <div>Created: {new Date(provider.created_at).toLocaleDateString()}</div>
+                                  {provider.last_used_at && (
+                                    <div>Last used: {new Date(provider.last_used_at).toLocaleDateString()}</div>
+                                  )}
+                                {!isOwner && (
+                                  <div>Owner: {provider.user_id}</div>
                                 )}
-                                <Badge variant={
-                                  provider.status === 'active' ? 'default' :
-                                  provider.status === 'error' ? 'destructive' : 'secondary'
-                                }>
-                                  {provider.status}
-                                </Badge>
-                                <Badge variant="outline">
-                                  {provider.provider_type}
-                                </Badge>
+                                </div>
                               </div>
-                              <div className="text-sm text-muted-foreground space-y-1">
-                                <div>API Key: {provider.api_key_prefix ? `••••••••${provider.api_key_prefix.slice(-4)}` : 'Not set'}</div>
-                                {provider.model_name && <div>Model: {provider.model_name}</div>}
-                                {provider.organization && <div>Organization: {provider.organization}</div>}
-                                <div>Created: {new Date(provider.created_at).toLocaleDateString()}</div>
-                                {provider.last_used_at && (
-                                  <div>Last used: {new Date(provider.last_used_at).toLocaleDateString()}</div>
-                                )}
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (!canModifyProvider) return
+                                    handleProviderTest(provider.id)
+                                  }}
+                                  disabled={isTesting || !canModifyProvider}
+                                >
+                                  <TestTube className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant={isDefault ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (!canModifyProvider) return
+                                    if (isDefault) {
+                                      handleClearDefaultProvider(provider)
+                                    } else {
+                                      handleSetDefaultProvider(provider.id)
+                                    }
+                                  }}
+                                  title={isDefault ? "Remove as default" : "Set as default"}
+                                  disabled={!canModifyProvider}
+                                >
+                                  <Star className={`w-4 h-4 ${isDefault ? 'fill-current' : ''}`} />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (!canModifyProvider) return
+                                    handleProviderEdit(provider)
+                                  }}
+                                  disabled={!canModifyProvider}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (!canModifyProvider) return
+                                    handleProviderDelete(provider.id, provider.name)
+                                  }}
+                                  disabled={!canModifyProvider}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
                               </div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleProviderTest(provider.id)
-                                }}
-                                disabled={isTesting}
-                              >
-                                <TestTube className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant={defaultProvider?.id === provider.id ? "default" : "outline"}
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (defaultProvider?.id === provider.id) {
-                                    handleClearDefaultProvider()
-                                  } else {
-                                    handleSetDefaultProvider(provider.id)
-                                  }
-                                }}
-                                title={defaultProvider?.id === provider.id ? "Remove as default" : "Set as default"}
-                              >
-                                <Star className={`w-4 h-4 ${defaultProvider?.id === provider.id ? 'fill-current' : ''}`} />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleProviderEdit(provider)
-                                }}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleProviderDelete(provider.id, provider.name)
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </CardContent>
@@ -1056,7 +1121,7 @@ export function AssistantPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {systemPrompts.length === 0 ? (
+                  {filteredPrompts.length === 0 ? (
                     <div className="text-center py-8">
                       <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                       <h3 className="text-lg font-medium mb-2">No system prompts configured</h3>
@@ -1066,46 +1131,65 @@ export function AssistantPage() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {systemPrompts.map((prompt) => (
-                        <div key={prompt.id} className="p-4 border border-border rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center space-x-2">
-                              <h3 className="font-medium">{prompt.name}</h3>
-                              <Badge variant={prompt.is_active ? 'default' : 'secondary'}>
-                                {prompt.is_active ? 'Active' : 'Inactive'}
-                              </Badge>
-                              <Badge variant={prompt.is_mas_feat_compliant ? 'default' : 'outline'}>
-                                {prompt.is_mas_feat_compliant ? 'MAS FEAT' : 'Custom'}
-                              </Badge>
+                      {filteredPrompts.map((prompt) => {
+                        const owningProvider = providers.find((provider) => provider.id === prompt.provider_id)
+                        const canModifyPrompt = (owningProvider?.user_id === user?.id) || isAdmin
+
+                        return (
+                          <div key={prompt.id} className="p-4 border border-border rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center space-x-2">
+                                <h3 className="font-medium">{prompt.name}</h3>
+                                <Badge variant={prompt.is_active ? 'default' : 'secondary'}>
+                                  {prompt.is_active ? 'Active' : 'Inactive'}
+                                </Badge>
+                                <Badge variant={prompt.is_mas_feat_compliant ? 'default' : 'outline'}>
+                                  {prompt.is_mas_feat_compliant ? 'MAS FEAT' : 'Custom'}
+                                </Badge>
+                                {owningProvider && (
+                                  <Badge variant="outline">
+                                    Provider: {owningProvider.name}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (!canModifyPrompt) return
+                                    handlePromptEdit(prompt)
+                                  }}
+                                  disabled={!canModifyPrompt}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (!canModifyPrompt) return
+                                    handlePromptDelete(prompt.id, prompt.name)
+                                  }}
+                                  disabled={!canModifyPrompt}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                             </div>
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handlePromptEdit(prompt)}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handlePromptDelete(prompt.id, prompt.name)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+
+                            {prompt.description && (
+                              <p className="text-sm text-muted-foreground mb-2">{prompt.description}</p>
+                            )}
+                            <div className="text-sm bg-muted p-2 rounded">
+                              <pre className="whitespace-pre-wrap">{prompt.content}</pre>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-2">
+                              Type: {prompt.prompt_type} • Created by: {prompt.created_by} • {new Date(prompt.created_at).toLocaleDateString()}
                             </div>
                           </div>
-                          {prompt.description && (
-                            <p className="text-sm text-muted-foreground mb-2">{prompt.description}</p>
-                          )}
-                          <div className="text-sm bg-muted p-2 rounded">
-                            <pre className="whitespace-pre-wrap">{prompt.content}</pre>
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-2">
-                            Type: {prompt.prompt_type} • Created by: {prompt.created_by} • {new Date(prompt.created_at).toLocaleDateString()}
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </CardContent>

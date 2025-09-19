@@ -4,7 +4,8 @@ import { getDevelopmentUser, isDevelopmentAutoAuthEnabled, logDevConfig } from '
 
 /**
  * Hook to set up development authentication automatically
- * This ensures that developers can access protected routes without manual login
+ * WARNING: This is disabled by default for security reasons
+ * Only activates when explicitly enabled via environment variables
  */
 export function useDevAuthSetup() {
   const { isAuthenticated, isLoading } = useAuth()
@@ -17,7 +18,15 @@ export function useDevAuthSetup() {
 
     // Check if development auto-auth is enabled
     if (!isDevelopmentAutoAuthEnabled()) {
+      // Auto-authentication is disabled by default for security
       return
+    }
+
+    // Security warning when auto-auth is enabled
+    if (import.meta.env.DEV && isDevelopmentAutoAuthEnabled()) {
+      console.warn('⚠️  SECURITY WARNING: Development auto-authentication is enabled')
+      console.warn('⚠️  This bypasses real authentication and should only be used for testing')
+      console.warn('⚠️  To disable, set VITE_DEV_AUTO_AUTH=false or VITE_DEV_ENABLED=false')
     }
 
     // Wait for auth state to initialize
@@ -42,6 +51,7 @@ export function useDevAuthSetup() {
         const devUser = getDevelopmentUser()
 
         if (devUser) {
+          console.warn('⚠️  SECURITY WARNING: Auto-authenticating with development user:', devUser.email)
           localStorage.setItem('user', JSON.stringify(devUser))
           localStorage.setItem('isAuthenticated', 'true')
           // Add a mock access token for API calls

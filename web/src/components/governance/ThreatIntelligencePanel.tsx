@@ -28,6 +28,8 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { makeAuthenticatedRequest } from '@/lib/googleAuth'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface ThreatIntelligenceFeed {
   id: string
@@ -74,6 +76,7 @@ export function ThreatIntelligencePanel() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
+  const { user } = useAuth()
 
   useEffect(() => {
     loadThreatIntelligenceData()
@@ -82,21 +85,19 @@ export function ThreatIntelligencePanel() {
   const loadThreatIntelligenceData = async () => {
     setLoading(true)
     try {
-      // Mock API calls - replace with real implementations
-      const [feedsResponse, indicatorsResponse] = await Promise.all([
-        fetch('/v1/governance/security/threat-intelligence/feeds?tenant_id=default'),
-        fetch('/v1/governance/security/threat-intelligence/indicators?tenant_id=default')
+      const tenantId = user?.organization || 'default-tenant'
+
+      const [feedsData, indicatorsData] = await Promise.all([
+        makeAuthenticatedRequest<ThreatIntelligenceFeed[]>(
+          `/v1/governance/security/threat-intelligence/feeds?tenant_id=${encodeURIComponent(tenantId)}`
+        ),
+        makeAuthenticatedRequest<ThreatIndicator[]>(
+          `/v1/governance/security/threat-intelligence/indicators?tenant_id=${encodeURIComponent(tenantId)}`
+        )
       ])
 
-      if (feedsResponse.ok) {
-        const feedsData = await feedsResponse.json()
-        setFeeds(feedsData)
-      }
-
-      if (indicatorsResponse.ok) {
-        const indicatorsData = await indicatorsResponse.json()
-        setIndicators(indicatorsData)
-      }
+      setFeeds(feedsData)
+      setIndicators(indicatorsData)
     } catch (error) {
       console.error('Failed to load threat intelligence data:', error)
     } finally {

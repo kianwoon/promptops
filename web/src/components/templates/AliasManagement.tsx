@@ -48,13 +48,17 @@ export function AliasManagement({
 
   const handleCreateAlias = () => {
     if (newAlias.alias && newAlias.target_version) {
+      if (!userId) {
+        console.error('User ID is required to create alias')
+        return
+      }
       onCreateAlias({
         alias: newAlias.alias,
         template_id: templateId,
         target_version: newAlias.target_version,
         weights: newAlias.weights,
         etag: '',
-        updated_by: userId || 'demo-user'
+        updated_by: userId
       })
       setNewAlias({ alias: '', target_version: '', weights: {}, description: '' })
       setShowCreateForm(false)

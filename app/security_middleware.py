@@ -179,6 +179,11 @@ class SecurityMonitoringMiddleware(BaseHTTPMiddleware):
 
     async def _is_malicious_ip(self, ip_address: str, db: Session) -> bool:
         """Check if IP address is known to be malicious"""
+        # Allow local development traffic
+        local_allowlist = {"127.0.0.1", "::1", "localhost"}
+        if ip_address in local_allowlist or ip_address.startswith("127.") or ip_address.startswith("::ffff:127."):
+            return False
+
         # Check local threat intelligence database
         indicator = db.query(ThreatIndicator).filter(
             and_(

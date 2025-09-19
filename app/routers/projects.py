@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -8,25 +8,18 @@ from app.database import get_db
 from app.models import Project, AuditLog
 from app.schemas import ProjectCreate, ProjectResponse, ProjectUpdate
 from app.auth import get_current_user
+from app.config import settings
 
-# Temporary: Create a mock user dependency for development
-async def get_mock_user():
-    """Mock user for development purposes"""
-    return {
-        "user_id": "demo-user",
-        "email": "demo@example.com",
-        "roles": ["admin"],
-        "tenant": "demo-tenant"
-    }
 
 router = APIRouter()
 
-@router.get("/", response_model=List[ProjectResponse])
+@router.get("", response_model=List[ProjectResponse])
 async def list_projects(
     skip: int = 0,
     limit: int = 100,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """List all projects"""
     projects = db.query(Project).offset(skip).limit(limit).all()
@@ -35,8 +28,9 @@ async def list_projects(
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
     project_id: str,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific project"""
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -44,11 +38,12 @@ async def get_project(
         raise HTTPException(status_code=404, detail="Project not found")
     return project
 
-@router.post("/", response_model=ProjectResponse)
+@router.post("", response_model=ProjectResponse)
 async def create_project(
     project_data: ProjectCreate = Body(...),
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new project"""
     project_id = str(uuid.uuid4())
@@ -93,8 +88,9 @@ async def create_project(
 async def update_project(
     project_id: str,
     project_update: ProjectUpdate = Body(...),
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a project"""
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -135,8 +131,9 @@ async def update_project(
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: str,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)  # Using mock user for development
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete a project"""
     project = db.query(Project).filter(Project.id == project_id).first()

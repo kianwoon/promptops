@@ -47,7 +47,10 @@
       "Bash(tr:*)",
       "Bash(grep:*)",
       "Bash(./node_modules/.bin/tsc:*)",
-      "Bash(./node_modules/typescript/bin/tsc:*)"
+      "Bash(./node_modules/typescript/bin/tsc:*)",
+      "Bash(tail:*)",
+      "mcp__ide__getDiagnostics",
+      "Read(//tmp/**)"
     ],
     "deny": [],
     "ask": []

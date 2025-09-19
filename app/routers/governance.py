@@ -4,8 +4,11 @@ from sqlalchemy import and_, or_
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
+import logging
 
 from app.database import get_db
+from app.auth import get_current_user
+from app.config import settings
 from app.models import (
     SecurityEvent, WorkflowDefinition, WorkflowInstance, ComplianceReport,
     PermissionTemplate, RolePermission, User, AuditLog, ApprovalRequest,
@@ -54,17 +57,8 @@ from app.schemas import (
     SecurityThreatIntelligenceRequest, SecurityThreatIntelligenceResponse, ThreatIndicatorResponse
 )
 
-# Temporary: Create a mock user dependency for development
-async def get_mock_user():
-    """Mock user for development purposes"""
-    return {
-        "user_id": "demo-user",
-        "email": "demo@example.com",
-        "roles": ["admin"],
-        "tenant": "demo-tenant"
-    }
-
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # ============ ROLE MANAGEMENT ENDPOINTS ============
 
@@ -72,7 +66,7 @@ router = APIRouter()
 async def list_roles(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List all available roles in the system"""
     # Get unique role names from RolePermission table
@@ -86,7 +80,7 @@ async def create_custom_role(
     request: Request,
     role_data: CustomRoleCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new custom role"""
     # Use RBAC service to create custom role
@@ -131,7 +125,7 @@ async def list_custom_roles(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List all custom roles with filtering"""
     roles = rbac_service.list_custom_roles(
@@ -148,7 +142,7 @@ async def get_custom_role(
     role_name: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific custom role"""
     role = rbac_service.get_custom_role(role_name, current_user["tenant"])
@@ -162,7 +156,7 @@ async def update_custom_role(
     request: Request,
     role_data: CustomRoleUpdate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a custom role"""
     # Get current role for audit
@@ -209,7 +203,7 @@ async def delete_custom_role(
     role_name: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete a custom role"""
     # Get current role for audit
@@ -246,7 +240,7 @@ async def get_role_effective_permissions(
     request: Request,
     resource_type: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get effective permissions for a role including inherited permissions"""
     role = rbac_service.get_custom_role(role_name, current_user["tenant"])
@@ -270,7 +264,7 @@ async def get_role_permissions(
     request: Request,
     resource_type: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get permissions for a specific role"""
     query = db.query(RolePermission).filter(RolePermission.role_name == role_name)
@@ -286,7 +280,7 @@ async def create_role_permission(
     request: Request,
     permission_data: RolePermissionCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new permission for a role"""
     # Override role_name from URL
@@ -337,7 +331,7 @@ async def update_role_permission(
     request: Request,
     permission_data: RolePermissionUpdate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a role permission"""
     permission = db.query(RolePermission).filter(
@@ -387,7 +381,7 @@ async def delete_role_permission(
     permission_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete a role permission"""
     permission = db.query(RolePermission).filter(
@@ -430,7 +424,7 @@ async def bulk_create_role_permissions(
     request: Request,
     bulk_data: BulkRolePermissionCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create multiple permissions for a role"""
     created_count = 0
@@ -481,7 +475,7 @@ async def check_permission(
     request: Request,
     check_data: PermissionCheckRequest = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Check if a role has a specific permission"""
     permission = db.query(RolePermission).filter(
@@ -530,7 +524,7 @@ async def create_security_event(
     request: Request,
     event_data: SecurityEventCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new security event"""
     event = SecurityEvent(**event_data.dict())
@@ -553,7 +547,7 @@ async def list_security_events(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List security events with filtering"""
     query = db.query(SecurityEvent).filter(SecurityEvent.tenant_id == current_user["tenant"])
@@ -581,7 +575,7 @@ async def get_security_event(
     event_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific security event"""
     event = db.query(SecurityEvent).filter(
@@ -600,7 +594,7 @@ async def update_security_event(
     request: Request,
     event_data: SecurityEventUpdate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a security event (typically for resolution)"""
     event = db.query(SecurityEvent).filter(
@@ -650,7 +644,7 @@ async def create_workflow_definition(
     request: Request,
     workflow_data: WorkflowDefinitionCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new workflow definition"""
     workflow_data.created_by = current_user["user_id"]
@@ -686,7 +680,7 @@ async def list_workflow_definitions(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List workflow definitions"""
     query = db.query(WorkflowDefinition).filter(WorkflowDefinition.tenant_id == current_user["tenant"])
@@ -704,7 +698,7 @@ async def get_workflow_definition(
     workflow_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific workflow definition"""
     workflow = db.query(WorkflowDefinition).filter(
@@ -723,7 +717,7 @@ async def update_workflow_definition(
     request: Request,
     workflow_data: WorkflowDefinitionUpdate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a workflow definition"""
     workflow = db.query(WorkflowDefinition).filter(
@@ -770,7 +764,7 @@ async def create_workflow_instance(
     request: Request,
     instance_data: WorkflowInstanceCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new workflow instance"""
     # Verify workflow exists
@@ -813,7 +807,7 @@ async def list_workflow_instances(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List workflow instances for a workflow definition"""
     query = db.query(WorkflowInstance).filter(
@@ -836,7 +830,7 @@ async def list_all_workflow_instances(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List all workflow instances"""
     query = db.query(WorkflowInstance).filter(WorkflowInstance.tenant_id == current_user["tenant"])
@@ -857,7 +851,7 @@ async def update_workflow_instance(
     request: Request,
     instance_data: WorkflowInstanceUpdate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a workflow instance"""
     instance = db.query(WorkflowInstance).filter(
@@ -905,7 +899,7 @@ async def execute_workflow_step_action(
     request: Request,
     action_data: WorkflowStepAction = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Execute an action on a workflow step"""
     instance = db.query(WorkflowInstance).filter(
@@ -941,7 +935,7 @@ async def create_compliance_report(
     report_data: ComplianceReportCreate = Body(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new compliance report"""
     report_data.generated_by = current_user["user_id"]
@@ -979,7 +973,7 @@ async def list_compliance_reports(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List compliance reports"""
     query = db.query(ComplianceReport).filter(ComplianceReport.tenant_id == current_user["tenant"])
@@ -997,7 +991,7 @@ async def get_compliance_report(
     report_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific compliance report"""
     report = db.query(ComplianceReport).filter(
@@ -1016,7 +1010,7 @@ async def update_compliance_report(
     request: Request,
     report_data: ComplianceReportUpdate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a compliance report"""
     report = db.query(ComplianceReport).filter(
@@ -1065,7 +1059,7 @@ async def create_permission_template(
     request: Request,
     template_data: PermissionTemplateCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new permission template"""
     try:
@@ -1108,7 +1102,7 @@ async def list_permission_templates(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List permission templates with enhanced filtering"""
     templates = rbac_service.list_permission_templates(
@@ -1127,7 +1121,7 @@ async def get_permission_template(
     template_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific permission template"""
     template = rbac_service.get_permission_template(template_id, current_user["tenant"])
@@ -1141,7 +1135,7 @@ async def update_permission_template(
     request: Request,
     template_data: PermissionTemplateUpdate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a permission template"""
     # Get current template for audit
@@ -1186,7 +1180,7 @@ async def delete_permission_template(
     template_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete a permission template"""
     # Get current template for audit
@@ -1224,7 +1218,7 @@ async def apply_template_to_role(
     request: Request,
     conditions: Optional[Dict[str, Any]] = Body(None),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Apply a permission template to a role"""
     template = rbac_service.get_permission_template(template_id, current_user["tenant"])
@@ -1270,7 +1264,7 @@ async def create_role_inheritance(
     request: Request,
     inheritance_data: RoleInheritanceCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a role inheritance relationship"""
     try:
@@ -1313,7 +1307,7 @@ async def list_role_inheritance(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List role inheritance relationships"""
     inheritances = rbac_service.list_role_inheritance(
@@ -1333,7 +1327,7 @@ async def get_role_inheritance(
     child_role: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific role inheritance relationship"""
     inheritance = rbac_service.get_role_inheritance(parent_role, child_role, current_user["tenant"])
@@ -1348,7 +1342,7 @@ async def update_role_inheritance(
     request: Request,
     inheritance_data: RoleInheritanceUpdate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a role inheritance relationship"""
     # Get current inheritance for audit
@@ -1392,7 +1386,7 @@ async def delete_role_inheritance(
     child_role: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete a role inheritance relationship"""
     # Get current inheritance for audit
@@ -1428,7 +1422,7 @@ async def get_role_inheritance_chain(
     role_name: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get the inheritance chain for a role"""
     inheritance_chain = rbac_service.get_role_inheritance_chain(role_name, current_user["tenant"])
@@ -1444,7 +1438,7 @@ async def get_child_roles(
     request: Request,
     direct_only: bool = False,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get child roles for a role"""
     child_roles = rbac_service.get_child_roles(role_name, current_user["tenant"], direct_only)
@@ -1462,7 +1456,7 @@ async def bulk_assign_roles(
     background_tasks: BackgroundTasks = BackgroundTasks(),
     bulk_data: BulkRoleAssignmentRequest = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Bulk assign roles to users"""
     try:
@@ -1502,7 +1496,7 @@ async def bulk_update_permissions(
     bulk_data: BulkPermissionUpdateRequest = Body(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Bulk update permissions for a role"""
     try:
@@ -1541,7 +1535,7 @@ async def bulk_copy_permissions(
     conditions: Optional[Dict[str, Any]] = Body(None, embed=True),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Copy permissions from source role to multiple target roles"""
     try:
@@ -1582,7 +1576,7 @@ async def bulk_create_resource_permissions(
     conditions: Optional[Dict[str, Any]] = Body(None, embed=True),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Bulk create resource-specific permissions"""
     try:
@@ -1623,7 +1617,7 @@ async def create_access_review(
     review_data: AccessReviewCreate = Body(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new access review"""
     try:
@@ -1667,7 +1661,7 @@ async def list_access_reviews(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List access reviews"""
     reviews = rbac_service.list_access_reviews(
@@ -1685,7 +1679,7 @@ async def get_access_review(
     review_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific access review"""
     review = rbac_service.get_access_review(review_id, current_user["tenant"])
@@ -1699,7 +1693,7 @@ async def update_access_review(
     request: Request,
     review_data: AccessReviewUpdate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update an access review"""
     # Get current review for audit
@@ -1744,7 +1738,7 @@ async def delete_access_review(
     review_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete an access review"""
     # Get current review for audit
@@ -1781,7 +1775,7 @@ async def execute_access_review(
     request: Request,
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Execute an access review (run the review process)"""
     review = rbac_service.get_access_review(review_id, current_user["tenant"])
@@ -1819,7 +1813,7 @@ async def get_access_review_findings(
     severity: Optional[str] = None,
     finding_type: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get findings for a specific access review"""
     review = rbac_service.get_access_review(review_id, current_user["tenant"])
@@ -1845,7 +1839,7 @@ async def get_access_review_recommendations(
     request: Request,
     priority: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get recommendations for a specific access review"""
     review = rbac_service.get_access_review(review_id, current_user["tenant"])
@@ -1870,7 +1864,7 @@ async def approve_access_review_recommendations(
     request: Request,
     approved_recommendations: List[str] = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Approve and implement access review recommendations"""
     review = rbac_service.get_access_review(review_id, current_user["tenant"])
@@ -1914,21 +1908,51 @@ async def generate_compliance_report_background(report_id: str, db: Session):
         if not report:
             return
 
-        # Simulate report generation (replace with actual logic)
-        import time
-        time.sleep(2)  # Simulate processing time
+        # Execute actual compliance report generation
+        # Query security events and compliance violations for the report period
+        report_start = report.created_at
+        report_end = datetime.utcnow()
 
-        # Generate mock findings and metrics
+        # Get actual security events
+        security_events = db.query(SecurityEvent).filter(
+            SecurityEvent.tenant_id == report.tenant_id,
+            SecurityEvent.created_at >= report_start,
+            SecurityEvent.created_at <= report_end
+        ).count()
+
+        # Get compliance violations (failed security events)
+        compliance_violations = db.query(SecurityEvent).filter(
+            SecurityEvent.tenant_id == report.tenant_id,
+            SecurityEvent.created_at >= report_start,
+            SecurityEvent.created_at <= report_end,
+            SecurityEvent.severity.in_([SecuritySeverity.HIGH, SecuritySeverity.CRITICAL])
+        ).count()
+
+        # Calculate actual metrics based on security events
+        total_possible_events = max(security_events + compliance_violations, 1)
+        security_score = max(0, 100 - (compliance_violations * 10))
+        compliance_score = max(0, 100 - (compliance_violations * 15))
+        overall_score = (security_score + compliance_score) / 2
+
+        # Generate recommendations based on actual findings
+        recommendations = []
+        if compliance_violations > 0:
+            recommendations.append("Review and address high-severity security events")
+        if security_events > 10:
+            recommendations.append("Implement additional security monitoring")
+        if compliance_score < 80:
+            recommendations.append("Update security policies and procedures")
+
         findings = {
-            "security_events": 5,
-            "compliance_violations": 2,
-            "recommendations": ["Implement MFA", "Update security policies"]
+            "security_events": security_events,
+            "compliance_violations": compliance_violations,
+            "recommendations": recommendations
         }
 
         metrics = {
-            "overall_score": 85,
-            "security_score": 90,
-            "compliance_score": 80
+            "overall_score": round(overall_score, 2),
+            "security_score": round(security_score, 2),
+            "compliance_score": round(compliance_score, 2)
         }
 
         # Update report
@@ -1992,7 +2016,7 @@ async def list_audit_logs(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List audit logs with comprehensive filtering"""
     query = db.query(AuditLog).filter(AuditLog.tenant_id == current_user["tenant"])
@@ -2037,7 +2061,7 @@ async def get_audit_log_stats(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get audit log statistics and analytics"""
     query = db.query(AuditLog).filter(AuditLog.tenant_id == current_user["tenant"])
@@ -2131,7 +2155,7 @@ async def get_audit_log(
     log_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific audit log entry"""
     log = db.query(AuditLog).filter(
@@ -2150,7 +2174,7 @@ async def export_audit_logs(
     export_request: AuditLogExportRequest,
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Export audit logs with filtering"""
     export_id = str(uuid.uuid4())
@@ -2214,19 +2238,38 @@ async def get_export_status(
     export_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get export status and download URL"""
-    # In a real implementation, you'd track export jobs in the database
-    # For now, return a mock response
-    return AuditLogExportResponse(
-        export_id=export_id,
-        file_url=f"/api/governance/audit-logs/export/{export_id}/download",
-        status="completed",
-        total_records=1000,
-        estimated_size=102400,
-        created_at=datetime.utcnow()
-    )
+    # Query the actual export job status from database
+    # Note: This would require an ExportJob model to be implemented
+    # For now, check if export file exists in storage
+    from app.services.storage_service import storage_service
+
+    try:
+        # Try to get export metadata
+        export_info = storage_service.get_export_metadata(export_id, current_user["tenant"])
+        if export_info:
+            return AuditLogExportResponse(
+                export_id=export_id,
+                file_url=export_info.get("file_url", f"/api/governance/audit-logs/export/{export_id}/download"),
+                status=export_info.get("status", "completed"),
+                total_records=export_info.get("total_records", 0),
+                estimated_size=export_info.get("estimated_size", 0),
+                created_at=export_info.get("created_at", datetime.utcnow())
+            )
+        else:
+            raise HTTPException(status_code=404, detail="Export job not found")
+    except Exception as e:
+        # Fallback to in-progress status if service unavailable
+        return AuditLogExportResponse(
+            export_id=export_id,
+            file_url="",
+            status="processing",
+            total_records=0,
+            estimated_size=0,
+            created_at=datetime.utcnow()
+        )
 
 # ============ ENHANCED WORKFLOW ENDPOINTS ============
 
@@ -2236,7 +2279,7 @@ async def create_workflow_step(
     request: Request,
     step_data: WorkflowStepCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new workflow step"""
     # Verify workflow exists
@@ -2279,7 +2322,7 @@ async def list_workflow_steps(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List workflow steps for a workflow definition"""
     query = db.query(WorkflowStep).filter(
@@ -2298,7 +2341,7 @@ async def execute_workflow_instance(
     request: Request,
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Execute a workflow instance using the enhanced workflow engine"""
     instance = db.query(WorkflowInstance).filter(
@@ -2332,7 +2375,7 @@ async def approve_workflow_step(
     request: Request,
     approval_data: WorkflowApprovalAction = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Approve, reject, or take action on a workflow step"""
     step_execution = db.query(WorkflowStepExecution).filter(
@@ -2379,7 +2422,7 @@ async def list_workflow_templates(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List workflow templates with filtering"""
     query = db.query(WorkflowTemplate)
@@ -2407,7 +2450,7 @@ async def create_workflow_template(
     request: Request,
     template_data: WorkflowTemplateCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new workflow template"""
     template_data.created_by = current_user["user_id"]
@@ -2441,7 +2484,7 @@ async def create_workflow_escalation_rule(
     request: Request,
     rule_data: WorkflowEscalationRuleCreate = Body(...),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new workflow escalation rule"""
     # Verify workflow exists
@@ -2483,7 +2526,7 @@ async def list_workflow_escalation_rules(
     step_number: Optional[int] = None,
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """List escalation rules for a workflow"""
     query = db.query(WorkflowEscalationRule).filter(
@@ -2508,7 +2551,7 @@ async def get_workflow_metrics(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get workflow performance metrics"""
     query = db.query(WorkflowMetrics).filter(
@@ -2534,7 +2577,7 @@ async def get_workflow_notifications(
     status: Optional[str] = None,
     notification_type: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get notifications for a workflow instance"""
     query = db.query(WorkflowNotification).filter(
@@ -2556,7 +2599,7 @@ async def send_workflow_notification(
     notification_data: WorkflowNotificationCreate = Body(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Send a notification for a workflow instance"""
     # Verify instance exists
@@ -2763,21 +2806,101 @@ async def export_audit_logs_background(
 ):
     """Background task to export audit logs"""
     try:
-        # Mock export implementation
-        import time
-        time.sleep(2)  # Simulate processing
+        from app.services.storage_service import storage_service
+        import json
+        import csv
+        import io
 
-        # In a real implementation, you would:
-        # 1. Query the database with filters
-        # 2. Format the data according to the requested format
-        # 3. Save to cloud storage or local filesystem
-        # 4. Update the export job status
+        # Query actual audit logs with filters
+        query = db.query(AuditLog).filter(AuditLog.tenant_id == tenant_id)
 
-        pass
+        # Apply filters if they exist
+        if filters:
+            if filters.start_date:
+                query = query.filter(AuditLog.ts >= filters.start_date)
+            if filters.end_date:
+                query = query.filter(AuditLog.ts <= filters.end_date)
+            if filters.user_id:
+                query = query.filter(AuditLog.actor == filters.user_id)
+            if filters.action:
+                query = query.filter(AuditLog.action == filters.action)
+            if filters.subject_type:
+                query = query.filter(AuditLog.subject_type == filters.subject_type)
+
+        # Get all matching audit logs
+        audit_logs = query.all()
+
+        # Format data according to requested format
+        if filters.format == "json":
+            # Convert to JSON
+            export_data = []
+            for log in audit_logs:
+                export_data.append({
+                    "timestamp": log.ts.isoformat(),
+                    "user_id": log.actor,
+                    "action": log.action,
+                    "subject": log.subject,
+                    "subject_type": log.subject_type,
+                    "subject_id": log.subject_id,
+                    "result": log.result,
+                    "ip_address": log.ip_address,
+                    "error_message": log.error_message
+                })
+
+            # Save to storage
+            file_content = json.dumps(export_data, indent=2)
+            content_type = "application/json"
+            file_extension = "json"
+
+        elif filters.format == "csv":
+            # Convert to CSV
+            output = io.StringIO()
+            fieldnames = ["timestamp", "user_id", "action", "subject", "subject_type", "subject_id", "result", "ip_address", "error_message"]
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for log in audit_logs:
+                writer.writerow({
+                    "timestamp": log.ts.isoformat(),
+                    "user_id": log.actor,
+                    "action": log.action,
+                    "subject": log.subject,
+                    "subject_type": log.subject_type,
+                    "subject_id": log.subject_id,
+                    "result": log.result,
+                    "ip_address": log.ip_address,
+                    "error_message": log.error_message
+                })
+
+            file_content = output.getvalue()
+            content_type = "text/csv"
+            file_extension = "csv"
+        else:
+            raise ValueError(f"Unsupported export format: {filters.format}")
+
+        # Save to cloud storage
+        file_path = f"audit-logs/{tenant_id}/{export_id}.{file_extension}"
+        storage_service.upload_file(
+            file_path=file_path,
+            content=file_content,
+            content_type=content_type,
+            metadata={
+                "export_id": export_id,
+                "tenant_id": tenant_id,
+                "total_records": len(audit_logs),
+                "format": filters.format,
+                "created_at": datetime.utcnow().isoformat()
+            }
+        )
+
+        # Update export job status (would require ExportJob model)
+        # For now, the status will be checked via storage service
 
     except Exception as e:
-        # Log error and update export status
-        pass
+        # Log error and handle failure
+        logger.error(f"Export failed for {export_id}: {str(e)}")
+        # Update export job status to failed (would require ExportJob model)
+        raise
 
 # =====================
 # SECURITY MONITORING ENDPOINTS
@@ -2789,7 +2912,7 @@ async def get_security_dashboard_metrics(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get security dashboard metrics and key indicators"""
     try:
@@ -2915,7 +3038,7 @@ async def get_security_events(
     limit: int = 100,
     offset: int = 0,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get security events with filtering"""
     try:
@@ -2953,12 +3076,12 @@ async def get_security_events(
 async def create_security_alert(
     alert: SecurityAlertCreate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new security alert"""
     try:
         # Validate tenant access
-        if alert.tenant_id != current_user.get("tenant_id"):
+        if alert.tenant_id != current_user["tenant_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
 
         db_alert = SecurityAlert(
@@ -3004,7 +3127,7 @@ async def get_security_alerts(
     limit: int = 100,
     offset: int = 0,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get security alerts with filtering"""
     try:
@@ -3041,7 +3164,7 @@ async def update_security_alert(
     alert_id: str,
     alert_update: SecurityAlertUpdate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a security alert"""
     try:
@@ -3050,7 +3173,7 @@ async def update_security_alert(
             raise HTTPException(status_code=404, detail="Security alert not found")
 
         # Validate tenant access
-        if alert.tenant_id != current_user.get("tenant_id"):
+        if alert.tenant_id != current_user["tenant_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
 
         # Update fields
@@ -3074,12 +3197,12 @@ async def update_security_alert(
 async def create_security_incident(
     incident: SecurityIncidentCreate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new security incident"""
     try:
         # Validate tenant access
-        if incident.tenant_id != current_user.get("tenant_id"):
+        if incident.tenant_id != current_user["tenant_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
 
         db_incident = SecurityIncident(
@@ -3125,7 +3248,7 @@ async def get_security_incidents(
     limit: int = 100,
     offset: int = 0,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get security incidents with filtering"""
     try:
@@ -3159,7 +3282,7 @@ async def get_security_incidents(
 async def detect_anomaly(
     request: AnomalyDetectionRequest,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Detect anomalies using configured rules"""
     try:
@@ -3227,7 +3350,7 @@ async def detect_anomaly(
                 "actual_value": request.metric_value,
                 "context_data": request.context_data
             },
-            tenant_id=current_user.get("tenant_id")
+            tenant_id=current_user["tenant_id"]
         )
 
         db.add(detection_result)
@@ -3248,8 +3371,8 @@ async def detect_anomaly(
                 detection_details=detection_result.detection_details,
                 risk_score=str(anomaly_score),
                 confidence_score="medium",
-                tenant_id=current_user.get("tenant_id"),
-                user_id=current_user.get("user_id") if request.entity_type == "user" else None,
+                tenant_id=current_user["tenant_id"],
+                user_id=current_user["user_id"] if request.entity_type == "user" else None,
                 session_id=request.context_data.get("session_id") if request.context_data else None,
                 ip_address=request.context_data.get("ip_address") if request.context_data else None,
                 user_agent=request.context_data.get("user_agent") if request.context_data else None
@@ -3288,7 +3411,7 @@ async def detect_anomaly(
 async def get_anomaly_detection_rules(
     tenant_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get anomaly detection rules for tenant"""
     try:
@@ -3306,7 +3429,7 @@ async def get_anomaly_detection_results(
     tenant_id: str,
     limit: int = 50,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get recent anomaly detection results for tenant"""
     try:
@@ -3323,13 +3446,13 @@ async def get_anomaly_detection_results(
 async def check_threat_intelligence(
     request: SecurityThreatIntelligenceRequest,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Check if an indicator is a known threat"""
     try:
         # Query threat indicators
         query = db.query(ThreatIndicator).filter(
-            ThreatIndicator.tenant_id == current_user.get("tenant_id"),
+            ThreatIndicator.tenant_id == current_user["tenant_id"],
             ThreatIndicator.indicator_type == request.indicator_type,
             ThreatIndicator.indicator_value == request.indicator_value
         )
@@ -3376,12 +3499,12 @@ async def check_threat_intelligence(
 async def create_threat_intelligence_feed(
     feed: ThreatIntelligenceFeedCreate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a threat intelligence feed"""
     try:
         # Validate tenant access
-        if feed.tenant_id != current_user.get("tenant_id"):
+        if feed.tenant_id != current_user["tenant_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
 
         db_feed = ThreatIntelligenceFeed(
@@ -3396,7 +3519,7 @@ async def create_threat_intelligence_feed(
             api_key=feed.api_key,
             auth_config=feed.auth_config,
             tenant_id=feed.tenant_id,
-            created_by=current_user.get("user_id")
+            created_by=current_user["user_id"]
         )
 
         db.add(db_feed)
@@ -3413,7 +3536,7 @@ async def create_threat_intelligence_feed(
 async def get_threat_intelligence_feeds(
     tenant_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get threat intelligence feeds for tenant"""
     try:
@@ -3430,7 +3553,7 @@ async def get_threat_intelligence_feeds(
 async def get_threat_intelligence_indicators(
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get threat intelligence indicators"""
     try:
@@ -3459,12 +3582,12 @@ async def get_threat_intelligence_indicators(
 async def create_security_metrics(
     metrics: SecurityMetricsCreate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_mock_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create security metrics record"""
     try:
         # Validate tenant access
-        if metrics.tenant_id != current_user.get("tenant_id"):
+        if metrics.tenant_id != current_user["tenant_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
 
         db_metrics = SecurityMetrics(

@@ -34,6 +34,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { makeAuthenticatedRequest } from '@/lib/googleAuth'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface SecurityIncident {
   id: string
@@ -80,6 +82,7 @@ export function IncidentManagementPanel() {
   const [filterSeverity, setFilterSeverity] = useState('all')
   const [selectedIncident, setSelectedIncident] = useState<SecurityIncident | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const { user } = useAuth()
 
   useEffect(() => {
     loadIncidents()
@@ -88,12 +91,11 @@ export function IncidentManagementPanel() {
   const loadIncidents = async () => {
     setLoading(true)
     try {
-      // Mock API call - replace with real implementation
-      const response = await fetch('/v1/governance/security/incidents?tenant_id=default&limit=100')
-      if (response.ok) {
-        const incidentsData = await response.json()
-        setIncidents(incidentsData)
-      }
+      const tenantId = user?.organization || 'default-tenant'
+      const incidentsData = await makeAuthenticatedRequest<SecurityIncident[]>(
+        `/v1/governance/security/incidents?tenant_id=${encodeURIComponent(tenantId)}&limit=100`
+      )
+      setIncidents(incidentsData)
     } catch (error) {
       console.error('Failed to load incidents:', error)
     } finally {

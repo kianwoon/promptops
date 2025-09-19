@@ -29,6 +29,7 @@ from app.utils import (
     create_hmac_signature, format_timestamp, validate_prompt_id,
     validate_project_id, get_client_ip, encrypt_secret_key, decrypt_secret_key
 )
+from app.auth import get_current_user
 from fastapi import Request
 import structlog
 
@@ -38,38 +39,36 @@ router = APIRouter()
 # Unprotected routes for web UI (using user auth instead of API key auth)
 @router.get("/web/auth/api-keys", response_model=List[ClientApiKeyResponse])
 async def list_api_keys_web(
-    request: Request,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """List all API keys for the current user (web UI version)"""
 
-    user = request.state.current_user
-    api_keys = db.query(ClientApiKey).filter(
-        ClientApiKey.user_id == user["user_id"]
-    ).order_by(ClientApiKey.created_at.desc()).all()
+    user = current_user
+    query = db.query(ClientApiKey)
 
-    # Decrypt keys for response
-    for api_key in api_keys:
-        # Decrypt secret key
-        if api_key.secret_key_encrypted:
-            try:
-                api_key.secret_key = decrypt_secret_key(api_key.secret_key_encrypted)
-            except Exception as e:
-                print(f"Failed to decrypt secret key: {e}")
-                api_key.secret_key = None
+    if "admin" not in user["roles"]:
+        query = query.filter(ClientApiKey.user_id == user["user_id"])
 
-        # Decrypt API key
-        if api_key.api_key_encrypted:
-            try:
-                api_key.api_key = decrypt_secret_key(api_key.api_key_encrypted)
-                print(f"WEB DEBUG: Set {api_key.id} api_key to: {api_key.api_key}")
-            except Exception as e:
-                print(f"Failed to decrypt API key: {e}")
-                api_key.api_key = None
+    api_keys = query.order_by(ClientApiKey.created_at.desc()).all()
 
-    # Convert to dictionaries to ensure proper serialization
     result = []
     for api_key in api_keys:
+        decrypted_api_key = None
+        decrypted_secret_key = None
+
+        if api_key.api_key_encrypted:
+            try:
+                decrypted_api_key = decrypt_secret_key(api_key.api_key_encrypted)
+            except Exception as e:
+                print(f"Failed to decrypt API key: {e}")
+
+        if api_key.secret_key_encrypted:
+            try:
+                decrypted_secret_key = decrypt_secret_key(api_key.secret_key_encrypted)
+            except Exception as e:
+                print(f"Failed to decrypt secret key: {e}")
+
         key_dict = {
             "id": api_key.id,
             "user_id": api_key.user_id,
@@ -77,14 +76,14 @@ async def list_api_keys_web(
             "name": api_key.name,
             "description": api_key.description,
             "api_key_prefix": api_key.api_key_prefix,
-            "api_key": api_key.api_key if hasattr(api_key, 'api_key') else None,
-            "secret_key": api_key.secret_key,
+            "api_key": decrypted_api_key,
+            "secret_key": decrypted_secret_key,
             "rate_limit_per_minute": api_key.rate_limit_per_minute,
             "rate_limit_per_hour": api_key.rate_limit_per_hour,
             "rate_limit_per_day": api_key.rate_limit_per_day,
             "allowed_projects": api_key.allowed_projects,
             "allowed_scopes": api_key.allowed_scopes,
-            "status": api_key.status,
+            "status": api_key.status.value if isinstance(api_key.status, ClientApiKeyStatus) else api_key.status,
             "last_used_at": api_key.last_used_at,
             "expires_at": api_key.expires_at,
             "created_at": api_key.created_at,
@@ -92,21 +91,17 @@ async def list_api_keys_web(
         }
         result.append(key_dict)
 
-    print(f"WEB DEBUG: Returning {len(result)} API keys")
-    for key in result:
-        print(f"WEB DEBUG: Key {key['name']} - api_key: {key['api_key']}")
-
     return result
 
 @router.delete("/web/auth/api-keys/{api_key_id}")
 async def delete_api_key_web(
     api_key_id: str,
-    request: Request,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Delete an API key (web UI version)"""
 
-    user = request.state.current_user
+    user = current_user
     api_key = db.query(ClientApiKey).filter(
         ClientApiKey.id == api_key_id,
         ClientApiKey.user_id == user["user_id"]
@@ -122,12 +117,12 @@ async def delete_api_key_web(
 
 @router.get("/web/usage/limits")
 async def get_usage_limits_web(
-    request: Request,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get usage limits for the current user (web UI version)"""
 
-    user = request.state.current_user
+    user = current_user
     # Get user's API keys to determine their limits
     user_api_keys = db.query(ClientApiKey).filter(
         ClientApiKey.user_id == user["user_id"]
@@ -152,12 +147,12 @@ async def get_usage_limits_web(
 @router.post("/auth/api-keys", response_model=ClientApiKeyCreateResponse)
 async def create_api_key(
     api_key_data: ClientApiKeyCreate,
-    request: Request,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Create a new API key for the current user"""
 
-    user = request.state.current_user
+    user = current_user
     # Generate API key and secret key
     api_key, secret_key = generate_api_key_pair()
 
@@ -197,39 +192,33 @@ async def create_api_key(
 
 @router.get("/auth/api-keys", response_model=List[ClientApiKeyResponse])
 async def list_api_keys(
-    request: Request,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """List all API keys for the current user"""
 
-    user = request.state.current_user
+    user = current_user
     api_keys = db.query(ClientApiKey).filter(
         ClientApiKey.user_id == user["user_id"]
     ).all()
 
-    # Decrypt keys for display
-    for api_key in api_keys:
-        # Decrypt secret key with error handling
-        if api_key.secret_key_encrypted:
-            try:
-                api_key.secret_key = decrypt_secret_key(api_key.secret_key_encrypted)
-                print(f"Successfully decrypted secret key for {api_key.id}")
-            except Exception as e:
-                print(f"Failed to decrypt secret key for {api_key.id}: {str(e)}")
-                api_key.secret_key = None
-
-        # Decrypt API key with error handling
-        if api_key.api_key_encrypted:
-            try:
-                api_key.api_key = decrypt_secret_key(api_key.api_key_encrypted)
-                print(f"Successfully decrypted API key for {api_key.id}")
-            except Exception as e:
-                print(f"Failed to decrypt API key for {api_key.id}: {str(e)}")
-                api_key.api_key = None
-
-    # Convert to explicit dictionaries to avoid Pydantic filtering
     result = []
     for api_key in api_keys:
+        decrypted_api_key = None
+        decrypted_secret_key = None
+
+        if api_key.api_key_encrypted:
+            try:
+                decrypted_api_key = decrypt_secret_key(api_key.api_key_encrypted)
+            except Exception as e:
+                print(f"Failed to decrypt API key for {api_key.id}: {str(e)}")
+
+        if api_key.secret_key_encrypted:
+            try:
+                decrypted_secret_key = decrypt_secret_key(api_key.secret_key_encrypted)
+            except Exception as e:
+                print(f"Failed to decrypt secret key for {api_key.id}: {str(e)}")
+
         key_dict = {
             "id": api_key.id,
             "user_id": api_key.user_id,
@@ -237,14 +226,14 @@ async def list_api_keys(
             "name": api_key.name,
             "description": api_key.description,
             "api_key_prefix": api_key.api_key_prefix,
-            "api_key": api_key.api_key if hasattr(api_key, 'api_key') else None,  # Check if field exists
-            "secret_key": api_key.secret_key,  # This should be the decrypted value
+            "api_key": decrypted_api_key,
+            "secret_key": decrypted_secret_key,
             "rate_limit_per_minute": api_key.rate_limit_per_minute,
             "rate_limit_per_hour": api_key.rate_limit_per_hour,
             "rate_limit_per_day": api_key.rate_limit_per_day,
             "allowed_projects": api_key.allowed_projects,
             "allowed_scopes": api_key.allowed_scopes,
-            "status": api_key.status,
+            "status": api_key.status.value if isinstance(api_key.status, ClientApiKeyStatus) else api_key.status,
             "last_used_at": api_key.last_used_at,
             "expires_at": api_key.expires_at,
             "created_at": api_key.created_at,
@@ -252,21 +241,17 @@ async def list_api_keys(
         }
         result.append(key_dict)
 
-    print(f"DEBUG: Returning {len(result)} API keys")
-    for key in result:
-        print(f"DEBUG: Key {key['name']} - api_key: {key['api_key']}")
-
     return result
 
 @router.delete("/auth/api-keys/{api_key_id}")
 async def revoke_api_key(
     api_key_id: str,
-    request: Request,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Revoke an API key"""
 
-    user = request.state.current_user
+    user = current_user
     api_key = db.query(ClientApiKey).filter(
         and_(
             ClientApiKey.id == api_key_id,

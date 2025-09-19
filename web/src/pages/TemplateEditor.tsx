@@ -71,7 +71,35 @@ deployment:
 export function TemplateEditor() {
   const { id, version } = useParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, isAuthenticated } = useAuth()
+
+  // Redirect if not authenticated
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Template Editor</h1>
+            <p className="text-muted-foreground">
+              Please log in to access the template editor.
+            </p>
+          </div>
+        </div>
+        <Card className="border-dashed border-2 border-muted-foreground/20">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <div className="p-4 rounded-full bg-muted mb-4">
+              <Settings className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Authentication Required</h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              Please log in to create and edit templates.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   const [activeTab, setActiveTab] = useState('editor')
   const [yamlContent, setYamlContent] = useState(defaultTemplate)
   const [isTesting, setIsTesting] = useState(false)
@@ -108,7 +136,7 @@ export function TemplateEditor() {
       const templateData = {
         id: id || null, // Let backend generate ID for new templates
         version: version,
-        owner: user?.id || 'demo-user',
+        owner: user.id,
         template_yaml: content,
         metadata: {
           description: description,

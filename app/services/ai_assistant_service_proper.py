@@ -31,6 +31,13 @@ from app.schemas import (
 logger = structlog.get_logger()
 
 
+DEFAULT_PROMPT_INSTRUCTIONS = (
+    "Generate a comprehensive, professional AI prompt that downstream users can run without extra clarification. "
+    "Ensure the final prompt describes role expectations, responsibilities, communication approach, quality controls, "
+    "and compliance requirements while aligning with MAS FEAT considerations."
+)
+
+
 class AIAssistantService:
     """Service layer for AI Assistant operations with proper database integration"""
 
@@ -55,81 +62,205 @@ class AIAssistantService:
             logger.warning("Failed to refresh User table metadata", error=str(e))
             # Don't raise the exception as this is a best-effort operation
 
-    # Provider Operations
-    def get_providers(self, user_id: str) -> List[AIAssistantProviderResponse]:
-        """Get all AI assistant providers for a user"""
-        try:
-            providers = self.db.query(AIAssistantProvider).filter(
-                AIAssistantProvider.user_id == user_id
-            ).order_by(AIAssistantProvider.created_at.desc()).all()
+    def _format_provider_response(self, provider: AIAssistantProvider) -> AIAssistantProviderResponse:
+        """Convert a provider ORM object into an API response"""
+        provider_type_value = (
+            provider.provider_type.value
+            if hasattr(provider.provider_type, "value")
+            else provider.provider_type
+        )
+        status_value = (
+            provider.status.value
+            if hasattr(provider.status, "value")
+            else provider.status
+        )
 
-            return [
-                AIAssistantProviderResponse(
-                    id=p.id,
-                    user_id=p.user_id,
-                    provider_type=p.provider_type.value if hasattr(p.provider_type, 'value') else p.provider_type,
-                    name=p.name,
-                    status=p.status.value if hasattr(p.status, 'value') else p.status,
-                    api_key="***" if p.api_key else None,  # Never return actual API keys
-                    api_key_prefix=p.api_key[:8] if p.api_key and len(p.api_key) > 8 else None,
-                    api_base_url=p.api_base_url,
-                    model_name=p.model_name,
-                    organization=p.organization,
-                    project=p.project,
-                    config_json=p.config_json or {},
-                    created_at=p.created_at,
-                    updated_at=p.updated_at,
-                    last_used_at=p.last_used_at
+        api_key_prefix: Optional[str] = None
+        if provider.api_key:
+            api_key_prefix = provider.api_key[:4] if len(provider.api_key) > 4 else provider.api_key
+
+        return AIAssistantProviderResponse(
+            id=provider.id,
+            user_id=provider.user_id,
+            provider_type=provider_type_value,
+            name=provider.name,
+            status=status_value,
+            api_key_prefix=api_key_prefix,
+            api_base_url=provider.api_base_url,
+            model_name=provider.model_name,
+            organization=provider.organization,
+            project=provider.project,
+            config_json=provider.config_json or {},
+            is_default=getattr(provider, "is_default", False),
+            created_at=provider.created_at,
+            updated_at=provider.updated_at,
+            last_used_at=provider.last_used_at
+        )
+
+    def _pick_fallback_provider(self, user_id: str) -> Optional[AIAssistantProvider]:
+        """Select the best available provider when no default is configured"""
+        return (
+            self.db.query(AIAssistantProvider)
+            .filter(
+                AIAssistantProvider.user_id == user_id,
+                AIAssistantProvider.status == AIAssistantProviderStatus.active
+            )
+            .order_by(
+                AIAssistantProvider.last_used_at.desc(),
+                AIAssistantProvider.created_at.asc()
+            )
+            .first()
+        )
+
+    def _clear_default_provider(self, user_id: str, exclude_id: Optional[str] = None) -> None:
+        """Unset the default flag for all providers belonging to the user"""
+        query = self.db.query(AIAssistantProvider).filter(
+            AIAssistantProvider.user_id == user_id,
+        )
+        if exclude_id:
+            query = query.filter(AIAssistantProvider.id != exclude_id)
+
+        query.update({AIAssistantProvider.is_default: False}, synchronize_session=False)
+
+    def _assign_default_provider(self, user_id: str, provider: AIAssistantProvider) -> None:
+        """Mark a provider as default while clearing other defaults for the user"""
+        self._clear_default_provider(user_id, exclude_id=provider.id)
+        provider.is_default = True
+
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if user:
+            user.default_ai_provider_id = provider.id
+            user.updated_at = datetime.utcnow()
+
+    # Provider Operations
+    def get_providers(
+        self,
+        user_id: str,
+        include_all: bool = False,
+        tenant_id: Optional[str] = None
+    ) -> List[AIAssistantProviderResponse]:
+        """Get AI assistant providers, optionally including tenant-shared defaults."""
+        try:
+            base_query = self.db.query(AIAssistantProvider)
+
+            providers: List[AIAssistantProvider] = []
+
+            if include_all:
+                query = base_query
+                if tenant_id:
+                    query = query.join(User, User.id == AIAssistantProvider.user_id).filter(
+                        or_(
+                            User.organization == tenant_id,
+                            User.organization.is_(None),
+                            AIAssistantProvider.user_id == user_id
+                        )
+                    )
+                providers = query.order_by(AIAssistantProvider.created_at.desc()).all()
+            else:
+                # Providers owned by the user
+                user_providers = (
+                    base_query
+                    .filter(AIAssistantProvider.user_id == user_id)
+                    .order_by(AIAssistantProvider.created_at.desc())
+                    .all()
                 )
-                for p in providers
-            ]
+
+                providers.extend(user_providers)
+
+                # Include tenant-level default providers for shared access
+                if tenant_id:
+                    shared_query = (
+                        self.db.query(AIAssistantProvider)
+                        .join(User, User.id == AIAssistantProvider.user_id)
+                        .filter(
+                            User.organization == tenant_id,
+                            AIAssistantProvider.is_default == True,
+                            AIAssistantProvider.status == AIAssistantProviderStatus.active
+                        )
+                    )
+
+                    shared_providers = shared_query.all()
+
+                    existing_ids = {p.id for p in providers}
+                    for provider in shared_providers:
+                        if provider.id not in existing_ids:
+                            providers.append(provider)
+                            existing_ids.add(provider.id)
+
+            return [self._format_provider_response(p) for p in providers]
         except Exception as e:
             logger.error("Error getting providers", user_id=user_id, error=str(e))
             return []
 
-    def get_provider(self, provider_id: str, user_id: str) -> Optional[AIAssistantProviderResponse]:
+    def get_provider(
+        self,
+        provider_id: str,
+        user_id: str,
+        include_all: bool = False,
+        tenant_id: Optional[str] = None
+    ) -> Optional[AIAssistantProviderResponse]:
         """Get a specific provider by ID"""
         try:
-            provider = self.db.query(AIAssistantProvider).filter(
-                and_(
-                    AIAssistantProvider.id == provider_id,
-                    AIAssistantProvider.user_id == user_id
+            query = self.db.query(AIAssistantProvider)
+
+            if include_all:
+                query = query.filter(AIAssistantProvider.id == provider_id)
+                if tenant_id:
+                    query = query.join(User, User.id == AIAssistantProvider.user_id).filter(
+                        or_(
+                            User.organization == tenant_id,
+                            User.organization.is_(None),
+                            AIAssistantProvider.user_id == user_id
+                        )
+                    )
+            else:
+                query = query.filter(
+                    and_(
+                        AIAssistantProvider.id == provider_id,
+                        AIAssistantProvider.user_id == user_id
+                    )
                 )
-            ).first()
+
+            provider = query.first()
 
             if not provider:
                 return None
 
-            return AIAssistantProviderResponse(
-                id=provider.id,
-                user_id=provider.user_id,
-                provider_type=provider.provider_type.value if hasattr(provider.provider_type, 'value') else provider.provider_type,
-                name=provider.name,
-                status=provider.status.value if hasattr(provider.status, 'value') else provider.status,
-                api_key="***" if provider.api_key else None,
-                api_key_prefix=provider.api_key[:8] if provider.api_key and len(provider.api_key) > 8 else None,
-                api_base_url=provider.api_base_url,
-                model_name=provider.model_name,
-                organization=provider.organization,
-                project=provider.project,
-                config_json=provider.config_json or {},
-                created_at=provider.created_at,
-                updated_at=provider.updated_at,
-                last_used_at=provider.last_used_at
-            )
+            return self._format_provider_response(provider)
         except Exception as e:
             logger.error("Error getting provider", provider_id=provider_id, user_id=user_id, error=str(e))
             return None
 
-    def get_provider_for_edit(self, provider_id: str, user_id: str) -> Optional[AIAssistantProviderEditResponse]:
+    def get_provider_for_edit(
+        self,
+        provider_id: str,
+        user_id: str,
+        include_all: bool = False,
+        tenant_id: Optional[str] = None
+    ) -> Optional[AIAssistantProviderEditResponse]:
         """Get a specific provider by ID with full API key for editing"""
         try:
-            provider = self.db.query(AIAssistantProvider).filter(
-                and_(
-                    AIAssistantProvider.id == provider_id,
-                    AIAssistantProvider.user_id == user_id
+            query = self.db.query(AIAssistantProvider)
+
+            if include_all:
+                query = query.filter(AIAssistantProvider.id == provider_id)
+                if tenant_id:
+                    query = query.join(User, User.id == AIAssistantProvider.user_id).filter(
+                        or_(
+                            User.organization == tenant_id,
+                            User.organization.is_(None),
+                            AIAssistantProvider.user_id == user_id
+                        )
+                    )
+            else:
+                query = query.filter(
+                    and_(
+                        AIAssistantProvider.id == provider_id,
+                        AIAssistantProvider.user_id == user_id
+                    )
                 )
-            ).first()
+
+            provider = query.first()
 
             if not provider:
                 return None
@@ -149,32 +280,85 @@ class AIAssistantService:
                 config_json=provider.config_json or {},
                 created_at=provider.created_at,
                 updated_at=provider.updated_at,
-                last_used_at=provider.last_used_at
+                last_used_at=provider.last_used_at,
+                is_default=getattr(provider, "is_default", False)
             )
         except Exception as e:
             logger.error("Error getting provider for edit", provider_id=provider_id, user_id=user_id, error=str(e))
             return None
 
-    def get_provider_model(self, provider_id: str, user_id: str) -> Optional[AIAssistantProvider]:
+    def get_provider_model(
+        self,
+        provider_id: str,
+        user_id: str,
+        include_all: bool = False,
+        tenant_id: Optional[str] = None
+    ) -> Optional[AIAssistantProvider]:
         """Get the raw provider model for internal use"""
         try:
-            provider = self.db.query(AIAssistantProvider).filter(
-                and_(
-                    AIAssistantProvider.id == provider_id,
-                    AIAssistantProvider.user_id == user_id
-                )
-            ).first()
+            query = self.db.query(AIAssistantProvider)
 
+            # Always try to find the provider by ID first, especially if include_all is True
+            provider = query.filter(AIAssistantProvider.id == provider_id).first()
+
+            if not provider and not include_all:
+                # If not found and include_all is False, then it must belong to the user
+                provider = query.filter(
+                    and_(
+                        AIAssistantProvider.id == provider_id,
+                        AIAssistantProvider.user_id == user_id
+                    )
+                ).first()
+
+            if not provider and tenant_id:
+                # Fallback: if still not found, and tenant_id is present, try to find it as a default tenant provider
+                provider = (
+                    self.db.query(AIAssistantProvider)
+                    .join(User, User.id == AIAssistantProvider.user_id)
+                    .filter(
+                        AIAssistantProvider.id == provider_id,
+                        User.organization == tenant_id,
+                        AIAssistantProvider.is_default == True,
+                        AIAssistantProvider.status == AIAssistantProviderStatus.active
+                    )
+                    .first()
+                )
+
+            if not provider:
+                logger.warning(
+                    "Provider not found in get_provider_model",
+                    provider_id=provider_id,
+                    user_id=user_id,
+                    include_all=include_all,
+                    tenant_id=tenant_id
+                )
             return provider
         except Exception as e:
-            logger.error("Error getting provider model", provider_id=provider_id, user_id=user_id, error=str(e))
+            logger.error(
+                "Error getting provider model",
+                provider_id=provider_id,
+                user_id=user_id,
+                include_all=include_all,
+                tenant_id=tenant_id,
+                error=str(e),
+                exc_info=True # Add exc_info for full traceback
+            )
             return None
 
     def create_provider(self, user_id: str, provider_data: AIAssistantProviderCreate) -> AIAssistantProviderResponse:
         """Create a new AI assistant provider"""
         try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                raise ValueError("User not found")
 
-            # Create new provider
+            existing_default = self.db.query(AIAssistantProvider).filter(
+                AIAssistantProvider.user_id == user_id,
+                AIAssistantProvider.is_default == True
+            ).first()
+
+            should_set_default = bool(getattr(provider_data, "is_default", False)) or existing_default is None
+
             provider_id = str(uuid.uuid4())
             provider = AIAssistantProvider(
                 id=provider_id,
@@ -187,44 +371,58 @@ class AIAssistantService:
                 model_name=provider_data.model_name or "",
                 organization=provider_data.organization or "",
                 project=provider_data.project or "",
-                config_json=provider_data.config_json or {}
+                config_json=provider_data.config_json or {},
+                is_default=False
             )
 
             self.db.add(provider)
+
+            if should_set_default:
+                self._clear_default_provider(user_id)
+                provider.is_default = True
+                user.default_ai_provider_id = provider_id
+                user.updated_at = datetime.utcnow()
+
             self.db.commit()
             self.db.refresh(provider)
 
-            return AIAssistantProviderResponse(
-                id=provider.id,
-                user_id=provider.user_id,
-                provider_type=provider.provider_type.value if hasattr(provider.provider_type, 'value') else provider.provider_type,
-                name=provider.name,
-                status=provider.status.value if hasattr(provider.status, 'value') else provider.status,
-                api_key="***" if provider.api_key else None,
-                api_key_prefix=provider.api_key[:8] if provider.api_key and len(provider.api_key) > 8 else None,
-                api_base_url=provider.api_base_url,
-                model_name=provider.model_name,
-                organization=provider.organization,
-                project=provider.project,
-                config_json=provider.config_json or {},
-                created_at=provider.created_at,
-                updated_at=provider.updated_at,
-                last_used_at=provider.last_used_at
-            )
+            return self._format_provider_response(provider)
         except Exception as e:
             self.db.rollback()
             logger.error("Error creating provider", user_id=user_id, error=str(e))
             raise e
 
-    def update_provider(self, provider_id: str, user_id: str, update_data: AIAssistantProviderUpdate) -> Optional[AIAssistantProviderResponse]:
+    def update_provider(
+        self,
+        provider_id: str,
+        user_id: str,
+        update_data: AIAssistantProviderUpdate,
+        include_all: bool = False,
+        tenant_id: Optional[str] = None
+    ) -> Optional[AIAssistantProviderResponse]:
         """Update an existing provider"""
         try:
-            provider = self.db.query(AIAssistantProvider).filter(
-                and_(
-                    AIAssistantProvider.id == provider_id,
-                    AIAssistantProvider.user_id == user_id
+            query = self.db.query(AIAssistantProvider)
+
+            if include_all:
+                query = query.filter(AIAssistantProvider.id == provider_id)
+                if tenant_id:
+                    query = query.join(User, User.id == AIAssistantProvider.user_id).filter(
+                        or_(
+                            User.organization == tenant_id,
+                            User.organization.is_(None),
+                            AIAssistantProvider.user_id == user_id
+                        )
+                    )
+            else:
+                query = query.filter(
+                    and_(
+                        AIAssistantProvider.id == provider_id,
+                        AIAssistantProvider.user_id == user_id
+                    )
                 )
-            ).first()
+
+            provider = query.first()
 
             if not provider:
                 return None
@@ -244,66 +442,112 @@ class AIAssistantService:
                 provider.project = update_data.project
             if update_data.config_json is not None:
                 provider.config_json = update_data.config_json
+            if update_data.status is not None:
+                provider.status = update_data.status
+            if update_data.is_default is not None:
+                target_user_id = provider.user_id
+                if update_data.is_default:
+                    self._assign_default_provider(target_user_id, provider)
+                else:
+                    provider.is_default = False
+                    user = self.db.query(User).filter(User.id == target_user_id).first()
+                    if user and user.default_ai_provider_id == provider.id:
+                        user.default_ai_provider_id = None
+                        user.updated_at = datetime.utcnow()
 
             provider.updated_at = datetime.utcnow()
             self.db.commit()
             self.db.refresh(provider)
 
-            return AIAssistantProviderResponse(
-                id=provider.id,
-                user_id=provider.user_id,
-                provider_type=provider.provider_type.value if hasattr(provider.provider_type, 'value') else provider.provider_type,
-                name=provider.name,
-                status=provider.status.value if hasattr(provider.status, 'value') else provider.status,
-                api_key="***" if provider.api_key else None,
-                api_key_prefix=provider.api_key[:8] if provider.api_key and len(provider.api_key) > 8 else None,
-                api_base_url=provider.api_base_url,
-                model_name=provider.model_name,
-                organization=provider.organization,
-                project=provider.project,
-                config_json=provider.config_json or {},
-                created_at=provider.created_at,
-                updated_at=provider.updated_at,
-                last_used_at=provider.last_used_at
-            )
+            return self._format_provider_response(provider)
         except Exception as e:
             self.db.rollback()
             logger.error("Error updating provider", provider_id=provider_id, user_id=user_id, error=str(e))
             return None
 
-    def delete_provider(self, provider_id: str, user_id: str) -> bool:
+    def delete_provider(
+        self,
+        provider_id: str,
+        user_id: str,
+        include_all: bool = False,
+        tenant_id: Optional[str] = None
+    ) -> bool:
         """Delete a provider (hard delete from database)"""
         try:
-            provider = self.db.query(AIAssistantProvider).filter(
-                and_(
-                    AIAssistantProvider.id == provider_id,
-                    AIAssistantProvider.user_id == user_id
+            query = self.db.query(AIAssistantProvider)
+
+            if include_all:
+                query = query.filter(AIAssistantProvider.id == provider_id)
+                if tenant_id:
+                    query = query.join(User, User.id == AIAssistantProvider.user_id).filter(
+                        or_(
+                            User.organization == tenant_id,
+                            User.organization.is_(None),
+                            AIAssistantProvider.user_id == user_id
+                        )
+                    )
+            else:
+                query = query.filter(
+                    and_(
+                        AIAssistantProvider.id == provider_id,
+                        AIAssistantProvider.user_id == user_id
+                    )
                 )
-            ).first()
+
+            provider = query.first()
 
             if not provider:
                 return False
+
+            was_default = getattr(provider, "is_default", False)
 
             # Hard delete - remove from database completely
             self.db.delete(provider)
             self.db.commit()
 
+            if was_default:
+                fallback = self._pick_fallback_provider(provider.user_id)
+                if fallback:
+                    self._assign_default_provider(provider.user_id, fallback)
+                    self.db.commit()
             return True
         except Exception as e:
             self.db.rollback()
             logger.error("Error deleting provider", provider_id=provider_id, user_id=user_id, error=str(e))
             return False
 
-    def test_provider(self, provider_id: str, user_id: str, test_request: AIAssistantProviderTestRequest) -> Optional[AIAssistantProviderTestResponse]:
+    def test_provider(
+        self,
+        provider_id: str,
+        user_id: str,
+        test_request: AIAssistantProviderTestRequest,
+        include_all: bool = False,
+        tenant_id: Optional[str] = None
+    ) -> Optional[AIAssistantProviderTestResponse]:
         """Test an AI provider configuration with a simple API call"""
         try:
             # Get provider
-            provider = self.db.query(AIAssistantProvider).filter(
-                and_(
-                    AIAssistantProvider.id == provider_id,
-                    AIAssistantProvider.user_id == user_id
+            query = self.db.query(AIAssistantProvider)
+
+            if include_all:
+                query = query.filter(AIAssistantProvider.id == provider_id)
+                if tenant_id:
+                    query = query.join(User, User.id == AIAssistantProvider.user_id).filter(
+                        or_(
+                            User.organization == tenant_id,
+                            User.organization.is_(None),
+                            AIAssistantProvider.user_id == user_id
+                        )
+                    )
+            else:
+                query = query.filter(
+                    and_(
+                        AIAssistantProvider.id == provider_id,
+                        AIAssistantProvider.user_id == user_id
+                    )
                 )
-            ).first()
+
+            provider = query.first()
 
             if not provider:
                 return None
@@ -775,14 +1019,56 @@ class AIAssistantService:
             logger.error("Failed to get system prompt by type", error=str(e), user_id=user_id, prompt_type=prompt_type)
             return None
 
-    def get_system_prompts(self, user_id: str) -> List[AIAssistantSystemPromptResponse]:
-        """Get all system prompts for user's providers"""
+    def get_system_prompt_for_provider(self, provider_id: str, prompt_type: str) -> Optional[AIAssistantSystemPrompt]:
+        """Get the active system prompt for a specific provider"""
         try:
-            prompts = self.db.query(AIAssistantSystemPrompt).join(
+            system_prompt = (
+                self.db.query(AIAssistantSystemPrompt)
+                .filter(
+                    AIAssistantSystemPrompt.provider_id == provider_id,
+                    AIAssistantSystemPrompt.prompt_type == prompt_type,
+                    AIAssistantSystemPrompt.is_active == True
+                )
+                .order_by(AIAssistantSystemPrompt.updated_at.desc())
+                .first()
+            )
+
+            return system_prompt
+        except Exception as e:
+            logger.error(
+                "Failed to get system prompt for provider",
+                error=str(e),
+                provider_id=provider_id,
+                prompt_type=prompt_type,
+            )
+            return None
+
+    def get_system_prompts(
+        self,
+        user_id: str,
+        include_all: bool = False,
+        tenant_id: Optional[str] = None
+    ) -> List[AIAssistantSystemPromptResponse]:
+        """Get all system prompts for the user's providers"""
+        try:
+            query = self.db.query(AIAssistantSystemPrompt).join(
                 AIAssistantProvider,
                 AIAssistantSystemPrompt.provider_id == AIAssistantProvider.id
-            ).filter(
-                AIAssistantProvider.user_id == user_id,
+            )
+
+            if include_all:
+                if tenant_id:
+                    query = query.join(User, User.id == AIAssistantProvider.user_id).filter(
+                        or_(
+                            User.organization == tenant_id,
+                            User.organization.is_(None),
+                            AIAssistantProvider.user_id == user_id
+                        )
+                    )
+            else:
+                query = query.filter(AIAssistantProvider.user_id == user_id)
+
+            prompts = query.filter(
                 AIAssistantSystemPrompt.is_active == True
             ).all()
 
@@ -949,78 +1235,103 @@ class AIAssistantService:
             self._refresh_user_table_metadata()
 
             user = self.db.query(User).filter(User.id == user_id).first()
-            if not user or not user.default_ai_provider_id:
+            if not user:
                 return None
 
             provider = self.db.query(AIAssistantProvider).filter(
-                AIAssistantProvider.id == user.default_ai_provider_id,
                 AIAssistantProvider.user_id == user_id,
+                AIAssistantProvider.is_default == True,
                 AIAssistantProvider.status == AIAssistantProviderStatus.active
             ).first()
+
+            if not provider and user.default_ai_provider_id:
+                provider = self.db.query(AIAssistantProvider).filter(
+                    AIAssistantProvider.id == user.default_ai_provider_id,
+                    AIAssistantProvider.user_id == user_id,
+                    AIAssistantProvider.status == AIAssistantProviderStatus.active
+                ).first()
+                if provider:
+                    try:
+                        self._assign_default_provider(user_id, provider)
+                        self.db.commit()
+                        self.db.refresh(provider)
+                    except Exception as commit_error:
+                        self.db.rollback()
+                        logger.warning(
+                            "Failed to persist stored default provider",
+                            user_id=user_id,
+                            provider_id=provider.id,
+                            error=str(commit_error)
+                        )
+                        provider = None
+
+            if not provider:
+                provider = self._pick_fallback_provider(user_id)
+                if provider:
+                    try:
+                        self._assign_default_provider(user_id, provider)
+                        self.db.commit()
+                        self.db.refresh(provider)
+                    except Exception as commit_error:
+                        self.db.rollback()
+                        logger.warning(
+                            "Failed to persist fallback default provider",
+                            user_id=user_id,
+                            provider_id=provider.id,
+                            error=str(commit_error)
+                        )
+                        provider = None
 
             if not provider:
                 return None
 
-            return AIAssistantProviderResponse(
-                id=provider.id,
-                user_id=provider.user_id,
-                provider_type=provider.provider_type,
-                name=provider.name,
-                status=provider.status,
-                api_key=provider.api_key,
-                api_base_url=provider.api_base_url,
-                model_name=provider.model_name,
-                organization=provider.organization,
-                project=provider.project,
-                config_json=provider.config_json,
-                created_at=provider.created_at,
-                updated_at=provider.updated_at,
-                last_used_at=provider.last_used_at
-            )
+            return self._format_provider_response(provider)
         except Exception as e:
-            logger.error("Error getting default provider", user_id=user_id, error=str(e))
+            logger.error("Error getting default provider", user_id=user_id, error=str(e), exc_info=True)
             return None
 
-    def set_default_provider(self, user_id: str, provider_id: str) -> AIAssistantProviderResponse:
+    def set_default_provider(
+        self,
+        user_id: str,
+        provider_id: str,
+        include_all: bool = False,
+        tenant_id: Optional[str] = None
+    ) -> AIAssistantProviderResponse:
         """Set the user's default AI provider"""
         try:
             # Refresh User table metadata to ensure we see the latest schema
             self._refresh_user_table_metadata()
 
             # Verify the provider exists and belongs to the user
-            provider = self.db.query(AIAssistantProvider).filter(
-                AIAssistantProvider.id == provider_id,
-                AIAssistantProvider.user_id == user_id,
-                AIAssistantProvider.status == AIAssistantProviderStatus.active
+            provider = self.get_provider(
+                provider_id=provider_id,
+                user_id=user_id,
+                include_all=include_all,
+                tenant_id=tenant_id
+            )
+            if not provider or provider.status != AIAssistantProviderStatus.active:
+                raise ValueError("Provider not found or not accessible")
+
+            provider_model = self.db.query(AIAssistantProvider).filter(
+                AIAssistantProvider.id == provider.id
             ).first()
 
-            if not provider:
-                raise ValueError("Provider not found or not accessible")
+            if not provider_model:
+                raise ValueError("Provider not found")
+
 
             # Update the user's default provider
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
                 raise ValueError("User not found")
 
-            user.default_ai_provider_id = provider_id
+            target_user_id = provider_model.user_id if include_all else user_id
+            self._assign_default_provider(target_user_id, provider_model)
             self.db.commit()
 
-            return AIAssistantProviderResponse(
-                id=provider.id,
-                user_id=provider.user_id,
-                provider_type=provider.provider_type,
-                name=provider.name,
-                status=provider.status,
-                api_key=provider.api_key,
-                api_base_url=provider.api_base_url,
-                model_name=provider.model_name,
-                organization=provider.organization,
-                project=provider.project,
-                config_json=provider.config_json,
-                created_at=provider.created_at,
-                updated_at=provider.updated_at,
-                last_used_at=provider.last_used_at
-            )
+            self.db.refresh(provider_model)
+
+            return self._format_provider_response(provider_model)
         except Exception as e:
             self.db.rollback()
             logger.error("Error setting default provider", user_id=user_id, provider_id=provider_id, error=str(e))
@@ -1036,7 +1347,9 @@ class AIAssistantService:
             if not user:
                 raise ValueError("User not found")
 
+            self._clear_default_provider(user_id)
             user.default_ai_provider_id = None
+            user.updated_at = datetime.utcnow()
             self.db.commit()
         except Exception as e:
             self.db.rollback()
@@ -1044,7 +1357,16 @@ class AIAssistantService:
             raise
 
     # Health Check
-    async def generate_prompt(self, provider_id: str, user_id: str, description: str, module_info: str = "", requirements: str = "") -> Dict[str, Any]:
+    async def generate_prompt(
+        self,
+        provider_id: str,
+        user_id: str,
+        description: str,
+        module_info: str = "",
+        requirements: str = "",
+        *,
+        system_prompt_content: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Generate a prompt using the configured AI provider"""
         try:
             # Get the provider
@@ -1053,20 +1375,18 @@ class AIAssistantService:
                 raise ValueError(f"Provider {provider_id} not found")
 
             # Create the prompt for the AI provider
-            ai_prompt = f"""Generate a comprehensive, professional AI prompt based on the following description:
+            base_instructions = (
+                system_prompt_content.strip()
+                if system_prompt_content and system_prompt_content.strip()
+                else DEFAULT_PROMPT_INSTRUCTIONS
+            )
 
-Description: {description}
-Module Info: {module_info}
-Requirements: {requirements}
-
-Generate a detailed prompt that includes:
-1. Role Definition
-2. Core Responsibilities
-3. Communication Guidelines
-4. Quality Standards
-5. Compliance Requirements
-
-The prompt should be specific to the described role and must include MAS FEAT compliance considerations."""
+            ai_prompt = (
+                f"{base_instructions}\n\n"
+                f"Description: {description}\n"
+                f"Module Info: {module_info}\n"
+                f"Requirements: {requirements}"
+            )
 
             # Call the appropriate AI provider based on provider type
             if provider.provider_type == "anthropic":

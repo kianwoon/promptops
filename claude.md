@@ -7,10 +7,6 @@
 3. ✅ **Request specific sections with offset/limit**: Instead of reading the entire large files, first use grep to find all class definitions and main function signatures in notebooks.py and notebook_rag_service.py, then we can dive deeper into specific areas of interest.
 ## 🚨 CRITICAL: Mandatory Agent Delegation
 **ABSOLUTE RULE**: Claude Code MUST delegate task to subagent. Treat the project as PRODUCTION. NOT MOCK SYSTEM.
-### Proactive Assignment Rules
-- Release agents after EACH task
-- Break large work into sequential chunks
-- Match agent expertise to task type
 ## 🚨 Common Failures to Avoid
 ### 1. Superficial Pattern Matching
 **NEVER** choose files based on keywords when user specifies exact file/location
@@ -46,6 +42,7 @@
 - use say command to  share your findings and respond
 - read the ./claude.md file before start anything
 ## After each task:
+- check app and web server using tail to confirm no new issue.
 - Report: "✅ Completed: [task]"
 - Show: "📋 Progress: [3/7 complete]"
 - Next: "🔄 Starting: [next task]"

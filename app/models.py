@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Integer, Boolean, JSON, ForeignKey, Enum, ForeignKeyConstraint, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, Integer, Boolean, JSON, ForeignKey, Enum, ForeignKeyConstraint, UniqueConstraint, text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -40,6 +40,8 @@ except ImportError:
 
 class UserRole(enum.Enum):
     ADMIN = "admin"
+    EDITOR = "editor"
+    APPROVER = "approver"
     USER = "user"
     VIEWER = "viewer"
 
@@ -53,7 +55,7 @@ class User(Base):
     id = Column(String, primary_key=True)
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=False)
-    role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
+    role = Column(Enum(UserRole), default=UserRole.VIEWER, nullable=False)
     organization = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     company_size = Column(String, nullable=True)
@@ -448,6 +450,7 @@ class AIAssistantProvider(Base):
     provider_type = Column(Enum(AIAssistantProviderType, name="aiassistantprovidertype", native_enum=True, values_callable=lambda e: [m.value for m in e], create_type=False), nullable=False)
     name = Column(String, nullable=False)  # User-friendly name for this provider config
     status = Column(Enum(AIAssistantProviderStatus, name="aiassistantproviderstatus", native_enum=True, values_callable=lambda e: [m.value for m in e], create_type=False), default=AIAssistantProviderStatus.active, nullable=False)
+    is_default = Column('default', Boolean, nullable=False, server_default=text('false'), default=False)
 
     # Configuration details
     api_key = Column(String, nullable=True)  # API key for authentication
