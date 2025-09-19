@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { authenticatedFetch } from '@/lib/httpInterceptor'
 import {
   Code,
   Download,
@@ -14,7 +15,12 @@ import {
   Zap,
   Copy,
   ExternalLink,
-  GitBranch
+  GitBranch,
+  Search,
+  Database,
+  Cpu,
+  Play,
+  Loader2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,8 +30,75 @@ import {
   AlertDescription,
   AlertTitle,
 } from '@/components/ui/alert'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
 
 export function DeveloperPage() {
+  // State for prompt retrieval
+  const [projectId, setProjectId] = useState('')
+  const [moduleId, setModuleId] = useState('')
+  const [llmModel, setLlmModel] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [secretKey, setSecretKey] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [results, setResults] = useState<any[]>([])
+  const [error, setError] = useState('')
+
+  // Available LLM models
+  const availableModels = [
+    { value: 'gpt-4', label: 'GPT-4', provider: 'openai' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', provider: 'openai' },
+    { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet', provider: 'anthropic' },
+    { value: 'claude-3-opus', label: 'Claude 3 Opus', provider: 'anthropic' },
+    { value: 'gemini-pro', label: 'Gemini Pro', provider: 'google' },
+    { value: 'llama-2', label: 'Llama 2', provider: 'meta' }
+  ]
+
+  // Function to retrieve prompts
+  const retrievePrompts = async () => {
+    if (!projectId || !moduleId) {
+      setError('Project ID and Module ID are required')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setResults([])
+
+    try {
+      // Build query parameters
+      const params = new URLSearchParams({
+        project_id: projectId,
+        module_id: moduleId,
+      })
+
+      if (llmModel) {
+        // Parse model to get provider and name
+        const model = availableModels.find(m => m.value === llmModel)
+        if (model) {
+          params.append('llm_model', llmModel)
+        }
+      }
+
+      const response = await authenticatedFetch(`/v1/prompts?${params.toString()}`)
+
+      if (response.ok) {
+        const data = await response.json()
+        setResults(data.items || data)
+      } else {
+        const errorData = await response.json()
+        setError(errorData.detail || 'Failed to retrieve prompts')
+      }
+    } catch (err) {
+      setError(`Network error: ${err.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const pipInstallationCode = `# Install via pip
 pip install promptops
 
@@ -49,14 +122,29 @@ client = promptops.Client(
     secret_key="your_secret_key_here"
 )
 
-# List available prompts
-prompts = client.list_prompts()
+# List prompts for a specific project and module
+prompts = client.list_prompts(
+    project_id="your_project_id",
+    module_id="your_module_id"
+)
 print(f"Found {len(prompts)} prompts")
 
 # Get a specific prompt
-prompt = client.get_prompt("prompt_id_here")
+prompt = client.get_prompt(
+    prompt_id="prompt_id_here",
+    project_id="your_project_id",
+    module_id="your_module_id"
+)
 print(f"Prompt: {prompt.name}")
-print(f"Content: {prompt.content}")`
+print(f"Content: {prompt.content}")
+
+# Get prompts filtered by LLM model
+gpt_prompts = client.list_prompts(
+    project_id="your_project_id",
+    module_id="your_module_id",
+    llm_model="gpt-4"
+)
+print(f"Found {len(gpt_prompts)} GPT-4 prompts")`
 
   const javascriptAuthCode = `import { PromptOps } from 'promptops';
 
@@ -66,14 +154,28 @@ const client = new PromptOps({
     secretKey: 'your_secret_key_here'
 });
 
-// List available prompts
-const prompts = await client.listPrompts();
+// List prompts for a specific project and module
+const prompts = await client.listPrompts({
+    projectId: 'your_project_id',
+    moduleId: 'your_module_id'
+});
 console.log(\`Found \${prompts.length} prompts\`);
 
 // Get a specific prompt
-const prompt = await client.getPrompt('prompt_id_here');
+const prompt = await client.getPrompt('prompt_id_here', {
+    projectId: 'your_project_id',
+    moduleId: 'your_module_id'
+});
 console.log(\`Prompt: \${prompt.name}\`);
-console.log(\`Content: \${prompt.content}\`);`
+console.log(\`Content: \${prompt.content}\`);
+
+// Get prompts filtered by LLM model
+const gptPrompts = await client.listPrompts({
+    projectId: 'your_project_id',
+    moduleId: 'your_module_id',
+    llmModel: 'gpt-4'
+});
+console.log(\`Found \${gptPrompts.length} GPT-4 prompts\`);`
 
   const pythonUsageCode = `import promptops
 
@@ -83,9 +185,11 @@ client = promptops.Client(
     secret_key="your_secret_key_here"
 )
 
-# Use a prompt in your application
+# Use a prompt in your application with project and module context
 response = client.use_prompt(
     prompt_id="your_prompt_id",
+    project_id="your_project_id",
+    module_id="your_module_id",
     variables={
         "user_input": "Hello, how are you?",
         "language": "English"
@@ -93,7 +197,22 @@ response = client.use_prompt(
 )
 
 print(response.content)
-print(response.usage)`
+print(response.usage)
+
+# Use with specific LLM model
+claude_response = client.use_prompt(
+    prompt_id="your_prompt_id",
+    project_id="your_project_id",
+    module_id="your_module_id",
+    llm_model="claude-3-sonnet",
+    variables={
+        "user_input": "Hello, how are you?",
+        "language": "English"
+    }
+)
+
+print(claude_response.content)
+print(claude_response.usage)`
 
   const javascriptUsageCode = `import { PromptOps } from 'promptops';
 
@@ -102,8 +221,10 @@ const client = new PromptOps({
     secretKey: 'your_secret_key_here'
 });
 
-// Use a prompt with variables
+// Use a prompt with project and module context
 const result = await client.usePrompt('prompt_id_here', {
+    projectId: 'your_project_id',
+    moduleId: 'your_module_id',
     variables: {
         userInput: 'Hello, how are you?',
         language: 'English'
@@ -111,7 +232,21 @@ const result = await client.usePrompt('prompt_id_here', {
 });
 
 console.log(result.content);
-console.log(result.usage);`
+console.log(result.usage);
+
+// Use with specific LLM model
+const claudeResult = await client.usePrompt('prompt_id_here', {
+    projectId: 'your_project_id',
+    moduleId: 'your_module_id',
+    llmModel: 'claude-3-sonnet',
+    variables: {
+        userInput: 'Hello, how are you?',
+        language: 'English'
+    }
+});
+
+console.log(claudeResult.content);
+console.log(claudeResult.usage);`
 
   const copyToClipboard = async (text: string) => {
     try {
@@ -425,6 +560,156 @@ console.log(result.usage);`
               </Card>
             </TabsContent>
           </Tabs>
+        </div>
+      </section>
+
+      {/* Interactive Prompt Retrieval Section */}
+      <section className="py-16 bg-gray-50">
+        <div className="px-6 max-w-7xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Interactive Prompt Retrieval
+            </h2>
+            <p className="text-xl text-gray-600">
+              Test and retrieve prompts for your projects using our interactive interface
+            </p>
+          </div>
+
+          <Card className="max-w-4xl mx-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Search className="w-5 h-5" />
+                <span>Retrieve Prompts</span>
+              </CardTitle>
+              <CardDescription>
+                Enter your project details to retrieve available prompts
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Error Display */}
+              {error && (
+                <Alert variant="destructive">
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Input Form */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="projectId">Project ID *</Label>
+                  <Input
+                    id="projectId"
+                    placeholder="Enter project ID"
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="moduleId">Module ID *</Label>
+                  <Input
+                    id="moduleId"
+                    placeholder="Enter module ID"
+                    value={moduleId}
+                    onChange={(e) => setModuleId(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="llmModel">LLM Model (Optional)</Label>
+                  <Select value={llmModel} onValueChange={setLlmModel}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select LLM model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableModels.map((model) => (
+                        <SelectItem key={model.value} value={model.value}>
+                          <div className="flex items-center space-x-2">
+                            <Badge variant="outline">{model.provider}</Badge>
+                            <span>{model.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* API Key Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="apiKey">API Key</Label>
+                  <Input
+                    id="apiKey"
+                    type="password"
+                    placeholder="Enter your API key"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="secretKey">Secret Key</Label>
+                  <Input
+                    id="secretKey"
+                    type="password"
+                    placeholder="Enter your secret key"
+                    value={secretKey}
+                    onChange={(e) => setSecretKey(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Retrieve Button */}
+              <Button
+                onClick={retrievePrompts}
+                disabled={loading || !projectId || !moduleId}
+                className="w-full"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                    Retrieving...
+                  </>
+                ) : (
+                  <>
+                    <Search className="mr-2 w-4 h-4" />
+                    Retrieve Prompts
+                  </>
+                )}
+              </Button>
+
+              {/* Results Display */}
+              {results.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Retrieved Prompts ({results.length})</h3>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {results.map((prompt, index) => (
+                      <Card key={index} className="p-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-medium">{prompt.name || `Prompt ${index + 1}`}</h4>
+                            <Badge variant="outline">{prompt.id}</Badge>
+                          </div>
+                          <p className="text-sm text-gray-600">{prompt.description || 'No description'}</p>
+                          <Textarea
+                            value={prompt.content || 'No content available'}
+                            readOnly
+                            className="min-h-[100px] text-sm"
+                          />
+                          <div className="flex items-center space-x-4 text-xs text-gray-500">
+                            <span>Created: {new Date(prompt.created_at).toLocaleDateString()}</span>
+                            <span>Version: {prompt.version || '1'}</span>
+                            {prompt.llm_model && (
+                              <Badge variant="secondary">{prompt.llm_model}</Badge>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </section>
 
