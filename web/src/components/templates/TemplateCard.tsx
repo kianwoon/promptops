@@ -54,7 +54,7 @@ export function TemplateCard({
       }, versions[0])
     : null
 
-  const hasVersions = versions.length > 0
+  const hasVersions = versions.length > 0 || template.version
 
   const getStatusColor = (status?: string) => {
     switch (status) {

@@ -76,7 +76,7 @@ security = HTTPBearer()
 app.include_router(templates.router, prefix="/v1/templates", tags=["templates"])
 app.include_router(render.router, prefix="/v1", tags=["render"])
 app.include_router(aliases.router, prefix="/v1/aliases", tags=["aliases"])
-app.include_router(evals.router, prefix="/v1/evals", tags=["evaluations"])
+app.include_router(evals.router, prefix="/v1/evaluations", tags=["evaluations"])
 app.include_router(policies.router, prefix="/v1/policies", tags=["policies"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
 

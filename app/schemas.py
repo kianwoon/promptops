@@ -105,9 +105,19 @@ class EvaluationRunResponse(BaseModel):
     metrics: Dict[str, Any]
     passed: bool
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
+
+class AliasesListResponse(BaseModel):
+    aliases: List[AliasResponse]
+
+class EvaluationsListResponse(BaseModel):
+    evaluations: List[EvaluationRunResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 # Policy schemas
 class PolicyEvaluationRequest(BaseModel):

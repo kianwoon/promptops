@@ -1,20 +1,32 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, List
 from datetime import datetime
+import uuid
 
 from app.database import get_db
 from app.models import Alias, Template, AuditLog
-from app.schemas import AliasResponse, AliasUpdate
-from app.auth import get_current_user
+from app.schemas import AliasResponse, AliasUpdate, AliasesListResponse
+from app.auth import get_current_user_or_demo, get_current_user
 
 router = APIRouter()
+
+@router.get("", response_model=List[AliasResponse])
+async def get_aliases(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_or_demo)
+):
+    """Get all aliases"""
+    aliases = db.query(Alias).order_by(Alias.alias).all()
+    return aliases
 
 @router.get("/{alias}", response_model=AliasResponse)
 async def get_alias(
     alias: str,
+    request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_or_demo)
 ):
     """Get alias configuration"""
     alias_obj = db.query(Alias).filter(Alias.alias == alias).first()

@@ -1,21 +1,54 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
 import uuid
 
 from app.database import get_db
 from app.models import EvaluationRun, Template, AuditLog
-from app.schemas import EvaluationRunCreate, EvaluationRunResponse
-from app.auth import get_current_user
+from app.schemas import EvaluationRunCreate, EvaluationRunResponse, EvaluationsListResponse
+from app.auth import get_current_user_or_demo, get_current_user
 
 router = APIRouter()
+
+@router.get("", response_model=EvaluationsListResponse)
+async def get_evaluations(
+    request: Request,
+    template_id: Optional[str] = Query(None, description="Filter by template ID"),
+    limit: int = Query(50, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_or_demo)
+):
+    """Get evaluation runs with optional template filtering and pagination"""
+
+    # Build query
+    query = db.query(EvaluationRun)
+
+    # Apply template filter if provided
+    if template_id:
+        query = query.filter(EvaluationRun.template_id == template_id)
+
+    # Get total count for pagination
+    total = query.count()
+
+    # Apply pagination
+    evaluations = query.order_by(EvaluationRun.created_at.desc()).offset(offset).limit(limit).all()
+
+    return {
+        "evaluations": evaluations,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + limit < total
+    }
 
 @router.post("/run", response_model=EvaluationRunResponse)
 async def run_evaluation(
     eval_data: EvaluationRunCreate,
+    request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_or_demo)
 ):
     """Run evaluation suite against template version"""
     
