@@ -134,6 +134,8 @@ class ProjectResponse(BaseModel):
     owner: str
     created_at: datetime
     updated_at: datetime
+    modules_count: Optional[int] = None
+    prompts_count: Optional[int] = None
 
     class Config:
         from_attributes = True

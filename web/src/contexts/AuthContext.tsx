@@ -2,7 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect, ReactNode } fr
 import { generateGoogleAuthUrl, handleGoogleCallback, storeAuthTokens } from '@/lib/googleAuth'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 
-interface User {
+export interface User {
   id: string
   email: string
   name: string
@@ -34,6 +34,10 @@ interface AuthContextType extends AuthState {
   updateUser: (userData: Partial<User>) => void
   hasPermission: (permission: string) => boolean
   hasRole: (roles: string[]) => boolean
+  dbUser: User | null
+  dbUserLoading: boolean
+  dbUserError: string | null
+  refreshDbUser: () => Promise<void>
 }
 
 type AuthAction =
@@ -161,7 +165,12 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, dispatch] = useReducer(authReducer, initialState)
-  const { user: dbUser, loading: dbUserLoading, refetch: refetchDbUser } = useCurrentUser()
+  const {
+    user: dbUser,
+    loading: dbUserLoading,
+    error: dbUserError,
+    refetch: refetchDbUser,
+  } = useCurrentUser()
 
   // Initialize auth state from localStorage and sync with database user
   useEffect(() => {
@@ -476,6 +485,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     updateUser,
     hasPermission,
     hasRole,
+    dbUser,
+    dbUserLoading,
+    dbUserError,
+    refreshDbUser: refetchDbUser,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

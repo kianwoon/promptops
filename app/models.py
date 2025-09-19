@@ -1,6 +1,7 @@
-from sqlalchemy import Column, String, DateTime, Integer, Boolean, JSON, ForeignKey, Enum, ForeignKeyConstraint, UniqueConstraint, text
+from sqlalchemy import Column, String, DateTime, Integer, Boolean, JSON, ForeignKey, Enum, ForeignKeyConstraint, UniqueConstraint, text, select, func
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.hybrid import hybrid_property
 from app.database import Base
 import enum
 
@@ -247,6 +248,31 @@ class Project(Base):
     # Relationships
     modules = relationship("Module", back_populates="project")
     owner_user = relationship("User", foreign_keys=[owner], back_populates="owned_projects")
+
+    @hybrid_property
+    def modules_count(self):
+        return len(self.modules)
+
+    @modules_count.expression
+    def modules_count(cls):
+        return (
+            select(func.count(Module.id))
+            .where(Module.project_id == cls.id)
+            .label("modules_count")
+        )
+
+    @hybrid_property
+    def prompts_count(self):
+        return sum(len(module.prompts) for module in self.modules)
+
+    @prompts_count.expression
+    def prompts_count(cls):
+        return (
+            select(func.count(Prompt.id))
+            .join(Module)
+            .where(Module.project_id == cls.id)
+            .label("prompts_count")
+        )
 
 class Prompt(Base):
     __tablename__ = "prompts"

@@ -2,6 +2,38 @@ import { useState, useEffect } from 'react'
 import { makeAuthenticatedRequest } from '@/lib/googleAuth'
 import { User } from '@/contexts/AuthContext'
 
+interface AuthMeResponse {
+  id: string
+  email: string
+  name: string
+  role: string
+  organization?: string | null
+  avatar?: string | null
+  provider?: string | null
+  provider_id?: string | null
+  is_verified: boolean
+  created_at: string
+  last_login?: string | null
+}
+
+interface DbUserResponse {
+  id: string
+  email: string
+  name: string
+  role: string
+  organization?: string | null
+  phone?: string | null
+  company_size?: string | null
+  avatar?: string | null
+  provider?: string | null
+  provider_id?: string | null
+  is_verified: boolean
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  last_login?: string | null
+}
+
 interface UseCurrentUserResult {
   user: User | null
   loading: boolean
@@ -19,23 +51,52 @@ export function useCurrentUser(): UseCurrentUserResult {
       setLoading(true)
       setError(null)
 
-      const userData = await makeAuthenticatedRequest<User>('/api/v1/auth/me')
+      const authUser = await makeAuthenticatedRequest<AuthMeResponse>('/api/v1/auth/me')
 
-      // Transform the user data to match the User interface
+      let dbUser: DbUserResponse | null = null
+      try {
+        dbUser = await makeAuthenticatedRequest<DbUserResponse>(`/v1/users/${authUser.id}`)
+      } catch (dbError) {
+        console.warn('useCurrentUser: failed to fetch database user profile', dbError)
+      }
+
+      const normalizedRole = (dbUser?.role || authUser.role || 'viewer').toLowerCase()
+      const role = ['admin', 'user', 'viewer'].includes(normalizedRole)
+        ? (normalizedRole as 'admin' | 'user' | 'viewer')
+        : 'viewer'
+
+      const avatarFromDb = dbUser?.avatar ?? undefined
+      const avatarFromAuth = authUser.avatar ?? undefined
+      const resolvedAvatar = [avatarFromDb, avatarFromAuth]
+        .map(value => (typeof value === 'string' ? value.trim() : ''))
+        .find(value => value.length > 0)
+
+      const resolvedProvider = (dbUser?.provider ?? authUser.provider ?? undefined)
+      const normalizedProvider = resolvedProvider
+        ? (resolvedProvider.toLowerCase() as 'local' | 'google')
+        : undefined
+
+      const resolvedProviderId = dbUser?.provider_id ?? authUser.provider_id ?? undefined
+      const resolvedCreatedAt = dbUser?.created_at ?? authUser.created_at
+      const resolvedLastLogin = dbUser?.last_login ?? authUser.last_login ?? undefined
+      const resolvedPhone = dbUser?.phone ?? undefined
+      const resolvedCompanySize = dbUser?.company_size ?? undefined
+      const resolvedOrganization = dbUser?.organization ?? authUser.organization ?? ''
+
       const transformedUser: User = {
-        id: userData.id,
-        email: userData.email,
-        name: userData.name,
-        role: userData.role as 'admin' | 'user' | 'viewer',
-        organization: userData.organization || '',
-        avatar: userData.avatar,
-        phone: undefined, // Not returned by /auth/me endpoint
-        companySize: undefined, // Not returned by /auth/me endpoint
-        createdAt: userData.created_at,
-        lastLogin: userData.last_login,
-        provider: userData.provider as 'local' | 'google' | undefined,
-        providerId: userData.provider_id,
-        isVerified: userData.is_verified,
+        id: authUser.id,
+        email: authUser.email,
+        name: dbUser?.name || authUser.name,
+        role,
+        organization: resolvedOrganization,
+        avatar: resolvedAvatar,
+        phone: resolvedPhone ?? undefined,
+        companySize: resolvedCompanySize ?? undefined,
+        createdAt: resolvedCreatedAt,
+        lastLogin: resolvedLastLogin ?? undefined,
+        provider: normalizedProvider,
+        providerId: resolvedProviderId ?? undefined,
+        isVerified: dbUser?.is_verified ?? authUser.is_verified,
       }
 
       setUser(transformedUser)

@@ -3,9 +3,11 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
 from datetime import datetime
+from sqlalchemy import select, func
+from sqlalchemy.orm import aliased
 
 from app.database import get_db
-from app.models import Project, AuditLog
+from app.models import Project, AuditLog, Module, Prompt # Import Module and Prompt
 from app.schemas import ProjectCreate, ProjectResponse, ProjectUpdate
 from app.auth import get_current_user
 from app.config import settings
@@ -22,8 +24,32 @@ async def list_projects(
     current_user: dict = Depends(get_current_user)
 ):
     """List all projects"""
-    projects = db.query(Project).offset(skip).limit(limit).all()
-    return projects
+    # Use the hybrid properties in the query
+    projects_query = select(
+        Project,
+        Project.modules_count,
+        Project.prompts_count
+    ).offset(skip).limit(limit)
+
+    # Execute the query and fetch results
+    # The result will be a list of tuples, where each tuple contains (Project_object, modules_count, prompts_count)
+    # We need to map this back to ProjectResponse schema
+    results = db.execute(projects_query).all()
+
+    # Manually construct ProjectResponse objects
+    # This is necessary because ProjectResponse expects modules_count and prompts_count as direct attributes
+    # and the query returns them as separate columns in a tuple.
+    # Alternatively, we could use a custom serializer or a different approach if ProjectResponse
+    # was designed to handle joinedload or subqueryload.
+    # However, given the current setup, this is the most straightforward way.
+    projects_with_counts = []
+    for project_obj, modules_count, prompts_count in results:
+        project_response = ProjectResponse.from_orm(project_obj)
+        project_response.modules_count = modules_count
+        project_response.prompts_count = prompts_count
+        projects_with_counts.append(project_response)
+
+    return projects_with_counts
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(

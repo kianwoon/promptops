@@ -294,15 +294,10 @@ class AuthService:
                 logger.warning(f"🔐 User with ID {user_id} not found in database")
 
             if user:
-                return {
-                    "user_id": user.id,
-                    "tenant": user.organization or "default-tenant",
-                    "tenant_id": user.organization or "default-tenant",
-                    "email": user.email,
-                    "name": user.name,
-                    "roles": [user.role.value] if user.role else ["user"]
-                }
+                logger.info(f"🔐 Found user: {user.email} with organization: {user.organization}")
+                return user
             else:
+                logger.warning(f"🔐 User with ID {user_id} not found in database")
                 return None
 
         except Exception as e:

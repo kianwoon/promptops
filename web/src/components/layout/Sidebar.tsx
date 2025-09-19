@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -51,13 +51,28 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
-  const { user, logout, hasPermission } = useAuth()
+  const { user, logout, hasPermission, dbUser } = useAuth()
+  const [avatarError, setAvatarError] = React.useState(false)
 
-  // Debug: Log navigation items and permissions
-  useEffect(() => {
+  const resolvedAvatar = React.useMemo(() => {
+    const databaseAvatar = typeof dbUser?.avatar === 'string' ? dbUser.avatar.trim() : ''
+    if (databaseAvatar) {
+      return databaseAvatar
+    }
+
+    const authAvatar = typeof user?.avatar === 'string' ? user.avatar.trim() : ''
+    return authAvatar || undefined
+  }, [dbUser?.avatar, user?.avatar])
+
+  React.useEffect(() => {
+    setAvatarError(false)
+  }, [resolvedAvatar])
+
+  React.useEffect(() => {
     if (import.meta.env.DEV) {
       console.log('🔍 Sidebar Debug:', {
         user,
+        dbUser,
         navigationItems: navigation.map(item => ({
           name: item.name,
           permission: item.permission,
@@ -65,14 +80,14 @@ export function Sidebar({ className }: SidebarProps) {
         }))
       })
     }
-  }, [user, hasPermission])
+  }, [user, dbUser, hasPermission])
 
   const visibleNavigation = navigation.filter(item => {
-    console.log('Checking navigation item:', item.name, 'permission:', item.permission);
+    console.log('Checking navigation item:', item.name, 'permission:', item.permission)
     if (!item.permission) return true
     try {
       const hasPerm = hasPermission(item.permission)
-      console.log(`${item.name} has permission ${item.permission}:`, hasPerm);
+      console.log(`${item.name} has permission ${item.permission}:`, hasPerm)
       return hasPerm
     } catch (error) {
       console.warn(`Permission check failed for ${item.name}:`, error)
@@ -80,7 +95,7 @@ export function Sidebar({ className }: SidebarProps) {
     }
   })
 
-  console.log('Visible navigation items:', visibleNavigation.map(item => item.name));
+  console.log('Visible navigation items:', visibleNavigation.map(item => item.name))
 
   return (
     <div className={cn(
@@ -155,7 +170,11 @@ export function Sidebar({ className }: SidebarProps) {
             !sidebarOpen && "justify-center"
           )}>
             <Avatar className="h-8 w-8">
-              <AvatarImage src={user?.avatar} alt={user?.name} />
+              <AvatarImage
+                src={avatarError ? undefined : resolvedAvatar}
+                alt={user?.name}
+                onError={() => setAvatarError(true)}
+              />
               <AvatarFallback>
                 {user?.name.split(' ').map(n => n[0]).join('') || 'U'}
               </AvatarFallback>

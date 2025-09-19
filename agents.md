@@ -5,6 +5,7 @@
 1. ✅ **Understand --> Think --> Plan --> Do**: Follow the critical thinking approach. 
 2. ✅ **tasks delegation to subagent**: delegate tassk to subagent!]
 3. ✅ **Request specific sections with offset/limit**: Instead of reading the entire large files, first use grep to find all class definitions and main function signatures in notebooks.py and notebook_rag_service.py, then we can dive deeper into specific areas of interest.
+4. ✅ **Use shell command 'Say'  to share your findings, ideas and propose solution**: 
 ## 🚨 Common Failures to Avoid
 ### 1. Superficial Pattern Matching
 **NEVER** choose files based on keywords when user specifies exact file/location
@@ -37,7 +38,7 @@
 ## 📊 Progress Communication
 # 🔴 MUST you do 
 ## Before each task 
-- use say command to  share your findings and respond
+- use shell command "say" to  share your findings and respond
 - read the ./claude.md file before start anything
 ## After each task:
 - check app and web server using tail to confirm no new issue.
