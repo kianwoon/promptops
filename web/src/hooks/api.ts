@@ -385,7 +385,7 @@ export const usePrompts = (moduleId?: string) =>
   useQuery({
     queryKey: ['prompts', moduleId],
     queryFn: () => {
-      const endpoint = moduleId ? `/prompts?module_id=${moduleId}` : '/prompts'
+      const endpoint = moduleId ? `/prompts?module_id=${moduleId}&include_inactive=true` : '/prompts?include_inactive=true'
       return apiRequest<Prompt[]>(endpoint)
     },
     enabled: moduleId !== undefined,
@@ -396,6 +396,13 @@ export const usePromptVersions = (promptId: string) =>
     queryKey: ['prompts', promptId, 'versions'],
     queryFn: () => apiRequest<Prompt[]>(`/prompts/${promptId}`),
     enabled: !!promptId,
+  })
+
+export const useLatestModuleVersion = (moduleId: string) =>
+  useQuery({
+    queryKey: ['prompts', moduleId, 'latest-version'],
+    queryFn: () => apiRequest<{ latest_version: string }>(`/prompts/modules/${moduleId}/latest-version`),
+    enabled: !!moduleId,
   })
 
 export const usePrompt = (promptId: string, version: string) =>
@@ -460,6 +467,46 @@ export const useDeletePrompt = () => {
     },
     onError: (error) => {
       toast.error(`Failed to delete prompt: ${error.message}`)
+    },
+  })
+}
+
+export const useActivatePrompt = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ promptId, version, reason }: { promptId: string; version: string; reason?: string }) =>
+      apiRequest<ApiResponse<Prompt>>(`/prompts/${promptId}/${version}/activate`, {
+        method: 'POST',
+        body: JSON.stringify(reason ? { reason } : {}),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['prompts'] })
+      queryClient.invalidateQueries({ queryKey: ['prompts', variables.promptId] })
+      toast.success('Prompt activated successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to activate prompt: ${error.message}`)
+    },
+  })
+}
+
+export const useDeactivatePrompt = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ promptId, version, reason }: { promptId: string; version: string; reason?: string }) =>
+      apiRequest<ApiResponse<Prompt>>(`/prompts/${promptId}/${version}/deactivate`, {
+        method: 'POST',
+        body: JSON.stringify(reason ? { reason } : {}),
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['prompts'] })
+      queryClient.invalidateQueries({ queryKey: ['prompts', variables.promptId] })
+      toast.success('Prompt deactivated successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to deactivate prompt: ${error.message}`)
     },
   })
 }
@@ -619,6 +666,12 @@ export const useApprovalRequests = (promptId?: string) =>
       return apiRequest<ApprovalRequest[]>(endpoint)
     },
     enabled: promptId !== undefined,
+  })
+
+export const useAllApprovalRequests = () =>
+  useQuery({
+    queryKey: ['approval-requests', 'all'],
+    queryFn: () => apiRequest<ApprovalRequest[]>('/approval-requests/'),
   })
 
 export const useApprovalRequest = (requestId: string) =>

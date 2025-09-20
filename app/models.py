@@ -108,6 +108,7 @@ class User(Base):
     templates = relationship("Template", foreign_keys="Template.owner", back_populates="owner_user")
     created_templates = relationship("Template", foreign_keys="Template.created_by", back_populates="creator_user")
     created_prompts = relationship("Prompt", foreign_keys="Prompt.created_by", back_populates="creator_user")
+    activated_prompts = relationship("Prompt", foreign_keys="Prompt.activated_by", back_populates="activator_user")
     updated_aliases = relationship("Alias", foreign_keys="Alias.updated_by", back_populates="updater_user")
 
     # Approval request relationships
@@ -300,6 +301,12 @@ class Prompt(Base):
     mas_risk_level = Column(String, nullable=False)
     mas_approval_log = Column(JSON, nullable=True)
 
+    # Activation status fields
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    activated_at = Column(DateTime(timezone=True), nullable=True)
+    activated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    activation_reason = Column(String, nullable=True)
+
     # Foreign key
     __table_args__ = (
         ForeignKeyConstraint(['module_id'], ['modules.id']),
@@ -311,6 +318,7 @@ class Prompt(Base):
     model_compatibilities = relationship("ModelCompatibility", back_populates="prompt")
     approval_requests = relationship("ApprovalRequest", back_populates="prompt")
     creator_user = relationship("User", foreign_keys=[created_by], back_populates="created_prompts")
+    activator_user = relationship("User", foreign_keys=[activated_by], back_populates="activated_prompts")
 
 class ModelCompatibility(Base):
     __tablename__ = "model_compatibilities"

@@ -64,7 +64,7 @@ import {
   useAvailableRoles,
   useApprovalFlowStats
 } from '@/hooks/useApprovalFlows'
-import { useUsers } from '@/hooks/api'
+import { useUsers, useUpdateApprovalRequest } from '@/hooks/api'
 import toast from 'react-hot-toast'
 
 
@@ -128,7 +128,13 @@ export function PromptApprovalWorkflow() {
   const { data: approvalRequests = [] } = useApprovalRequests()
   const { data: users = [] } = useUsers()
 
-  
+  // Debug: Log approval requests structure
+  console.log('🔍 [DEBUG] Approval requests structure:', approvalRequests)
+  if (approvalRequests.length > 0) {
+    console.log('🔍 [DEBUG] First approval request sample:', approvalRequests[0])
+    console.log('🔍 [DEBUG] Available fields:', Object.keys(approvalRequests[0]))
+  }
+
   // Create mappings for better display
   const userNameMap = useMemo(() => {
     const map: Record<string, string> = {}
@@ -245,6 +251,65 @@ export function PromptApprovalWorkflow() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
   const [filterType, setFilterType] = useState<'all' | 'create' | 'edit'>('all')
   const [selectedRequest, setSelectedRequest] = useState<any>(null)
+  const updateApprovalRequest = useUpdateApprovalRequest()
+  const [approvalComments, setApprovalComments] = useState('')
+  const [rejectionReason, setRejectionReason] = useState('')
+
+  // Debug: Log when selectedRequest changes
+  console.log('🔍 [DEBUG] selectedRequest:', selectedRequest)
+
+  // Handle approval actions
+  const handleApprove = async () => {
+    if (!selectedRequest) return
+
+    try {
+      await updateApprovalRequest.mutateAsync({
+        requestId: selectedRequest.id,
+        request: {
+          status: 'approved',
+          comments: approvalComments,
+          approver: 'current_user' // This should come from auth context
+        }
+      })
+      setSelectedRequest(null)
+      setApprovalComments('')
+      // Refresh the approval requests list
+      queryClient.invalidateQueries({ queryKey: ['approval-requests'] })
+      toast.success('Request approved successfully')
+    } catch (error) {
+      toast.error('Failed to approve request')
+    }
+  }
+
+  const handleReject = async () => {
+    if (!selectedRequest) return
+
+    try {
+      await updateApprovalRequest.mutateAsync({
+        requestId: selectedRequest.id,
+        request: {
+          status: 'rejected',
+          rejection_reason: rejectionReason,
+          approver: 'current_user' // This should come from auth context
+        }
+      })
+      setSelectedRequest(null)
+      setRejectionReason('')
+      // Refresh the approval requests list
+      queryClient.invalidateQueries({ queryKey: ['approval-requests'] })
+      toast.success('Request rejected successfully')
+    } catch (error) {
+      toast.error('Failed to reject request')
+    }
+  }
+
+  // Reset form when dialog closes
+  const handleDialogClose = () => {
+    setSelectedRequest(null)
+    setApprovalComments('')
+    setRejectionReason('')
+  }
+
   const [isDeleteFlowDialogOpen, setIsDeleteFlowDialogOpen] = useState(false)
   const [flowToDelete, setFlowToDelete] = useState<EnhancedApprovalFlow | null>(null)
 
@@ -291,10 +356,8 @@ export function PromptApprovalWorkflow() {
         flow: {
           name: flow.name,
           description: flow.description,
-          status: flow.status,
+          status: flow.status as 'active' | 'inactive' | 'draft',
           steps: flow.steps,
-          conditions: flow.conditions,
-          metadata: flow.metadata,
         }
       }, {
         onSuccess: () => {
@@ -315,8 +378,6 @@ export function PromptApprovalWorkflow() {
         description: flow.description,
         flow_type: selectedTemplate ? 'predefined' : 'custom',
         steps: flow.steps,
-        conditions: flow.conditions,
-        metadata: flow.metadata,
       }, {
         onSuccess: () => {
           // Close flow designer only after successful save
@@ -372,7 +433,7 @@ export function PromptApprovalWorkflow() {
     setShowTemplateSelector(false)
   }
 
-  const handleTemplateCreate = (template: FlowTemplate, customName?: string, customRoles?: Record<string, string[]>) => {
+  const handleTemplateCreate = (_template: FlowTemplate, _customName?: string, _customRoles?: Record<string, string[]>) => {
     // This is handled by the createFlowFromTemplate mutation
     setShowTemplateSelector(false)
   }
@@ -830,64 +891,148 @@ export function PromptApprovalWorkflow() {
       </Dialog>
 
       {/* Review Request Dialog */}
-      <Dialog open={!!selectedRequest} onOpenChange={() => setSelectedRequest(null)}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={!!selectedRequest} onOpenChange={handleDialogClose}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Review Approval Request</DialogTitle>
             <DialogDescription>
-              Review the details of this prompt approval request
+              Review and approve or reject this prompt approval request
             </DialogDescription>
           </DialogHeader>
           {selectedRequest && (
-            <div className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium">Module</Label>
-                <p className="text-sm text-muted-foreground">
-                  {moduleSlotMap[selectedRequest.prompt_id] || selectedRequest.prompt_id}
-                </p>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Prompt ID</Label>
-                <p className="text-sm text-muted-foreground font-mono">
-                  {selectedRequest.prompt_id}
-                </p>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Requested By</Label>
-                <p className="text-sm text-muted-foreground">
-                  {userNameMap[selectedRequest.requested_by] || selectedRequest.requested_by}
-                </p>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Requested At</Label>
-                <p className="text-sm text-muted-foreground">
-                  {new Date(selectedRequest.requested_at).toLocaleString()}
-                </p>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Status</Label>
-                <Badge variant={
-                  selectedRequest.status === 'approved' ? 'default' :
-                  selectedRequest.status === 'rejected' ? 'destructive' : 'secondary'
-                }>
-                  {selectedRequest.status}
-                </Badge>
-              </div>
-              {selectedRequest.comments && (
+            <div className="space-y-6">
+              {/* Request Details */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium">Comments</Label>
+                  <Label className="text-sm font-medium">Module</Label>
                   <p className="text-sm text-muted-foreground">
-                    {selectedRequest.comments}
+                    {moduleSlotMap[selectedRequest.prompt_id] || 'Unknown Module'}
                   </p>
                 </div>
+                <div>
+                  <Label className="text-sm font-medium">Prompt ID</Label>
+                  <p className="text-sm text-muted-foreground font-mono text-xs">
+                    {selectedRequest.prompt_id}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Requested By</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {userNameMap[selectedRequest.requested_by] || selectedRequest.requested_by}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Requested At</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(selectedRequest.requested_at).toLocaleString()}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Current Status</Label>
+                  <Badge variant={
+                    selectedRequest.status === 'approved' ? 'default' :
+                    selectedRequest.status === 'rejected' ? 'destructive' : 'secondary'
+                  }>
+                    {selectedRequest.status}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Prompt Details */}
+              {promptDetailsMap[selectedRequest.prompt_id] && (
+                <div className="border rounded-lg p-4">
+                  <h4 className="font-medium mb-2">Prompt Details</h4>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-sm font-medium">Name</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {promptDetailsMap[selectedRequest.prompt_id].name || 'Unnamed Prompt'}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Description</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {promptDetailsMap[selectedRequest.prompt_id].description || 'No description'}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Risk Level</Label>
+                      <Badge variant={
+                        promptDetailsMap[selectedRequest.prompt_id].mas_risk_level === 'high' ? 'destructive' :
+                        promptDetailsMap[selectedRequest.prompt_id].mas_risk_level === 'medium' ? 'default' : 'secondary'
+                      }>
+                        {promptDetailsMap[selectedRequest.prompt_id].mas_risk_level || 'low'} risk
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Approval Actions */}
+              {selectedRequest.status === 'pending' && (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="approvalComments" className="text-sm font-medium">
+                      Approval Comments (Optional)
+                    </Label>
+                    <Textarea
+                      id="approvalComments"
+                      placeholder="Add any comments about your approval decision..."
+                      value={approvalComments}
+                      onChange={(e) => setApprovalComments(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="rejectionReason" className="text-sm font-medium">
+                      Rejection Reason (Required for rejection)
+                    </Label>
+                    <Textarea
+                      id="rejectionReason"
+                      placeholder="If rejecting, please provide a reason..."
+                      value={rejectionReason}
+                      onChange={(e) => setRejectionReason(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  <DialogFooter className="flex justify-between">
+                    <Button
+                      variant="outline"
+                      onClick={handleDialogClose}
+                    >
+                      Cancel
+                    </Button>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="destructive"
+                        onClick={handleReject}
+                        disabled={!rejectionReason.trim() || updateApprovalRequest.isPending}
+                      >
+                        {updateApprovalRequest.isPending ? 'Rejecting...' : 'Reject'}
+                      </Button>
+                      <Button
+                        onClick={handleApprove}
+                        disabled={updateApprovalRequest.isPending}
+                      >
+                        {updateApprovalRequest.isPending ? 'Approving...' : 'Approve'}
+                      </Button>
+                    </div>
+                  </DialogFooter>
+                </div>
+              )}
+
+              {/* Show final status if already decided */}
+              {selectedRequest.status !== 'pending' && (
+                <DialogFooter>
+                  <Button variant="outline" onClick={handleDialogClose}>
+                    Close
+                  </Button>
+                </DialogFooter>
               )}
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedRequest(null)}>
-              Close
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

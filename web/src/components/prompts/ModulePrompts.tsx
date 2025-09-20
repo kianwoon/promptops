@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { usePrompts, useDeletePrompt, useProject, useModule, useAIAssistantProviders, useApprovalRequests } from '@/hooks/api'
+import { usePrompts, useDeletePrompt, useActivatePrompt, useDeactivatePrompt, useProject, useModule, useAIAssistantProviders, useAllApprovalRequests } from '@/hooks/api'
 import { PromptEditor } from './PromptEditor'
 import { formatDistanceToNow } from 'date-fns'
 import type { Prompt, ApprovalRequest } from '@/types/api'
@@ -14,7 +14,7 @@ import type { Prompt, ApprovalRequest } from '@/types/api'
 // Helper functions for approval status
 const getApprovalStatusColor = (status?: string) => {
   switch (status) {
-    case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200 animate-pulse'
     case 'approved': return 'bg-green-100 text-green-800 border-green-200'
     case 'rejected': return 'bg-red-100 text-red-800 border-red-200'
     default: return 'bg-gray-100 text-gray-800 border-gray-200'
@@ -32,26 +32,30 @@ const getApprovalStatusIcon = (status?: string) => {
 
 const getApprovalStatusText = (status?: string) => {
   switch (status) {
-    case 'pending': return 'Under Review'
-    case 'approved': return 'Approved'
-    case 'rejected': return 'Rejected'
-    default: return 'Not Submitted'
+    case 'pending': return '⏳ Under Review'
+    case 'approved': return '✅ Approved'
+    case 'rejected': return '❌ Rejected'
+    default: return '📝 Not Submitted'
   }
 }
 
+// Helper functions for activation status
+const getActivationStatusColor = (isActive?: boolean) => {
+  return isActive
+    ? 'bg-green-100 text-green-800 border-green-200'
+    : 'bg-gray-100 text-gray-800 border-gray-200'
+}
+
+const getActivationStatusIcon = (isActive?: boolean) => {
+  return isActive ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />
+}
+
+const getActivationStatusText = (isActive?: boolean) => {
+  return isActive ? 'Active' : 'Inactive'
+}
+
 // Approval Status Badge Component
-function ApprovalStatusBadge({ promptId }: { promptId: string }) {
-  const { data: approvalRequests, isLoading } = useApprovalRequests(promptId)
-
-  if (isLoading) {
-    return (
-      <Badge variant="outline" className="flex items-center gap-2">
-        <div className="w-4 h-4 bg-gray-200 rounded animate-pulse" />
-        Loading...
-      </Badge>
-    )
-  }
-
+function ApprovalStatusBadge({ approvalRequests }: { approvalRequests?: ApprovalRequest[] }) {
   const latestRequest = approvalRequests?.[0] // Get the most recent approval request
 
   return (
@@ -61,6 +65,44 @@ function ApprovalStatusBadge({ promptId }: { promptId: string }) {
     >
       {getApprovalStatusIcon(latestRequest?.status)}
       {getApprovalStatusText(latestRequest?.status)}
+    </Badge>
+  )
+}
+
+// Helper function to check if prompt is pending approval
+const isPromptPendingApproval = (approvalRequests?: ApprovalRequest[]) => {
+  const latestRequest = approvalRequests?.[0]
+  return latestRequest?.status === 'pending'
+}
+
+// Helper function to determine if activation should be allowed
+const canActivatePrompt = (isActive: boolean, approvalRequests?: ApprovalRequest[]) => {
+  // Already active prompts can be deactivated
+  if (isActive) return true
+
+  const latestRequest = approvalRequests?.[0]
+
+  // Can activate if:
+  // 1. No approval request exists (Not Submitted)
+  // 2. Approval status is 'approved'
+  // Cannot activate if:
+  // - Status is 'pending' (Under Review)
+  // - Status is 'rejected'
+
+  if (!latestRequest) return true // Not Submitted - can activate
+  if (latestRequest.status === 'approved') return true // Approved - can activate
+  return false // Pending or Rejected - cannot activate
+}
+
+// Activation Status Badge Component
+function ActivationStatusBadge({ isActive }: { isActive?: boolean }) {
+  return (
+    <Badge
+      variant="outline"
+      className={`flex items-center gap-2 ${getActivationStatusColor(isActive)}`}
+    >
+      {getActivationStatusIcon(isActive)}
+      {getActivationStatusText(isActive)}
     </Badge>
   )
 }
@@ -77,6 +119,23 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
   const { data: prompts, isLoading, refetch } = usePrompts(moduleId)
   const { data: aiProviders } = useAIAssistantProviders()
   const deletePrompt = useDeletePrompt()
+  const activatePrompt = useActivatePrompt()
+  const deactivatePrompt = useDeactivatePrompt()
+
+  // Fetch all approval requests for prompts
+  const { data: allApprovalRequests = [] } = useAllApprovalRequests()
+
+  // Create a map of prompt_id to approval requests for quick lookup
+  const approvalRequestsDataMap = React.useMemo(() => {
+    const map: Record<string, any[]> = {}
+    allApprovalRequests.forEach(request => {
+      if (!map[request.prompt_id]) {
+        map[request.prompt_id] = []
+      }
+      map[request.prompt_id].push(request)
+    })
+    return map
+  }, [allApprovalRequests])
 
   const [isCreatePromptOpen, setIsCreatePromptOpen] = useState(false)
   const [editingPrompt, setEditingPrompt] = useState<{ prompt: Prompt; version: string } | null>(null)
@@ -84,6 +143,16 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
 
   const handleDeletePrompt = async (promptId: string, version: string, promptName: string) => {
     setDeletePromptDialog({ promptId, version, promptName })
+  }
+
+  const handleActivatePrompt = async (promptId: string, version: string, promptName: string) => {
+    const reason = `Manual activation of ${promptName}`
+    await activatePrompt.mutateAsync({ promptId, version, reason })
+  }
+
+  const handleDeactivatePrompt = async (promptId: string, version: string, promptName: string) => {
+    const reason = `Manual deactivation of ${promptName}`
+    await deactivatePrompt.mutateAsync({ promptId, version, reason })
   }
 
   const confirmDeletePrompt = async () => {
@@ -224,7 +293,13 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
       {/* Prompts Grid */}
       {prompts && prompts.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {prompts.map((prompt) => (
+          {prompts.map((prompt) => {
+            // Get approval status for each prompt without using hooks inside map
+            const approvalRequestsData = approvalRequestsDataMap[prompt.id] || []
+            const isPendingApproval = isPromptPendingApproval(approvalRequestsData)
+            const canActivate = canActivatePrompt(prompt.is_active, approvalRequestsData)
+
+            return (
             <Card key={`${prompt.id}-${prompt.version}`} className="hover:shadow-md transition-shadow">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -240,8 +315,9 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {/* Risk Level and Approval Status Badges */}
-                  <div className="flex items-center justify-between gap-2">
+                  {/* Approval Status, Risk Level, and Activation Status Badges */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ApprovalStatusBadge approvalRequests={approvalRequestsData} />
                     <Badge
                       variant="outline"
                       className={`flex items-center gap-2 ${getRiskLevelColor(prompt.mas_risk_level)}`}
@@ -249,7 +325,7 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
                       {getRiskLevelIcon(prompt.mas_risk_level)}
                       {(prompt.mas_risk_level || 'low').toUpperCase()} Risk
                     </Badge>
-                    <ApprovalStatusBadge promptId={prompt.id} />
+                    <ActivationStatusBadge isActive={prompt.is_active} />
                   </div>
 
                   {/* Description */}
@@ -343,6 +419,29 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
                       <TestTube className="w-3 h-3 mr-2" />
                       Model Testing
                     </Button>
+                    {prompt.is_active ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => handleDeactivatePrompt(prompt.id, prompt.version, prompt.name || prompt.description || 'Untitled Prompt')}
+                        disabled={deactivatePrompt.isPending}
+                      >
+                        <XCircle className="w-3 h-3 mr-2" />
+                        {deactivatePrompt.isPending ? 'Deactivating...' : 'Deactivate Prompt'}
+                      </Button>
+                    ) : canActivate ? (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => handleActivatePrompt(prompt.id, prompt.version, prompt.name || prompt.description || 'Untitled Prompt')}
+                        disabled={activatePrompt.isPending}
+                      >
+                        <CheckCircle className="w-3 h-3 mr-2" />
+                        {activatePrompt.isPending ? 'Activating...' : 'Activate Prompt'}
+                      </Button>
+                    ) : null}
                     <Button
                       variant="destructive"
                       size="sm"
@@ -356,7 +455,8 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
                 </div>
               </CardContent>
             </Card>
-          ))}
+        );
+      })}
         </div>
       ) : (
         <Card>

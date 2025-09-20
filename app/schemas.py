@@ -209,6 +209,8 @@ class PromptCreate(BaseModel):
     mas_testing_notes: Optional[str] = None
     mas_risk_level: str
     mas_approval_log: Optional[Dict[str, Any]] = None
+    is_active: bool = Field(default=True, description="Whether this prompt version is active and available for use")
+    activation_reason: Optional[str] = Field(default=None, description="Reason for activation status change")
 
     model_config = ConfigDict(
         protected_namespaces=()
@@ -233,6 +235,10 @@ class PromptResponse(BaseModel):
     mas_approval_log: Optional[Dict[str, Any]] = None
     target_models: List[str]
     model_specific_prompts: List[ModelSpecificPrompt]
+    is_active: bool
+    activated_at: Optional[datetime] = None
+    activated_by: Optional[str] = None
+    activation_reason: Optional[str] = None
 
     model_config = ConfigDict(
         protected_namespaces=(),
@@ -251,6 +257,9 @@ class PromptUpdate(BaseModel):
     mas_testing_notes: Optional[str] = None
     mas_risk_level: Optional[str] = None
     mas_approval_log: Optional[Dict[str, Any]] = None
+    is_active: Optional[bool] = Field(default=None, description="Whether this prompt version is active and available for use")
+    activation_reason: Optional[str] = Field(default=None, description="Reason for activation status change")
+    version: Optional[str] = Field(default=None, description="New version number. Only allowed for prompts under review.")
 
     model_config = ConfigDict(
         protected_namespaces=()

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import get_db
 from app.models import ApprovalRequest, Prompt, AuditLog
@@ -64,10 +64,10 @@ async def create_approval_request(
         id=request_id,
         prompt_id=request_data.prompt_id,
         requested_by=request_data.requested_by,
-        requested_at=datetime.utcnow(),
+        requested_at=datetime.now(timezone.utc),
         status=request_data.status,
         approver=request_data.approver,
-        approved_at=datetime.utcnow() if request_data.status == "approved" else None,
+        approved_at=datetime.now(timezone.utc) if request_data.status == "approved" else None,
         rejection_reason=request_data.rejection_reason,
         comments=request_data.comments
     )
@@ -110,7 +110,7 @@ async def update_approval_request(
     }
 
     # Update fields
-    update_data = request_update.dict(exclude_unset=True)
+    update_data = request_update.model_dump(exclude_unset=True)
 
     # Validate status if provided
     if "status" in update_data:
@@ -120,10 +120,47 @@ async def update_approval_request(
 
         # Update approved_at timestamp when status changes to approved
         if update_data["status"] == "approved" and request.status != "approved":
-            update_data["approved_at"] = datetime.utcnow()
+            update_data["approved_at"] = datetime.now(timezone.utc)
 
     for field, value in update_data.items():
         setattr(request, field, value)
+
+    # Auto-activate prompt when approval is granted
+    if update_data.get("status") == "approved" and request.status != "approved":
+        prompt = db.query(Prompt).filter(Prompt.id == request.prompt_id).first()
+        if prompt:
+            # Store original values for audit log
+            before_activation = {
+                "is_active": prompt.is_active,
+                "activated_at": prompt.activated_at.isoformat() if prompt.activated_at else None,
+                "activated_by": prompt.activated_by
+            }
+
+            # Activate the prompt
+            prompt.is_active = True
+            prompt.activated_at = datetime.now(timezone.utc)
+            prompt.activated_by = request.approver or current_user["user_id"]
+            prompt.activation_reason = "Auto-activated upon approval"
+            prompt.updated_at = datetime.now(timezone.utc)
+
+            # Log the auto-activation
+            activation_audit_log = AuditLog(
+                id=str(uuid.uuid4()),
+                actor=request.approver or current_user["user_id"],
+                action="auto_activate_prompt",
+                subject=f"{prompt.id}@{prompt.version}",
+                subject_type="prompt",
+                subject_id=prompt.id,
+                before_json=before_activation,
+                after_json={
+                    "is_active": True,
+                    "activated_at": prompt.activated_at.isoformat(),
+                    "activated_by": prompt.activated_by,
+                    "activation_reason": "Auto-activated upon approval"
+                },
+                result="success"
+            )
+            db.add(activation_audit_log)
 
     db.commit()
     db.refresh(request)

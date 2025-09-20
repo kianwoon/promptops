@@ -359,9 +359,24 @@ async def get_prompt(
         user = await require_project_access(project_id)(user)
 
     # Get latest version of the prompt
-    prompt = db.query(Prompt).filter(
-        Prompt.id == prompt_id
-    ).order_by(Prompt.version.desc()).first()
+    # Support both old and new ID patterns for backward compatibility
+    import re
+
+    # Check if prompt_id has a version suffix
+    if re.match(r'^.+-v\d+\.\d+\.\d+$', prompt_id):
+        # Extract the base prompt ID
+        base_prompt_id = re.sub(r'-v\d+\.\d+\.\d+$', '', prompt_id)
+        # Find all versions of this base prompt
+        prompt = db.query(Prompt).filter(
+            (Prompt.id == base_prompt_id) |
+            (Prompt.id.like(f"{base_prompt_id}-v%"))
+        ).order_by(Prompt.version.desc()).first()
+    else:
+        # Find all versions of this prompt (original pattern and versioned pattern)
+        prompt = db.query(Prompt).filter(
+            (Prompt.id == prompt_id) |
+            (Prompt.id.like(f"{prompt_id}-v%"))
+        ).order_by(Prompt.version.desc()).first()
 
     if not prompt:
         raise HTTPException(
@@ -407,7 +422,24 @@ async def get_prompt_versions(
 ):
     """List all versions of a prompt"""
 
-    prompts = db.query(Prompt).filter(Prompt.id == prompt_id).all()
+    # Support both old and new ID patterns for backward compatibility
+    import re
+
+    # Check if prompt_id has a version suffix
+    if re.match(r'^.+-v\d+\.\d+\.\d+$', prompt_id):
+        # Extract the base prompt ID
+        base_prompt_id = re.sub(r'-v\d+\.\d+\.\d+$', '', prompt_id)
+        # Find all versions of this base prompt
+        prompts = db.query(Prompt).filter(
+            (Prompt.id == base_prompt_id) |
+            (Prompt.id.like(f"{base_prompt_id}-v%"))
+        ).all()
+    else:
+        # Find all versions of this prompt (original pattern and versioned pattern)
+        prompts = db.query(Prompt).filter(
+            (Prompt.id == prompt_id) |
+            (Prompt.id.like(f"{prompt_id}-v%"))
+        ).all()
 
     if not prompts:
         raise HTTPException(
@@ -454,12 +486,23 @@ async def get_prompt_version(
 ):
     """Get a specific version of a prompt"""
 
+    # Try the new versioned ID pattern first
+    versioned_id = f"{prompt_id}-v{version}"
     prompt = db.query(Prompt).filter(
         and_(
-            Prompt.id == prompt_id,
+            Prompt.id == versioned_id,
             Prompt.version == version
         )
     ).first()
+
+    # If not found, try the original pattern (for backward compatibility)
+    if not prompt:
+        prompt = db.query(Prompt).filter(
+            and_(
+                Prompt.id == prompt_id,
+                Prompt.version == version
+            )
+        ).first()
 
     if not prompt:
         raise HTTPException(
@@ -577,9 +620,24 @@ async def get_model_specific_prompt(
     """Get model-specific version of a prompt"""
 
     # Get latest version of the prompt
-    prompt = db.query(Prompt).filter(
-        Prompt.id == prompt_id
-    ).order_by(Prompt.version.desc()).first()
+    # Support both old and new ID patterns for backward compatibility
+    import re
+
+    # Check if prompt_id has a version suffix
+    if re.match(r'^.+-v\d+\.\d+\.\d+$', prompt_id):
+        # Extract the base prompt ID
+        base_prompt_id = re.sub(r'-v\d+\.\d+\.\d+$', '', prompt_id)
+        # Find all versions of this base prompt
+        prompt = db.query(Prompt).filter(
+            (Prompt.id == base_prompt_id) |
+            (Prompt.id.like(f"{base_prompt_id}-v%"))
+        ).order_by(Prompt.version.desc()).first()
+    else:
+        # Find all versions of this prompt (original pattern and versioned pattern)
+        prompt = db.query(Prompt).filter(
+            (Prompt.id == prompt_id) |
+            (Prompt.id.like(f"{prompt_id}-v%"))
+        ).order_by(Prompt.version.desc()).first()
 
     if not prompt:
         raise HTTPException(
@@ -646,9 +704,24 @@ async def batch_get_prompts(
     for prompt_id in batch_request.prompt_ids:
         try:
             # Get latest version of the prompt
-            prompt = db.query(Prompt).filter(
-                Prompt.id == prompt_id
-            ).order_by(Prompt.version.desc()).first()
+            # Support both old and new ID patterns for backward compatibility
+            import re
+
+            # Check if prompt_id has a version suffix
+            if re.match(r'^.+-v\d+\.\d+\.\d+$', prompt_id):
+                # Extract the base prompt ID
+                base_prompt_id = re.sub(r'-v\d+\.\d+\.\d+$', '', prompt_id)
+                # Find all versions of this base prompt
+                prompt = db.query(Prompt).filter(
+                    (Prompt.id == base_prompt_id) |
+                    (Prompt.id.like(f"{base_prompt_id}-v%"))
+                ).order_by(Prompt.version.desc()).first()
+            else:
+                # Find all versions of this prompt (original pattern and versioned pattern)
+                prompt = db.query(Prompt).filter(
+                    (Prompt.id == prompt_id) |
+                    (Prompt.id.like(f"{prompt_id}-v%"))
+                ).order_by(Prompt.version.desc()).first()
 
             if not prompt:
                 errors.append({"prompt_id": prompt_id, "error": "Prompt not found"})

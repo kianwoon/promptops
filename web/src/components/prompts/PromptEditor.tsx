@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react'
-import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -28,11 +27,15 @@ import {
   Bot,
   Copy,
   Check,
-  GitCompare
+  GitCompare,
+  Plus,
+  Trash2,
+  Download,
+  Upload
 } from 'lucide-react'
 import { AIAssistantLoading } from '@/components/ai/AIAssistantLoading'
 import { DiffViewer } from '@/components/DiffViewer'
-import { usePrompt, useUpdatePrompt, useCreatePrompt, useModelCompatibilities, useTestPromptCompatibility, useCompatibilityMatrix, useApprovalRequests, useCreateApprovalRequest, useAIAssistantProviders } from '@/hooks/api'
+import { usePrompt, useUpdatePrompt, useCreatePrompt, useTestPromptCompatibility, useCompatibilityMatrix, useApprovalRequests, useCreateApprovalRequest, useAIAssistantProviders, usePromptVersions, useLatestModuleVersion } from '@/hooks/api'
 import type { Prompt, PromptCreate, PromptUpdate } from '@/types/api'
 import { formatDistanceToNow } from 'date-fns'
 import { useAuth } from '@/contexts/AuthContext'
@@ -110,9 +113,6 @@ export function PromptEditor({
     return isNew ? 'Create' : 'Save'
   }
 
-  
-  // Force cache bust - try different approach
-  console.log('CACHE BUST: v4')
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [validation, setValidation] = useState<MASComplianceValidation>({ isValid: true, errors: [], warnings: [] })
@@ -122,15 +122,22 @@ export function PromptEditor({
   const [isCopied, setIsCopied] = useState(false)
   const [showDiff, setShowDiff] = useState(false)
   const [originalContent, setOriginalContent] = useState('')
-  
+  const [showCreateVersionDialog, setShowCreateVersionDialog] = useState(false)
+  const [showVersionDiff, setShowVersionDiff] = useState(false)
+  const [selectedVersionForDiff, setSelectedVersionForDiff] = useState<Prompt | null>(null)
+  const [newVersion, setNewVersion] = useState('')
+  const [copyFromVersion, setCopyFromVersion] = useState<string>('')
+  const [isCreatingVersion, setIsCreatingVersion] = useState(false)
+
   const { data: prompt, isLoading } = usePrompt(promptId || '', version || '')
+  const { data: promptVersions, isLoading: isVersionsLoading } = usePromptVersions(promptId || '')
+  const { data: latestModuleVersion } = useLatestModuleVersion(moduleId || '')
   const module = moduleData
 
   // Component ready state to prevent rendering during initialization
   const [isComponentReady, setIsComponentReady] = useState(false)
   const updatePrompt = useUpdatePrompt()
   const createPrompt = useCreatePrompt()
-  const { data: compatibilities } = useModelCompatibilities(promptId)
   const { data: matrix } = useCompatibilityMatrix(promptId || '', version)
   const { data: approvalRequests } = useApprovalRequests(promptId)
   const { data: aiProviders } = useAIAssistantProviders()
@@ -150,7 +157,7 @@ export function PromptEditor({
       setMasIntent(prompt.mas_intent)
       setMasFairnessNotes(prompt.mas_fairness_notes)
       setMasTestingNotes(prompt.mas_testing_notes || '')
-      setMasRiskLevel(prompt.mas_risk_level || 'low')
+      setMasRiskLevel(getSafeMasRiskLevel(prompt.mas_risk_level as 'low' | 'medium' | 'high'))
     }
   }, [prompt, isNew])
 
@@ -549,6 +556,213 @@ export function PromptEditor({
     }
   }
 
+  const validateVersion = (version: string): boolean => {
+    const versionRegex = /^\d+\.\d+\.\d+$/
+    return versionRegex.test(version)
+  }
+
+  const getNextVersion = (currentVersion: string): string => {
+    const parts = currentVersion.split('.')
+    const major = parseInt(parts[0])
+    const minor = parseInt(parts[1])
+    const patch = parseInt(parts[2])
+
+    return `${major}.${minor}.${patch + 1}`
+  }
+
+  const handleCreateNewVersion = async () => {
+    if (!promptId || !newVersion || !moduleId) return
+
+    if (!validateVersion(newVersion)) {
+      setValidation({
+        isValid: false,
+        errors: ['Version must be in semantic versioning format (e.g., 1.0.0)'],
+        warnings: []
+      })
+      return
+    }
+
+    setIsCreatingVersion(true)
+    try {
+      const isUnderReview = hasPendingApproval()
+
+      if (isUnderReview) {
+        // When under review: Update existing prompt's version number
+        let contentToUse = content
+
+        if (copyFromVersion && copyFromVersion !== "empty") {
+          const versionToCopy = promptVersions?.find(v => v.version === copyFromVersion)
+          if (versionToCopy) {
+            contentToUse = versionToCopy.content
+          }
+        }
+
+        // Update the existing prompt with new version number
+        const updateData: PromptUpdate = {
+          content: contentToUse,
+          name: description || `Prompt ${newVersion}`,
+          description,
+          provider_id: providerId || null,
+          target_models: [],
+          model_specific_prompts: [],
+          mas_intent: masIntent,
+          mas_fairness_notes: masFairnessNotes,
+          mas_testing_notes: masTestingNotes,
+          mas_risk_level: masRiskLevel,
+          version: newVersion // Include the new version number
+        }
+
+        // Update the prompt with the new version number
+        const result = await updatePrompt.mutateAsync({
+          promptId,
+          version, // Current version
+          prompt: updateData
+        })
+
+        setShowCreateVersionDialog(false)
+        setNewVersion('')
+        setCopyFromVersion('')
+
+        // Show success message
+        setValidation(prev => ({
+          ...prev,
+          warnings: [...prev.warnings, `Prompt version updated successfully from ${version} to ${newVersion}`]
+        }))
+
+        // Call onSave with the updated prompt to refresh the parent component
+        onSave?.(result.data)
+      } else {
+        // When active: Create new version with new ID (current behavior)
+        let contentToUse = content
+
+        if (copyFromVersion && copyFromVersion !== "empty") {
+          const versionToCopy = promptVersions?.find(v => v.version === copyFromVersion)
+          if (versionToCopy) {
+            contentToUse = versionToCopy.content
+          }
+        }
+
+        // Generate a unique ID for the new version to work around database constraint
+        // This creates a unique ID based on the original prompt ID with a version suffix
+        const uniqueVersionId = `${promptId}-v${newVersion.replace(/\./g, '-')}`
+
+        const newPrompt: PromptCreate = {
+          id: uniqueVersionId,
+          version: newVersion,
+          module_id: moduleId,
+          content: contentToUse,
+          name: description || `Prompt ${newVersion}`,
+          description,
+          provider_id: providerId || null,
+          target_models: [],
+          model_specific_prompts: [],
+          mas_intent: masIntent,
+          mas_fairness_notes: masFairnessNotes,
+          mas_testing_notes: masTestingNotes,
+          mas_risk_level: masRiskLevel
+        }
+
+        await createPrompt.mutateAsync(newPrompt)
+        setShowCreateVersionDialog(false)
+        setNewVersion('')
+        setCopyFromVersion('')
+
+        // Switch to the new version
+        if (onSave) {
+          onSave({
+            ...newPrompt,
+            created_by: user.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            is_active: false
+          })
+        }
+
+        // Show success message
+        setValidation(prev => ({
+          ...prev,
+          warnings: [...prev.warnings, 'New version created successfully']
+        }))
+      }
+    } catch (error) {
+      console.error('Failed to create/update prompt version:', error)
+      setValidation(prev => ({
+        ...prev,
+        errors: [...prev.errors, 'Failed to create/update version']
+      }))
+    } finally {
+      setIsCreatingVersion(false)
+    }
+  }
+
+  const handleCompareVersion = (versionToCompare: Prompt) => {
+    setSelectedVersionForDiff(versionToCompare)
+    setShowVersionDiff(true)
+  }
+
+  const handleSwitchToVersion = (versionToSwitch: string) => {
+    if (onSave) {
+      const targetPrompt = promptVersions?.find(v => v.version === versionToSwitch)
+      if (targetPrompt) {
+        onSave(targetPrompt)
+      }
+    }
+  }
+
+  const handleDeleteVersion = async (versionToDelete: string) => {
+    if (!promptId || versionToDelete === version) return
+
+    try {
+      await updatePrompt.mutateAsync({
+        promptId,
+        version: versionToDelete,
+        prompt: { is_active: false }
+      })
+    } catch (error) {
+      console.error('Failed to delete version:', error)
+    }
+  }
+
+  const openCreateVersionDialog = () => {
+    // Use the latest version from the entire module, not just the current prompt
+    const latestVersion = latestModuleVersion?.latest_version || version
+    const nextVersion = getNextVersion(latestVersion)
+
+    if (hasPendingApproval()) {
+      // Auto-increment version when under review
+      setNewVersion(nextVersion)
+      setCopyFromVersion(version)
+    } else {
+      // Let user choose version when not under review
+      setNewVersion(nextVersion)
+      setCopyFromVersion(version)
+    }
+    setShowCreateVersionDialog(true)
+  }
+
+  // Check if prompt has pending approval requests
+  const hasPendingApproval = () => {
+    return approvalRequests?.some(req => req.status === 'pending') || false
+  }
+
+  // Get appropriate button text for version creation
+  const getVersionButtonText = () => {
+    return hasPendingApproval() ? 'Update Version' : 'Create New Version'
+  }
+
+  // Get dialog title based on approval status
+  const getVersionDialogTitle = () => {
+    return hasPendingApproval() ? 'Update Prompt Version' : 'Create New Version'
+  }
+
+  // Get dialog description based on approval status
+  const getVersionDialogDescription = () => {
+    if (hasPendingApproval()) {
+      return 'This prompt is currently under review. The version will be updated with new content while keeping the same prompt ID.'
+    }
+    return 'Create a new version of this prompt. You can copy content from an existing version or start fresh.'
+  }
+
   const getRiskLevelColor = (risk?: string) => {
     switch (risk) {
       case 'low': return 'bg-green-100 text-green-800 border-green-200'
@@ -599,8 +813,6 @@ export function PromptEditor({
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Temporarily commented out to test error source */}
-          {/*
           <Badge
             variant="outline"
             className={`flex items-center gap-2 ${getRiskLevelColor(getSafeMasRiskLevel(masRiskLevel))}`}
@@ -608,7 +820,6 @@ export function PromptEditor({
             {getRiskLevelIcon(getSafeMasRiskLevel(masRiskLevel))}
             {getSafeMasRiskLevel(masRiskLevel).toUpperCase()} Risk
           </Badge>
-          */}
 
           {!isNew && (
             <Button
@@ -957,11 +1168,11 @@ export function PromptEditor({
                 </Button>
               </div>
 
-              {matrix && (
+              {matrix && Array.isArray(matrix.results) && (
                 <div className="space-y-4">
                   <h4 className="font-medium">Compatibility Matrix</h4>
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {matrix.results?.map((result: any, index: number) => (
+                    {matrix.results.map((result: any, index: number) => (
                       <Card key={index}>
                         <CardContent className="pt-4">
                           <div className="space-y-2">
@@ -993,27 +1204,126 @@ export function PromptEditor({
         <TabsContent value="versions" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <GitCommit className="w-5 h-5 mr-2" />
-                Version History
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center">
+                  <GitCommit className="w-5 h-5 mr-2" />
+                  Version History
+                </CardTitle>
+                {!isNew && (
+                  <Button onClick={openCreateVersionDialog} className="flex items-center">
+                    <Plus className="w-4 h-4 mr-2" />
+                    {getVersionButtonText()}
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                {isNew ? 'No versions yet. Create the first version to get started.' : 'Version history and comparison will be available here.'}
-              </p>
-
-              {!isNew && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-3 border rounded">
-                    <div>
-                      <span className="font-medium">{version}</span>
-                      <span className="text-sm text-muted-foreground ml-2">
-                        {formatDistanceToNow(new Date(prompt?.updated_at || ''), { addSuffix: true })}
-                      </span>
-                    </div>
-                    <Badge variant="default">Current</Badge>
+              {isNew ? (
+                <div className="text-center py-8">
+                  <GitCommit className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No versions yet</h3>
+                  <p className="text-muted-foreground mb-4">Create the first version to get started with version management.</p>
+                </div>
+              ) : isVersionsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : promptVersions && promptVersions.length > 0 ? (
+                <div className="space-y-4">
+                  {/* Version Stats */}
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span>Total versions: {promptVersions.length}</span>
+                    <span>Active versions: {promptVersions.filter(v => v.is_active).length}</span>
                   </div>
+
+                  {/* Versions Table */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="grid grid-cols-6 gap-4 p-4 bg-muted text-sm font-medium">
+                      <div>Version</div>
+                      <div>Status</div>
+                      <div>Created</div>
+                      <div>Risk Level</div>
+                      <div>Author</div>
+                      <div className="text-right">Actions</div>
+                    </div>
+
+                    <div className="divide-y">
+                      {promptVersions
+                        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                        .map((versionItem) => (
+                          <div key={versionItem.version} className="grid grid-cols-6 gap-4 p-4 items-center text-sm">
+                            <div>
+                              <div className="font-medium">{versionItem.version}</div>
+                              {versionItem.description && (
+                                <div className="text-muted-foreground text-xs mt-1">
+                                  {versionItem.description}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                {versionItem.version === version ? (
+                                  <Badge variant="default">Current</Badge>
+                                ) : versionItem.is_active ? (
+                                  <Badge variant="secondary">Active</Badge>
+                                ) : (
+                                  <Badge variant="outline">Inactive</Badge>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-muted-foreground">
+                              {formatDistanceToNow(new Date(versionItem.created_at), { addSuffix: true })}
+                            </div>
+                            <div>
+                              <Badge className={getRiskLevelColor(versionItem.mas_risk_level)}>
+                                {versionItem.mas_risk_level?.toUpperCase()}
+                              </Badge>
+                            </div>
+                            <div className="text-muted-foreground text-xs">
+                              {versionItem.created_by}
+                            </div>
+                            <div className="flex items-center justify-end gap-1">
+                              {versionItem.version !== version && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleSwitchToVersion(versionItem.version)}
+                                    title="Switch to this version"
+                                  >
+                                    <Upload className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleCompareVersion(versionItem)}
+                                    title="Compare with current"
+                                  >
+                                    <GitCompare className="w-4 h-4" />
+                                  </Button>
+                                  {promptVersions.filter(v => v.is_active).length > 1 && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleDeleteVersion(versionItem.version)}
+                                      title="Delete version"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <GitCommit className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No versions found</h3>
+                  <p className="text-muted-foreground mb-4">Unable to load version history. Please try refreshing the page.</p>
                 </div>
               )}
             </CardContent>
@@ -1058,10 +1368,15 @@ export function PromptEditor({
       <AIAssistantLoading
         isOpen={showAIAssistantLoading}
         onClose={() => setShowAIAssistantLoading(false)}
+        onComplete={(generatedContent, masFields) => {
+          // Handle completion when AI generation is done
+          // The actual content update is handled in handleAIAssistant
+          setShowAIAssistantLoading(false)
+        }}
         getContext={() => ({
           description: description || 'Create a prompt',
-          existingContent: content,
-          promptType: isNew ? 'create_prompt' : 'edit_prompt'
+          module_info: module?.description || '',
+          requirements: module?.requirements || ''
         })}
       />
 
@@ -1077,6 +1392,115 @@ export function PromptEditor({
           oldContent={originalContent}
           newContent={content}
           title="Prompt Content Changes"
+        />
+      )}
+
+      {/* Create New Version Dialog */}
+      <Dialog open={showCreateVersionDialog} onOpenChange={setShowCreateVersionDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{getVersionDialogTitle()}</DialogTitle>
+            <DialogDescription>
+              {getVersionDialogDescription()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Always show version number field, but disable when under review */}
+            <div className="space-y-2">
+              <Label htmlFor="new-version">Version Number *</Label>
+              <Input
+                id="new-version"
+                placeholder="1.0.0"
+                value={newVersion}
+                onChange={(e) => setNewVersion(e.target.value)}
+                disabled={hasPendingApproval()}
+                className={validation.errors.some(e => e.includes('Version')) ? 'border-red-500' : ''}
+              />
+              <p className="text-xs text-muted-foreground">
+                {hasPendingApproval()
+                  ? `New version number for updating prompt ${promptId} (currently under review)`
+                  : 'Use semantic versioning format (e.g., 1.0.0, 1.0.1, 1.1.0)'
+                }
+              </p>
+              {validation.errors.some(e => e.includes('Version')) && (
+                <p className="text-xs text-red-500">{validation.errors.find(e => e.includes('Version'))}</p>
+              )}
+            </div>
+
+            {/* Always show copy content selector */}
+            <div className="space-y-2">
+              <Label htmlFor="copy-from">Copy Content From</Label>
+              <Select value={copyFromVersion} onValueChange={setCopyFromVersion}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select version to copy from" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="empty">Start with empty content</SelectItem>
+                  {promptVersions?.map((versionItem) => (
+                    <SelectItem key={versionItem.version} value={versionItem.version}>
+                      {versionItem.version} - {versionItem.description || 'No description'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Choose which version to copy content from, or start with empty content
+              </p>
+            </div>
+
+            {hasPendingApproval() && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <Clock className="h-5 w-5 text-yellow-800 mt-0.5 mr-3" />
+                  <div>
+                    <h4 className="text-sm font-medium text-yellow-800">Prompt Under Review</h4>
+                    <p className="text-sm text-yellow-700 mt-1">
+                      This prompt is currently awaiting approval. The existing prompt will be updated with the new version number and content, keeping the same prompt ID to maintain the approval workflow.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <AlertTriangle className="h-5 w-5 text-blue-800 mt-0.5 mr-3" />
+                <div>
+                  <h4 className="text-sm font-medium text-blue-800">Version Information</h4>
+                  <p className="text-sm text-blue-700 mt-1">
+                    {hasPendingApproval()
+                      ? 'The existing prompt will be updated with the new version number and all current MAS FEAT compliance fields.'
+                      : 'A new version will be created with all current MAS FEAT compliance fields copied over. You can modify them after creation.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateVersionDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateNewVersion}
+              disabled={!newVersion || isCreatingVersion}
+            >
+              {isCreatingVersion ? (hasPendingApproval() ? 'Updating...' : 'Creating...') : (hasPendingApproval() ? 'Update Version' : 'Create New Version')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Version Comparison Dialog */}
+      {showVersionDiff && selectedVersionForDiff && (
+        <DiffViewer
+          isOpen={showVersionDiff}
+          onClose={() => {
+            setShowVersionDiff(false)
+            setSelectedVersionForDiff(null)
+          }}
+          oldContent={selectedVersionForDiff.content}
+          newContent={content}
+          title={`Compare Version ${selectedVersionForDiff.version} with Current`}
         />
       )}
     </div>

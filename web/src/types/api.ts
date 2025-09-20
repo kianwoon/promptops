@@ -255,6 +255,10 @@ export interface Prompt {
   mas_approval_log?: Record<string, any>
   target_models: string[]
   model_specific_prompts: ModelSpecificPrompt[]
+  is_active: boolean
+  activated_at?: string | null
+  activated_by?: string | null
+  activation_reason?: string | null
 }
 
 export interface PromptCreate {
@@ -272,6 +276,8 @@ export interface PromptCreate {
   mas_testing_notes?: string
   mas_risk_level: string
   mas_approval_log?: Record<string, any>
+  is_active?: boolean
+  activation_reason?: string | null
 }
 
 export interface PromptUpdate {
@@ -286,6 +292,9 @@ export interface PromptUpdate {
   mas_testing_notes?: string
   mas_risk_level?: string
   mas_approval_log?: Record<string, any>
+  is_active?: boolean
+  activation_reason?: string | null
+  version?: string // New version number. Only allowed for prompts under review.
 }
 
 // Compatibility Matrix Types

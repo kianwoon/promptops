@@ -55,7 +55,10 @@
       "WebSearch",
       "mcp__web-search-prime__webSearchPrime",
       "WebFetch(domain:docs.claude.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(npx eslint:*)",
+      "Bash(echo:*)",
+      "Bash(DATABASE_URL=\"postgresql://promptops:promptops@localhost:5432/promptops\" psql:*)"
     ],
     "deny": [],
     "ask": []
