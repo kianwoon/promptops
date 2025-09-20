@@ -390,6 +390,13 @@ export interface ApprovalRequest {
   approved_at?: string
   rejection_reason?: string
   comments?: string
+  // Prompt version information
+  prompt_version: string
+  prompt_name: string
+  prompt_description?: string
+  prompt_is_active: boolean
+  prompt_created_by: string
+  prompt_created_at: string
 }
 
 export interface ApprovalRequestCreate {

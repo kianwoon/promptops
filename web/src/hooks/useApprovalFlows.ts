@@ -749,6 +749,83 @@ export const useAvailablePermissionTemplates = (options?: UseQueryOptions<Permis
     ...options,
   })
 
+// ============ APPROVAL PERMISSION HOOKS ============
+
+export interface ApprovalPermissionCheck {
+  can_approve: boolean
+  can_reject: boolean
+  can_escalate: boolean
+  can_view_details: boolean
+  required_roles: string[]
+  user_roles: string[]
+  current_step_roles: string[]
+  is_step_approver: boolean
+  is_system_admin: boolean
+  permission_details: {
+    role_based_access: boolean
+    step_specific_access: boolean
+    flow_admin_access: boolean
+  }
+}
+
+export const useApprovalPermissions = (requestId?: string, options?: UseQueryOptions<ApprovalPermissionCheck>) =>
+  useQuery({
+    queryKey: ['approval-permissions', requestId],
+    queryFn: async () => {
+      if (!requestId) {
+        // Return default permissions if no request ID
+        return {
+          can_approve: false,
+          can_reject: false,
+          can_escalate: false,
+          can_view_details: true,
+          required_roles: [],
+          user_roles: [],
+          current_step_roles: [],
+          is_step_approver: false,
+          is_system_admin: false,
+          permission_details: {
+            role_based_access: false,
+            step_specific_access: false,
+            flow_admin_access: false
+          }
+        }
+      }
+
+      try {
+        return await apiRequest<ApprovalPermissionCheck>(`/${requestId}/permissions`)
+      } catch (error) {
+        // Fallback to client-side permission check if backend endpoint doesn't exist
+        const { useAuth } = await import('@/contexts/AuthContext')
+        const auth = useAuth()
+        const userRole = auth.user?.role || 'viewer'
+
+        // Default role-based permissions for approval
+        const adminRoles = ['admin']
+        const approverRoles = ['admin', 'approver']
+
+        return {
+          can_approve: approverRoles.includes(userRole),
+          can_reject: approverRoles.includes(userRole),
+          can_escalate: adminRoles.includes(userRole),
+          can_view_details: true,
+          required_roles: approverRoles,
+          user_roles: [userRole],
+          current_step_roles: approverRoles,
+          is_step_approver: approverRoles.includes(userRole),
+          is_system_admin: adminRoles.includes(userRole),
+          permission_details: {
+            role_based_access: true,
+            step_specific_access: false,
+            flow_admin_access: adminRoles.includes(userRole)
+          }
+        }
+      }
+    },
+    enabled: !!requestId,
+    ...options,
+  })
+
 // ============ UTILITY HOOKS ============
 
 export const useFlowDesignerState = (initialState?: Partial<FlowDesignerState>) => {

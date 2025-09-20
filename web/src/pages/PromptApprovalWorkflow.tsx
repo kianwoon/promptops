@@ -29,7 +29,8 @@ import {
   AlertTriangle,
   Layers,
   Play,
-  Pause
+  Pause,
+  Lock
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { FlowDesigner } from '@/components/approval/FlowDesigner'
@@ -62,9 +63,11 @@ import {
   useDeleteApprovalFlow,
   useApprovalRequests,
   useAvailableRoles,
-  useApprovalFlowStats
+  useApprovalFlowStats,
+  useApprovalPermissions
 } from '@/hooks/useApprovalFlows'
-import { useUsers, useUpdateApprovalRequest } from '@/hooks/api'
+import { useUsers, useModules, usePrompts, useUpdateApprovalRequest } from '@/hooks/api'
+import { useAuth } from '@/contexts/AuthContext'
 import toast from 'react-hot-toast'
 
 
@@ -127,123 +130,9 @@ export function PromptApprovalWorkflow() {
   const { data: flowStats } = useApprovalFlowStats()
   const { data: approvalRequests = [] } = useApprovalRequests()
   const { data: users = [] } = useUsers()
-
-  // Debug: Log approval requests structure
-  console.log('🔍 [DEBUG] Approval requests structure:', approvalRequests)
-  if (approvalRequests.length > 0) {
-    console.log('🔍 [DEBUG] First approval request sample:', approvalRequests[0])
-    console.log('🔍 [DEBUG] Available fields:', Object.keys(approvalRequests[0]))
-  }
-
-  // Create mappings for better display
-  const userNameMap = useMemo(() => {
-    const map: Record<string, string> = {}
-    users.forEach((user: any) => {
-      if (user.id && !map[user.id]) {
-        map[user.id] = user.name || user.email || user.id
-      }
-    })
-    return map
-  }, [users])
-
-  // Get unique prompt IDs from approval requests
-  const uniquePromptIds = useMemo(() => {
-    return [...new Set(approvalRequests.map((r: any) => r.prompt_id))]
-  }, [approvalRequests])
-
-  // Use useQueries to fetch multiple prompts without hooks order violation
-  const promptQueries = useQueries({
-    queries: uniquePromptIds.map((promptId) => ({
-      queryKey: ['prompts', promptId, 'versions'],
-      queryFn: () => apiRequest<any[]>(`/prompts/${promptId}`),
-      enabled: !!promptId,
-    }))
-  })
-
-  // Create prompt details map from query results
-  const promptDetailsMap = useMemo(() => {
-    const map: Record<string, any> = {}
-    promptQueries.forEach((query, index) => {
-      const promptId = uniquePromptIds[index]
-      if (query.data && query.data.length > 0) {
-        map[promptId] = query.data[0] // Get latest version
-      }
-    })
-    return map
-  }, [promptQueries, uniquePromptIds])
-
-  // Fetch module details for each unique module_id using existing hooks
-  const uniqueModuleIds = useMemo(() => {
-    return [...new Set(Object.values(promptDetailsMap).map((p: any) => p?.module_id).filter(Boolean))]
-  }, [promptDetailsMap])
-
-  // Use useQueries to fetch multiple modules without hooks order violation
-  const moduleQueries = useQueries({
-    queries: uniqueModuleIds.map((moduleId) => ({
-      queryKey: ['modules', moduleId, 'versions'],
-      queryFn: () => apiRequest<any[]>(`/modules/${moduleId}`),
-      enabled: !!moduleId,
-    }))
-  })
-
-  // Create module details map from query results
-  const moduleDetailsMap = useMemo(() => {
-    const map: Record<string, any> = {}
-    moduleQueries.forEach((query, index) => {
-      const moduleId = uniqueModuleIds[index]
-      if (query.data && query.data.length > 0) {
-        map[moduleId] = query.data[0] // Get latest version
-      }
-    })
-    return map
-  }, [moduleQueries, uniqueModuleIds])
-
-  // Create a mapping of prompt IDs to module slot names
-  const moduleSlotMap = useMemo(() => {
-    const map: Record<string, string> = {}
-
-    approvalRequests.forEach((request: any) => {
-      if (request.prompt_id && !map[request.prompt_id]) {
-        const prompt = promptDetailsMap[request.prompt_id]
-
-        if (prompt && prompt.module_id) {
-          const module = moduleDetailsMap[prompt.module_id]
-
-          if (module && module.slot) {
-            map[request.prompt_id] = module.slot
-          } else {
-            map[request.prompt_id] = `Module ${prompt.module_id}`
-          }
-        } else {
-          map[request.prompt_id] = 'Unknown Module'
-        }
-      }
-    })
-
-    return map
-  }, [approvalRequests, promptDetailsMap, moduleDetailsMap])
-
-  const createFlowMutation = useCreateApprovalFlow()
-  const updateFlowMutation = useUpdateApprovalFlow()
-  const deleteFlowMutation = useDeleteApprovalFlow()
-
-  // Status update mutation
-  const updateFlowStatusMutation = useMutation({
-    mutationFn: async ({ flowId, status }: { flowId: string; status: string }) => {
-      // Use the authenticated HTTP client
-      return await authenticatedFetch(`${FLOWS_API_BASE}/flows/${flowId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status })
-      })
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['approval-flows'] })
-      toast.success('Flow status updated successfully')
-    },
-    onError: (error) => {
-      toast.error(`Failed to update flow status: ${error.message}`)
-    },
-  })
+  const { data: modules = [] } = useModules()
+  const { data: prompts = [] } = usePrompts()
+  const { user: authUser } = useAuth()
 
   // State for search and filters
   const [flowsSearchQuery, setFlowsSearchQuery] = useState('')
@@ -255,12 +144,23 @@ export function PromptApprovalWorkflow() {
   const [approvalComments, setApprovalComments] = useState('')
   const [rejectionReason, setRejectionReason] = useState('')
 
+  // Flow management mutations
+  const createFlowMutation = useCreateApprovalFlow()
+  const updateFlowMutation = useUpdateApprovalFlow()
+  const deleteFlowMutation = useDeleteApprovalFlow()
+  const updateFlowStatusMutation = useUpdateApprovalFlow() // Reuse update mutation for status changes
+
+  // Permission checking for selected request - moved after state initialization
+  const { data: permissions, isLoading: permissionsLoading } = useApprovalPermissions(
+    selectedRequest?.id
+  )
+
   // Debug: Log when selectedRequest changes
   console.log('🔍 [DEBUG] selectedRequest:', selectedRequest)
 
   // Handle approval actions
   const handleApprove = async () => {
-    if (!selectedRequest) return
+    if (!selectedRequest || !authUser) return
 
     try {
       await updateApprovalRequest.mutateAsync({
@@ -268,7 +168,7 @@ export function PromptApprovalWorkflow() {
         request: {
           status: 'approved',
           comments: approvalComments,
-          approver: 'current_user' // This should come from auth context
+          approver: authUser.id // Use actual user ID from auth context
         }
       })
       setSelectedRequest(null)
@@ -282,7 +182,7 @@ export function PromptApprovalWorkflow() {
   }
 
   const handleReject = async () => {
-    if (!selectedRequest) return
+    if (!selectedRequest || !authUser) return
 
     try {
       await updateApprovalRequest.mutateAsync({
@@ -290,7 +190,7 @@ export function PromptApprovalWorkflow() {
         request: {
           status: 'rejected',
           rejection_reason: rejectionReason,
-          approver: 'current_user' // This should come from auth context
+          approver: authUser.id // Use actual user ID from auth context
         }
       })
       setSelectedRequest(null)
@@ -314,6 +214,33 @@ export function PromptApprovalWorkflow() {
   const [flowToDelete, setFlowToDelete] = useState<EnhancedApprovalFlow | null>(null)
 
 
+  // Create maps for efficient lookups
+  const moduleSlotMap = useMemo(() => {
+    return modules.reduce((acc, module) => {
+      acc[module.id] = module.name || module.slot_name || `Module ${module.id}`
+      return acc
+    }, {} as Record<string, string>)
+  }, [modules])
+
+  const userNameMap = useMemo(() => {
+    return users.reduce((acc, user) => {
+      acc[user.id] = user.name || user.email || `User ${user.id}`
+      return acc
+    }, {} as Record<string, string>)
+  }, [users])
+
+  const promptDetailsMap = useMemo(() => {
+    return prompts.reduce((acc, prompt) => {
+      acc[prompt.id] = {
+        name: prompt.name,
+        version: prompt.version,
+        description: prompt.description,
+        mas_risk_level: prompt.mas_risk_level
+      }
+      return acc
+    }, {} as Record<string, any>)
+  }, [prompts])
+
   const filteredRequests = useMemo(() => {
     return approvalRequests.filter((request: any) => {
       const moduleSlot = moduleSlotMap[request.prompt_id] || request.prompt_id
@@ -325,7 +252,7 @@ export function PromptApprovalWorkflow() {
 
       return matchesSearch && matchesStatus && matchesType
     })
-  }, [approvalRequests, requestsSearchQuery, filterStatus, filterType])
+  }, [approvalRequests, requestsSearchQuery, filterStatus, filterType, moduleSlotMap, userNameMap])
 
   const filteredFlows = useMemo(() => {
     return enhancedFlows.filter(flow => {
@@ -334,8 +261,6 @@ export function PromptApprovalWorkflow() {
       return matchesSearch
     })
   }, [enhancedFlows, flowsSearchQuery])
-
-
 
   // Enhanced flow designer handlers
   const handleCreateCustomFlow = () => {
@@ -583,7 +508,16 @@ export function PromptApprovalWorkflow() {
                 <TableBody>
                   {filteredRequests.map((request: any) => (
                     <TableRow key={request.id}>
-                      <TableCell className="font-medium">{moduleSlotMap[request.prompt_id] || request.prompt_id}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="space-y-1">
+                          <div>{moduleSlotMap[request.prompt_id] || request.prompt_id}</div>
+                          {request.prompt_version && (
+                            <div className="text-xs text-muted-foreground">
+                              Version: {request.prompt_version}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <Badge variant="default">
                           Create
@@ -894,7 +828,14 @@ export function PromptApprovalWorkflow() {
       <Dialog open={!!selectedRequest} onOpenChange={handleDialogClose}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Review Approval Request</DialogTitle>
+            <DialogTitle>
+              Review Approval Request
+              {selectedRequest?.prompt_name && (
+                <span className="text-base font-normal text-muted-foreground ml-2">
+                  - {selectedRequest.prompt_name} v{selectedRequest.prompt_version}
+                </span>
+              )}
+            </DialogTitle>
             <DialogDescription>
               Review and approve or reject this prompt approval request
             </DialogDescription>
@@ -939,34 +880,128 @@ export function PromptApprovalWorkflow() {
               </div>
 
               {/* Prompt Details */}
-              {promptDetailsMap[selectedRequest.prompt_id] && (
-                <div className="border rounded-lg p-4">
-                  <h4 className="font-medium mb-2">Prompt Details</h4>
-                  <div className="space-y-2">
+              <div className="border rounded-lg p-4">
+                <h4 className="font-medium mb-2">Prompt Details</h4>
+                <div className="space-y-2">
+                  {/* Version Information */}
+                  <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm font-medium">Name</Label>
+                      <Label className="text-sm font-medium">Prompt Name</Label>
                       <p className="text-sm text-muted-foreground">
-                        {promptDetailsMap[selectedRequest.prompt_id].name || 'Unnamed Prompt'}
+                        {selectedRequest.prompt_name || promptDetailsMap[selectedRequest.prompt_id]?.name || 'Unnamed Prompt'}
                       </p>
                     </div>
-                    <div>
-                      <Label className="text-sm font-medium">Description</Label>
-                      <p className="text-sm text-muted-foreground">
-                        {promptDetailsMap[selectedRequest.prompt_id].description || 'No description'}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">Risk Level</Label>
-                      <Badge variant={
-                        promptDetailsMap[selectedRequest.prompt_id].mas_risk_level === 'high' ? 'destructive' :
-                        promptDetailsMap[selectedRequest.prompt_id].mas_risk_level === 'medium' ? 'default' : 'secondary'
-                      }>
-                        {promptDetailsMap[selectedRequest.prompt_id].mas_risk_level || 'low'} risk
+                    <div className="text-right">
+                      <Label className="text-sm font-medium">Version</Label>
+                      <Badge variant="outline" className="ml-2">
+                        {selectedRequest.prompt_version || promptDetailsMap[selectedRequest.prompt_id]?.version || 'N/A'}
                       </Badge>
                     </div>
                   </div>
+
+                  <div>
+                    <Label className="text-sm font-medium">Description</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedRequest.prompt_description || promptDetailsMap[selectedRequest.prompt_id]?.description || 'No description'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium">Risk Level</Label>
+                    <Badge variant={
+                      (selectedRequest.mas_risk_level || promptDetailsMap[selectedRequest.prompt_id]?.mas_risk_level) === 'high' ? 'destructive' :
+                      (selectedRequest.mas_risk_level || promptDetailsMap[selectedRequest.prompt_id]?.mas_risk_level) === 'medium' ? 'default' : 'secondary'
+                    }>
+                      {(selectedRequest.mas_risk_level || promptDetailsMap[selectedRequest.prompt_id]?.mas_risk_level) || 'low'} risk
+                    </Badge>
+                  </div>
+
+                  {/* Additional Version Context */}
+                  {selectedRequest.prompt_created_at && (
+                    <div>
+                      <Label className="text-sm font-medium">Created</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(selectedRequest.prompt_created_at).toLocaleDateString()} by {selectedRequest.prompt_created_by || 'Unknown'}
+                      </p>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+
+              {/* Permission Information */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-medium mb-3">Approval Permissions</h4>
+                {permissionsLoading ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                    <span className="text-sm text-muted-foreground">Checking permissions...</span>
+                  </div>
+                ) : permissions ? (
+                  <div className="space-y-3">
+                    {/* User Role Display */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Your Role:</span>
+                      <div className="flex space-x-1">
+                        {permissions.user_roles.map((role, index) => (
+                          <Badge key={index} variant="outline" className="text-xs">
+                            {role}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Required Roles Display */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Required Roles:</span>
+                      <div className="flex space-x-1">
+                        {permissions.required_roles.map((role, index) => (
+                          <Badge key={index} variant="secondary" className="text-xs">
+                            {role}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Permission Status */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center space-x-2">
+                        {permissions.can_approve ? (
+                          <CheckCircle className="h-3 w-3 text-green-500" />
+                        ) : (
+                          <XCircle className="h-3 w-3 text-red-500" />
+                        )}
+                        <span>Can Approve</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {permissions.can_reject ? (
+                          <CheckCircle className="h-3 w-3 text-green-500" />
+                        ) : (
+                          <XCircle className="h-3 w-3 text-red-500" />
+                        )}
+                        <span>Can Reject</span>
+                      </div>
+                    </div>
+
+                    {/* Permission Details */}
+                    {!permissions.can_approve && !permissions.can_reject && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-md p-2">
+                        <div className="flex items-center space-x-2 text-yellow-800">
+                          <AlertTriangle className="h-4 w-4" />
+                          <span className="text-sm font-medium">Insufficient Permissions</span>
+                        </div>
+                        <p className="text-xs text-yellow-700 mt-1">
+                          You don't have the required roles to approve or reject this request.
+                          Contact your administrator if you believe this is an error.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    Unable to check permissions. Please refresh the page.
+                  </div>
+                )}
+              </div>
 
               {/* Approval Actions */}
               {selectedRequest.status === 'pending' && (
@@ -1005,19 +1040,34 @@ export function PromptApprovalWorkflow() {
                       Cancel
                     </Button>
                     <div className="flex space-x-2">
-                      <Button
-                        variant="destructive"
-                        onClick={handleReject}
-                        disabled={!rejectionReason.trim() || updateApprovalRequest.isPending}
-                      >
-                        {updateApprovalRequest.isPending ? 'Rejecting...' : 'Reject'}
-                      </Button>
-                      <Button
-                        onClick={handleApprove}
-                        disabled={updateApprovalRequest.isPending}
-                      >
-                        {updateApprovalRequest.isPending ? 'Approving...' : 'Approve'}
-                      </Button>
+                      {/* Reject Button - Only shown if user has permission */}
+                      {permissions?.can_reject && (
+                        <Button
+                          variant="destructive"
+                          onClick={handleReject}
+                          disabled={!rejectionReason.trim() || updateApprovalRequest.isPending}
+                        >
+                          {updateApprovalRequest.isPending ? 'Rejecting...' : 'Reject'}
+                        </Button>
+                      )}
+
+                      {/* Approve Button - Only shown if user has permission */}
+                      {permissions?.can_approve && (
+                        <Button
+                          onClick={handleApprove}
+                          disabled={updateApprovalRequest.isPending}
+                        >
+                          {updateApprovalRequest.isPending ? 'Approving...' : 'Approve'}
+                        </Button>
+                      )}
+
+                      {/* Show message if user lacks permissions */}
+                      {!permissions?.can_approve && !permissions?.can_reject && (
+                        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                          <Lock className="h-4 w-4" />
+                          <span>Insufficient permissions to take action</span>
+                        </div>
+                      )}
                     </div>
                   </DialogFooter>
                 </div>

@@ -300,6 +300,15 @@ class ModelCompatibilityUpdate(BaseModel):
     )
 
 # ApprovalRequest schemas
+class ApprovalRequestUpdate(BaseModel):
+    status: Optional[str] = None
+    approver: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    comments: Optional[str] = None
+    # Workflow integration
+    evidence: Optional[Dict[str, Any]] = None
+    workflow_action: Optional[str] = None  # "approve", "reject", "request_changes"
+
 class ApprovalRequestCreate(BaseModel):
     prompt_id: str
     requested_by: str
@@ -307,6 +316,10 @@ class ApprovalRequestCreate(BaseModel):
     approver: Optional[str] = None
     rejection_reason: Optional[str] = None
     comments: Optional[str] = None
+    # Workflow integration
+    workflow_definition_id: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
+    evidence: Optional[Dict[str, Any]] = None
 
 class ApprovalRequestResponse(BaseModel):
     id: str
@@ -318,6 +331,69 @@ class ApprovalRequestResponse(BaseModel):
     approved_at: Optional[datetime] = None
     rejection_reason: Optional[str] = None
     comments: Optional[str] = None
+    # Prompt version information
+    prompt_version: str
+    prompt_name: str
+    prompt_description: Optional[str] = None
+    prompt_is_active: bool
+    prompt_created_by: str
+    prompt_created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkflowStepInfo(BaseModel):
+    step_index: Optional[int] = None
+    step_name: Optional[str] = None
+    step_type: Optional[str] = None
+    required_roles: List[str] = []
+    required_users: List[str] = []
+    is_current_step: bool = False
+    is_completed: bool = False
+    status: Optional[str] = None
+
+class WorkflowContext(BaseModel):
+    has_workflow: bool = False
+    workflow_instance_id: Optional[str] = None
+    workflow_name: Optional[str] = None
+    workflow_description: Optional[str] = None
+    current_step: Optional[int] = None
+    total_steps: Optional[int] = None
+    workflow_status: Optional[str] = None
+    current_step_info: Optional[WorkflowStepInfo] = None
+    evidence_required: bool = False
+    current_evidence: Dict[str, Any] = {}
+    initiated_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    due_date: Optional[datetime] = None
+
+class ApprovalRequestResponseEnhanced(BaseModel):
+    id: str
+    prompt_id: str
+    requested_by: str
+    requested_at: datetime
+    status: str
+    approver: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
+    comments: Optional[str] = None
+    # Prompt version information
+    prompt_version: str
+    prompt_name: str
+    prompt_description: Optional[str] = None
+    prompt_is_active: bool
+    prompt_created_by: str
+    prompt_created_at: datetime
+    # Workflow integration
+    workflow_instance_id: Optional[str] = None
+    workflow_step: Optional[int] = None
+    evidence_required: bool = False
+    evidence: Optional[Dict[str, Any]] = None
+    workflow_context: Optional[WorkflowContext] = None
+    # Permission context
+    user_can_approve: bool = False
+    user_can_reject: bool = False
+    user_has_permission: bool = False
 
     class Config:
         from_attributes = True
