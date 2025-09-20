@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "web-search-prime": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://api.z.ai/api/mcp/web_search_prime/mcp",
+        "--header",
+        "Authorization: Bearer 90d2a17510fc48dc8229ea27f271c6db.mPw5ajfgHCC5TbWM"
+      ],
+      "disabled": false,
+      "timeout": 180
+    }
+  }
+}

@@ -22,11 +22,12 @@ export function PublicLayout({ children, onSignInClick, onRegisterClick }: Publi
   const { user, isAuthenticated, logout } = useAuth()
 
   const navigation = [
-    { name: 'Features', href: '/#features' },
+    { name: 'Solutions', href: '/#features' },
+    { name: 'FEAT Compliance', href: '/#feat-compliance' },
     { name: 'Developer', href: '/developer' },
     { name: 'Use Cases', href: '/#use-cases' },
+    { name: 'Enterprise', href: '/#enterprise' },
     { name: 'Pricing', href: '/#pricing' },
-    { name: 'About', href: '/#about' },
   ]
 
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register'

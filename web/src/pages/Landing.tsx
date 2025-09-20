@@ -1,12 +1,12 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { 
-  ArrowRight, 
-  CheckCircle, 
-  Shield, 
-  Zap, 
-  Users, 
-  BarChart3, 
+import {
+  ArrowRight,
+  CheckCircle,
+  Shield,
+  Zap,
+  Users,
+  BarChart3,
   Github,
   Mail,
   Lock,
@@ -14,7 +14,8 @@ import {
   EyeOff,
   Chrome,
   FileText,
-  Rocket
+  Rocket,
+  X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,41 +34,41 @@ export function Landing() {
 
   const features = [
     {
-      icon: BarChart3,
-      title: "Prompt as Source Code",
-      description: "Git-level discipline for prompts with versioning, branching, and audit trails"
-    },
-    {
       icon: Shield,
-      title: "Enterprise Prompt Governance",
-      description: "Multi-model prompt management with validation, testing, and compliance controls"
+      title: "Built-in FEAT Compliance",
+      description: "Fairness, Ethics, Accountability, and Transparency built into every prompt—launch AI with confidence"
     },
     {
       icon: Zap,
-      title: "Prompt-Dense Workflows",
-      description: "Scale AI operations with template reuse, variants, and performance monitoring"
+      title: "Zero-Code Prompt Updates",
+      description: "Update prompts instantly without touching application code—no CI/CD redeployments required"
     },
     {
       icon: Users,
-      title: "Professional Prompt Engineering",
-      description: "Collaborative prompt development with review cycles and approval workflows"
+      title: "Developer-Friendly SDK",
+      description: "Install once, integrate seamlessly—app developers get production prompts without prompt engineering expertise"
+    },
+    {
+      icon: BarChart3,
+      title: "Enterprise Governance",
+      description: "Audit trails, approval workflows, and compliance tracking for regulated industries"
     }
   ]
 
   const useCases = [
-    "Enterprise AI Development Teams",
-    "Prompt Engineering Departments",
-    "AI Product Management",
-    "Machine Learning Operations",
-    "Enterprise AI Governance",
-    "Multi-Model Deployment Teams"
+    "App Development Teams Building AI Features",
+    "Startups Launching AI Products Without Prompt Experts",
+    "Enterprise Teams Needing FEAT-Compliant AI",
+    "Developers Integrating Multiple LLM Models",
+    "Product Teams Requiring Rapid Prompt Iteration",
+    "Organizations with Strict AI Governance Requirements"
   ]
 
   const stats = [
-    { label: "Prompt Version Control", value: "Git-Level", description: "Branching, merging, and audit trails" },
-    { label: "Multi-Model Support", value: "12+ Models", description: "GPT, Claude, Gemini, Llama & more" },
-    { label: "Prompt Performance", value: "< 25ms", description: "Edge-cached prompt delivery" },
-    { label: "Enterprise Ready", value: "SOC 2", description: "Governance & compliance built-in" }
+    { label: "FEAT Compliant Prompts", value: "100%", description: "All prompts pre-validated for fairness and ethics" },
+    { label: "Developer Onboarding", value: "5 min", description: "Install SDK and start using prompts immediately" },
+    { label: "Code-Free Updates", value: "0 lines", description: "Update prompts without touching application code" },
+    { label: "Enterprise Governance", value: "SOC 2", description: "Built-in compliance for regulated industries" }
   ]
 
   return (
@@ -77,19 +78,19 @@ export function Landing() {
       <section className="px-6 py-8 relative">
         <div className={`grid md:grid-cols-2 gap-6 items-center max-w-7xl mx-auto ${isAuthenticated ? 'gap-4' : 'gap-6'}`}>
           <div>
-            <div className={`inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-sm font-medium ${isAuthenticated ? 'mb-2' : 'mb-4'}`}>
-              <Zap className="w-4 h-4 mr-2" />
-              Git-Level Discipline for AI Prompts
+            <div className={`inline-flex items-center px-3 py-1 rounded-full bg-red-100 text-red-700 text-sm font-medium ${isAuthenticated ? 'mb-2' : 'mb-4'}`}>
+              <Shield className="w-4 h-4 mr-2" />
+              Enterprise AI Can't Launch Without FEAT Compliance
             </div>
-            
+
             <h1 className={`text-5xl font-bold text-gray-900 leading-tight ${isAuthenticated ? 'mb-2' : 'mb-4'}`}>
-              Bring Git-Level Discipline to
-              <span className="text-blue-600"> Enterprise AI Prompts</span>
+              Where App Developers Get
+              <span className="text-blue-600"> Production-Ready Prompts</span>
             </h1>
-            
+
             <p className={`text-xl text-gray-600 leading-relaxed ${isAuthenticated ? 'mb-4' : 'mb-6'}`}>
-              PromptOps treats prompts as the new source code of enterprise AI. 
-              Built for professional prompt engineers managing complex, prompt-dense workflows across multiple models.
+              PromptOps eliminates prompt engineering expertise gaps.
+              Install our SDK, integrate, and get FEAT-compliant prompts instantly—without code changes or redeployments.
             </p>
             
             <div className={`flex flex-col sm:flex-row gap-4 ${isAuthenticated ? 'mb-4' : 'mb-8'}`}>
@@ -425,6 +426,125 @@ export function Landing() {
                 </Card>
               )
             })}
+          </div>
+        </div>
+      </section>
+
+      {/* FEAT Compliance Section */}
+      <section id="feat-compliance" className="py-16 bg-red-50">
+        <div className="px-6 max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center px-4 py-2 bg-red-100 text-red-700 rounded-full text-sm font-medium mb-6">
+              <Shield className="w-4 h-4 mr-2" />
+              FEAT Compliance by Design
+            </div>
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Launch AI With Confidence, Not Fear
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Without FEAT (Fairness, Ethics, Accountability, Transparency) compliance,
+              AI systems can't be deployed to production. PromptOps builds compliance into every prompt.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Shield className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Fairness</h3>
+              <p className="text-gray-600 mb-4">Built-in bias detection and fairness metrics ensure equitable AI outcomes across all user groups.</p>
+              <div className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                Automated
+              </div>
+            </div>
+
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Users className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Ethics</h3>
+              <p className="text-gray-600 mb-4">Ethical guidelines and content filters integrated into every prompt to prevent harmful outputs.</p>
+              <div className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                Enforced
+              </div>
+            </div>
+
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <BarChart3 className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Accountability</h3>
+              <p className="text-gray-600 mb-4">Complete audit trails and approval workflows ensure every prompt decision is documented and traceable.</p>
+              <div className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                Tracked
+              </div>
+            </div>
+
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Eye className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Transparency</h3>
+              <p className="text-gray-600 mb-4">Clear documentation of prompt behavior, limitations, and decision-making processes for stakeholders.</p>
+              <div className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                Documented
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-12 text-center">
+            <div className="bg-white rounded-lg shadow-lg p-8 max-w-4xl mx-auto">
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">The FEAT Compliance Gap</h3>
+              <div className="grid md:grid-cols-2 gap-8">
+                <div>
+                  <h4 className="text-lg font-semibold text-red-600 mb-3">Without PromptOps</h4>
+                  <ul className="space-y-2 text-gray-600">
+                    <li className="flex items-start">
+                      <X className="w-4 h-4 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
+                      Manual compliance checks
+                    </li>
+                    <li className="flex items-start">
+                      <X className="w-4 h-4 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
+                      Inconsistent standards
+                    </li>
+                    <li className="flex items-start">
+                      <X className="w-4 h-4 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
+                      Limited audit trails
+                    </li>
+                    <li className="flex items-start">
+                      <X className="w-4 h-4 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
+                      Deployment delays
+                    </li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="text-lg font-semibold text-green-600 mb-3">With PromptOps</h4>
+                  <ul className="space-y-2 text-gray-600">
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                      Automated validation
+                    </li>
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                  Consistent frameworks
+                    </li>
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                      Complete traceability
+                    </li>
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                      Instant deployment
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>

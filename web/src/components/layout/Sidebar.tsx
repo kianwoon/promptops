@@ -173,9 +173,12 @@ export function Sidebar({ className }: SidebarProps) {
               <AvatarImage
                 src={avatarError ? undefined : resolvedAvatar}
                 alt={user?.name}
-                onError={() => setAvatarError(true)}
+                onError={() => {
+                  console.log('Sidebar avatar image error:', resolvedAvatar)
+                  setAvatarError(true)
+                }}
               />
-              <AvatarFallback>
+              <AvatarFallback className="text-xs">
                 {user?.name.split(' ').map(n => n[0]).join('') || 'U'}
               </AvatarFallback>
             </Avatar>
