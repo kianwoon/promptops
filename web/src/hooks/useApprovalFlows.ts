@@ -800,9 +800,9 @@ export const useApprovalPermissions = (requestId?: string, options?: UseQueryOpt
         const auth = useAuth()
         const userRole = auth.user?.role || 'viewer'
 
-        // Default role-based permissions for approval
+        // Default role-based permissions for approval - admin only
         const adminRoles = ['admin']
-        const approverRoles = ['admin', 'approver']
+        const approverRoles = ['admin']  // Only admin can approve per requirements
 
         return {
           can_approve: approverRoles.includes(userRole),

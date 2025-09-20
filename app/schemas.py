@@ -342,6 +342,16 @@ class ApprovalRequestResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class PromptComparisonResponse(BaseModel):
+    """Schema for prompt comparison endpoint response"""
+    approval_request: ApprovalRequestResponse
+    current_active_prompt: Optional[PromptResponse] = None
+    new_prompt_version: PromptResponse
+    comparison_summary: Dict[str, Any] = {}
+
+    class Config:
+        from_attributes = True
+
 class WorkflowStepInfo(BaseModel):
     step_index: Optional[int] = None
     step_name: Optional[str] = None

@@ -681,6 +681,13 @@ export const useApprovalRequest = (requestId: string) =>
     enabled: !!requestId,
   })
 
+export const useApprovalRequestComparison = (requestId: string) =>
+  useQuery({
+    queryKey: ['approval-requests', requestId, 'comparison'],
+    queryFn: () => apiRequest<any>(`/approval-requests/${requestId}/comparison`),
+    enabled: !!requestId,
+  })
+
 export const useCreateApprovalRequest = () => {
   const queryClient = useQueryClient()
 

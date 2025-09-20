@@ -66,7 +66,8 @@ import {
   useApprovalFlowStats,
   useApprovalPermissions
 } from '@/hooks/useApprovalFlows'
-import { useUsers, useModules, usePrompts, useUpdateApprovalRequest } from '@/hooks/api'
+import { useUsers, useModules, usePrompts, useUpdateApprovalRequest, useApprovalRequestComparison } from '@/hooks/api'
+import { SimpleDiffView } from '@/components/SimpleDiffView'
 import { useAuth } from '@/contexts/AuthContext'
 import toast from 'react-hot-toast'
 
@@ -155,6 +156,11 @@ export function PromptApprovalWorkflow() {
     selectedRequest?.id
   )
 
+  // Fetch comparison data for selected request
+  const { data: comparisonData, isLoading: comparisonLoading } = useApprovalRequestComparison(
+    selectedRequest?.id
+  )
+
   // Debug: Log when selectedRequest changes
   console.log('🔍 [DEBUG] selectedRequest:', selectedRequest)
 
@@ -217,10 +223,20 @@ export function PromptApprovalWorkflow() {
   // Create maps for efficient lookups
   const moduleSlotMap = useMemo(() => {
     return modules.reduce((acc, module) => {
-      acc[module.id] = module.name || module.slot_name || `Module ${module.id}`
+      acc[module.id] = module.name || module.slot || `Module ${module.id}`
       return acc
     }, {} as Record<string, string>)
   }, [modules])
+
+  // Create prompt-to-module lookup map
+  const promptToModuleMap = useMemo(() => {
+    return prompts.reduce((acc, prompt) => {
+      if (prompt.module_id) {
+        acc[prompt.id] = moduleSlotMap[prompt.module_id] || `Module ${prompt.module_id}`
+      }
+      return acc
+    }, {} as Record<string, string>)
+  }, [prompts, moduleSlotMap])
 
   const userNameMap = useMemo(() => {
     return users.reduce((acc, user) => {
@@ -243,7 +259,7 @@ export function PromptApprovalWorkflow() {
 
   const filteredRequests = useMemo(() => {
     return approvalRequests.filter((request: any) => {
-      const moduleSlot = moduleSlotMap[request.prompt_id] || request.prompt_id
+      const moduleSlot = promptToModuleMap[request.prompt_id] || request.prompt_id
       const requestedByName = userNameMap[request.requested_by] || request.requested_by
       const matchesSearch = moduleSlot?.toLowerCase().includes(requestsSearchQuery.toLowerCase()) ||
                           requestedByName?.toLowerCase().includes(requestsSearchQuery.toLowerCase())
@@ -510,7 +526,7 @@ export function PromptApprovalWorkflow() {
                     <TableRow key={request.id}>
                       <TableCell className="font-medium">
                         <div className="space-y-1">
-                          <div>{moduleSlotMap[request.prompt_id] || request.prompt_id}</div>
+                          <div>{promptToModuleMap[request.prompt_id] || request.prompt_id}</div>
                           {request.prompt_version && (
                             <div className="text-xs text-muted-foreground">
                               Version: {request.prompt_version}
@@ -847,7 +863,7 @@ export function PromptApprovalWorkflow() {
                 <div>
                   <Label className="text-sm font-medium">Module</Label>
                   <p className="text-sm text-muted-foreground">
-                    {moduleSlotMap[selectedRequest.prompt_id] || 'Unknown Module'}
+                    {promptToModuleMap[selectedRequest.prompt_id] || 'Unknown Module'}
                   </p>
                 </div>
                 <div>
@@ -927,6 +943,125 @@ export function PromptApprovalWorkflow() {
                   )}
                 </div>
               </div>
+
+              {/* Version Comparison Section */}
+              {comparisonLoading ? (
+                <div className="border rounded-lg p-4">
+                  <h4 className="font-medium mb-3">Version Comparison</h4>
+                  <div className="flex items-center space-x-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                    <span className="text-sm text-muted-foreground">Loading comparison data...</span>
+                  </div>
+                </div>
+              ) : comparisonData && (
+                <div className="border rounded-lg p-4">
+                  <h4 className="font-medium mb-3">Version Comparison</h4>
+
+                  {/* Comparison Summary */}
+                  {comparisonData.comparison_summary && (
+                    <div className="mb-4 p-3 bg-blue-50 rounded-md">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">Version Changes</span>
+                        <Badge variant="outline" className="text-xs">
+                          {comparisonData.comparison_summary.version_comparison?.is_version_upgrade ? 'Version Upgrade' : 'Version Change'}
+                        </Badge>
+                      </div>
+                      {comparisonData.comparison_summary.version_comparison && (
+                        <div className="text-xs text-muted-foreground">
+                          {comparisonData.comparison_summary.version_comparison.current_version || 'First version'} → {comparisonData.comparison_summary.version_comparison.new_version}
+                        </div>
+                      )}
+                      {comparisonData.comparison_summary.content_changes?.has_content_changes && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Content length difference: {comparisonData.comparison_summary.content_changes.content_length_diff || 0} characters
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Side-by-side comparison */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Current Active Prompt */}
+                    {comparisonData.current_active_prompt ? (
+                      <div className="border rounded-md p-3">
+                        <h5 className="text-sm font-medium mb-2 text-green-700">Current Active Version</h5>
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <span className="font-medium">Version:</span> {comparisonData.current_active_prompt.version}
+                          </div>
+                          <div>
+                            <span className="font-medium">Name:</span> {comparisonData.current_active_prompt.name || 'Unnamed'}
+                          </div>
+                          <div>
+                            <span className="font-medium">Risk Level:</span>{' '}
+                            <Badge variant={
+                              comparisonData.current_active_prompt.mas_risk_level === 'high' ? 'destructive' :
+                              comparisonData.current_active_prompt.mas_risk_level === 'medium' ? 'default' : 'secondary'
+                            } className="text-xs">
+                              {comparisonData.current_active_prompt.mas_risk_level || 'low'} risk
+                            </Badge>
+                          </div>
+                          {comparisonData.current_active_prompt.description && (
+                            <div>
+                              <span className="font-medium">Description:</span>
+                              <p className="text-muted-foreground mt-1">{comparisonData.current_active_prompt.description}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="border rounded-md p-3 bg-gray-50">
+                        <h5 className="text-sm font-medium mb-2 text-gray-600">First Version</h5>
+                        <p className="text-xs text-muted-foreground">No active version exists. This will be the first active version.</p>
+                      </div>
+                    )}
+
+                    {/* New Prompt Version */}
+                    <div className="border rounded-md p-3">
+                      <h5 className="text-sm font-medium mb-2 text-blue-700">New Version</h5>
+                      <div className="space-y-2 text-xs">
+                        <div>
+                          <span className="font-medium">Version:</span> {comparisonData.new_prompt_version.version}
+                        </div>
+                        <div>
+                          <span className="font-medium">Name:</span> {comparisonData.new_prompt_version.name || 'Unnamed'}
+                        </div>
+                        <div>
+                          <span className="font-medium">Risk Level:</span>{' '}
+                          <Badge variant={
+                            comparisonData.new_prompt_version.mas_risk_level === 'high' ? 'destructive' :
+                            comparisonData.new_prompt_version.mas_risk_level === 'medium' ? 'default' : 'secondary'
+                          } className="text-xs">
+                            {comparisonData.new_prompt_version.mas_risk_level || 'low'} risk
+                          </Badge>
+                        </div>
+                        {comparisonData.new_prompt_version.description && (
+                          <div>
+                            <span className="font-medium">Description:</span>
+                            <p className="text-muted-foreground mt-1">{comparisonData.new_prompt_version.description}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Content Changes */}
+                  {comparisonData.current_active_prompt && comparisonData.comparison_summary?.content_changes?.has_content_changes && (
+                    <div className="mt-4">
+                      <h5 className="text-sm font-medium mb-2">Content Changes</h5>
+                      <div className="text-xs mb-2 text-muted-foreground">
+                        Showing differences between versions (highlighted changes)
+                      </div>
+                      <div className="border rounded-md bg-gray-50 p-2 max-h-64 overflow-y-auto">
+                        <SimpleDiffView
+                          oldContent={comparisonData.current_active_prompt.content}
+                          newContent={comparisonData.new_prompt_version.content}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Permission Information */}
               <div className="border rounded-lg p-4 bg-gray-50">

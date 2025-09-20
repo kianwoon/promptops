@@ -8,8 +8,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 from app.database import get_db
-from app.models import ApprovalRequest, Prompt, AuditLog
-from app.schemas import ApprovalRequestCreate, ApprovalRequestResponse, ApprovalRequestUpdate
+from app.models import ApprovalRequest, Prompt, AuditLog, WorkflowDefinition, WorkflowInstance
+from app.schemas import ApprovalRequestCreate, ApprovalRequestResponse, ApprovalRequestUpdate, PromptComparisonResponse, PromptResponse
 from app.auth import get_current_user
 from app.auth.approval_permissions import check_specific_approval_access
 from app.auth.workflow_approval_permissions import (
@@ -240,6 +240,39 @@ async def get_approval_request_permissions(
 
         has_approval_permissions = can_approve or can_reject
 
+        # Get required roles from workflow definition
+        required_roles = ["admin"]  # Default to admin only
+        try:
+            # Find active workflow instance for this approval request
+            workflow_instance = db.query(WorkflowInstance).filter(
+                WorkflowInstance.resource_id == request_id,
+                WorkflowInstance.resource_type == "approval_request",
+                WorkflowInstance.status.in_(["pending", "in_progress"])
+            ).first()
+
+            if workflow_instance:
+                # Get workflow definition to extract required roles
+                workflow_def = db.query(WorkflowDefinition).filter(
+                    WorkflowDefinition.id == workflow_instance.workflow_definition_id
+                ).first()
+
+                if workflow_def and workflow_def.steps_json:
+                    # Extract required roles from workflow steps
+                    steps = workflow_def.steps_json
+                    if isinstance(steps, list) and steps:
+                        # Look for approval steps and their required roles
+                        for step in steps:
+                            if step.get("step_type") in ["MANUAL_APPROVAL", "PARALLEL_APPROVAL", "SEQUENTIAL_APPROVAL"] or \
+                               step.get("type") in ["manual_approval", "parallel_approval", "sequential_approval"]:
+                                # Check both approval_roles and required_roles fields
+                                step_roles = step.get("approval_roles", []) or step.get("required_roles", [])
+                                if step_roles:
+                                    required_roles = step_roles
+                                    break
+        except Exception as e:
+            logger.warning(f"Error getting required roles from workflow: {e}, defaulting to admin only")
+            required_roles = ["admin"]
+
         return {
             "can_approve": can_approve,
             "can_reject": can_reject,
@@ -249,7 +282,7 @@ async def get_approval_request_permissions(
             "can_escalate": "admin" in user_roles,
             "is_requester": is_requester,
             "has_approval_permissions": has_approval_permissions,
-            "required_roles": ["admin", "approver"],
+            "required_roles": required_roles,
             "user_roles": user_roles,
             "user_id": user_id,
             "request_status": approval_request.status,
@@ -269,7 +302,7 @@ async def get_approval_request_permissions(
             "can_escalate": False,
             "is_requester": False,
             "has_approval_permissions": False,
-            "required_roles": ["admin", "approver"],
+            "required_roles": ["admin"],  # Default to admin only in error case
             "user_roles": current_user.get("roles", []),
             "user_id": current_user.get("user_id", current_user.get("sub", "")),
             "request_status": "unknown",
@@ -709,3 +742,181 @@ async def delete_approval_request(
     db.commit()
 
     return {"message": "Approval request deleted successfully"}
+
+@router.get("/{request_id}/comparison", response_model=PromptComparisonResponse)
+async def get_approval_request_comparison(
+    request_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get comparison between current active prompt and new prompt version for approval request"""
+    try:
+        # Get the approval request with prompt information
+        query = db.query(
+            ApprovalRequest,
+            Prompt.version.label('prompt_version'),
+            Prompt.name.label('prompt_name'),
+            Prompt.description.label('prompt_description'),
+            Prompt.is_active.label('prompt_is_active'),
+            Prompt.created_by.label('prompt_created_by'),
+            Prompt.created_at.label('prompt_created_at'),
+            Prompt.module_id.label('prompt_module_id'),
+            Prompt.content.label('prompt_content'),
+            Prompt.mas_intent.label('prompt_mas_intent'),
+            Prompt.mas_fairness_notes.label('prompt_mas_fairness_notes'),
+            Prompt.mas_testing_notes.label('prompt_mas_testing_notes'),
+            Prompt.mas_risk_level.label('prompt_mas_risk_level'),
+            Prompt.target_models.label('prompt_target_models'),
+            Prompt.model_specific_prompts.label('prompt_model_specific_prompts')
+        ).join(Prompt, ApprovalRequest.prompt_id == Prompt.id).filter(ApprovalRequest.id == request_id)
+
+        request_data = query.first()
+        if not request_data:
+            raise HTTPException(status_code=404, detail="Approval request not found")
+
+        # Extract approval request data
+        approval_request_obj = request_data[0]
+
+        # Create approval request response
+        approval_request_response = ApprovalRequestResponse(
+            id=approval_request_obj.id,
+            prompt_id=approval_request_obj.prompt_id,
+            requested_by=approval_request_obj.requested_by,
+            requested_at=approval_request_obj.requested_at,
+            status=approval_request_obj.status,
+            approver=approval_request_obj.approver,
+            approved_at=approval_request_obj.approved_at,
+            rejection_reason=approval_request_obj.rejection_reason,
+            comments=approval_request_obj.comments,
+            prompt_version=request_data[1],
+            prompt_name=request_data[2],
+            prompt_description=request_data[3],
+            prompt_is_active=request_data[4],
+            prompt_created_by=request_data[5],
+            prompt_created_at=request_data[6]
+        )
+
+        # Create new prompt version response (the one being requested for approval)
+        new_prompt_response = PromptResponse(
+            id=approval_request_obj.prompt_id,
+            version=request_data[1],
+            module_id=request_data[7],
+            content=request_data[8],
+            name=request_data[2],
+            description=request_data[3],
+            provider_id=None,  # We don't have this in the join
+            provider_name=None,
+            created_by=request_data[5],
+            created_at=request_data[6],
+            updated_at=request_data[6],  # Using created_at as fallback
+            mas_intent=request_data[9],
+            mas_fairness_notes=request_data[10],
+            mas_testing_notes=request_data[11],
+            mas_risk_level=request_data[12],
+            mas_approval_log=None,
+            target_models=request_data[13] or [],
+            model_specific_prompts=request_data[14] or [],
+            is_active=request_data[4],
+            activated_at=None,
+            activated_by=None,
+            activation_reason=None
+        )
+
+        # Find current active prompt for the same module_id
+        current_active_prompt = None
+        module_id = request_data[7]
+
+        if module_id:
+            # Query for the active prompt with the highest version for this module
+            active_prompt_query = db.query(Prompt).filter(
+                Prompt.module_id == module_id,
+                Prompt.is_active == True
+            ).order_by(Prompt.created_at.desc()).first()
+
+            if active_prompt_query and active_prompt_query.id != approval_request_obj.prompt_id:
+                current_active_prompt = PromptResponse(
+                    id=active_prompt_query.id,
+                    version=active_prompt_query.version,
+                    module_id=active_prompt_query.module_id,
+                    content=active_prompt_query.content,
+                    name=active_prompt_query.name,
+                    description=active_prompt_query.description,
+                    provider_id=active_prompt_query.provider_id,
+                    provider_name=None,  # Would need join with providers table
+                    created_by=active_prompt_query.created_by,
+                    created_at=active_prompt_query.created_at,
+                    updated_at=active_prompt_query.updated_at,
+                    mas_intent=active_prompt_query.mas_intent,
+                    mas_fairness_notes=active_prompt_query.mas_fairness_notes,
+                    mas_testing_notes=active_prompt_query.mas_testing_notes,
+                    mas_risk_level=active_prompt_query.mas_risk_level,
+                    mas_approval_log=active_prompt_query.mas_approval_log,
+                    target_models=active_prompt_query.target_models or [],
+                    model_specific_prompts=active_prompt_query.model_specific_prompts or [],
+                    is_active=active_prompt_query.is_active,
+                    activated_at=active_prompt_query.activated_at,
+                    activated_by=active_prompt_query.activated_by,
+                    activation_reason=active_prompt_query.activation_reason
+                )
+
+        # Generate comparison summary
+        comparison_summary = {}
+        if current_active_prompt:
+            comparison_summary = {
+                "has_current_active": True,
+                "version_comparison": {
+                    "current_version": current_active_prompt.version,
+                    "new_version": new_prompt_response.version,
+                    "is_version_upgrade": _is_version_upgrade(current_active_prompt.version, new_prompt_response.version)
+                },
+                "content_changes": {
+                    "content_length_diff": len(new_prompt_response.content) - len(current_active_prompt.content),
+                    "has_content_changes": current_active_prompt.content != new_prompt_response.content
+                },
+                "mas_compliance": {
+                    "risk_level_change": current_active_prompt.mas_risk_level != new_prompt_response.mas_risk_level,
+                    "current_risk_level": current_active_prompt.mas_risk_level,
+                    "new_risk_level": new_prompt_response.mas_risk_level
+                }
+            }
+        else:
+            comparison_summary = {
+                "has_current_active": False,
+                "message": "This is the first prompt version for this module"
+            }
+
+        return PromptComparisonResponse(
+            approval_request=approval_request_response,
+            current_active_prompt=current_active_prompt,
+            new_prompt_version=new_prompt_response,
+            comparison_summary=comparison_summary
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error getting approval request comparison", error=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting comparison: {str(e)}"
+        )
+
+def _is_version_upgrade(current_version: str, new_version: str) -> bool:
+    """Helper function to check if new version is an upgrade from current version"""
+    try:
+        # Simple version comparison - split by dots and compare numerically
+        current_parts = [int(x) for x in current_version.split('.')]
+        new_parts = [int(x) for x in new_version.split('.')]
+
+        # Compare each part
+        for i in range(max(len(current_parts), len(new_parts))):
+            current_val = current_parts[i] if i < len(current_parts) else 0
+            new_val = new_parts[i] if i < len(new_parts) else 0
+            if new_val > current_val:
+                return True
+            elif new_val < current_val:
+                return False
+        return False  # Versions are equal
+    except (ValueError, AttributeError):
+        # If version parsing fails, assume it's not an upgrade
+        return False
