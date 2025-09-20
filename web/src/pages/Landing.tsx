@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton'
+import { GitHubLoginButton } from '@/components/auth/GitHubLoginButton'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function Landing() {
@@ -224,8 +225,9 @@ export function Landing() {
                       </div>
                     </div>
                     
-                    <div className="mt-4">
+                    <div className="mt-4 space-y-3">
                       <GoogleLoginButton className="w-full" />
+                      <GitHubLoginButton className="w-full" />
                     </div>
                   </div>
                   

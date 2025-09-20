@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton'
+import { GitHubLoginButton } from '@/components/auth/GitHubLoginButton'
 
 interface SignInModalProps {
   isOpen: boolean
@@ -103,8 +104,9 @@ export function SignInModal({ isOpen, onClose, onSwitchToRegister }: SignInModal
                   </div>
                 </div>
                 
-                <div className="mt-4">
+                <div className="mt-4 space-y-3">
                   <GoogleLoginButton className="w-full" />
+                  <GitHubLoginButton className="w-full" />
                 </div>
               </div>
               

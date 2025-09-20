@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -7,11 +7,12 @@ import logging
 import jwt
 
 from app.database import get_db
-from app.models import Prompt, Module, AuditLog
+from app.models import Prompt, Module, AuditLog, ApprovalRequest, WorkflowInstance, WorkflowDefinition, WorkflowInstanceStatus, WorkflowStatus
 from app.schemas import PromptCreate, PromptResponse, PromptUpdate
 from app.auth import get_current_user
 from app.services.auth_service import AuthService
 from app.config import settings
+from app.auth.rbac import rbac_service, Permission
 
 # Configure logging for authentication debugging
 logger = logging.getLogger(__name__)
@@ -104,6 +105,23 @@ async def create_prompt(
             # Handle case where current_user might not be a dict
             tenant_id = getattr(current_user, "tenant", getattr(current_user, "tenant_id", "demo-tenant"))
 
+    # Get user roles to determine if approval workflow is needed
+    user_roles = current_user.get("roles", [])
+    if isinstance(user_roles, str):
+        user_roles = [user_roles]  # Convert to list if it's a string
+
+    # Check if user has editor role and requires approval
+    requires_approval = False
+    if "editor" in [role.lower() for role in user_roles]:
+        # Check if user has submit_prompt_for_approval permission
+        can_submit = rbac_service.can_perform_action(
+            user_roles=user_roles,
+            action=Permission.SUBMIT_PROMPT_FOR_APPROVAL.value,
+            resource_type="prompt"
+        )
+        if can_submit:
+            requires_approval = True
+
     # Create the prompt with model-specific variations
     prompt = Prompt(
         id=prompt_data.id,
@@ -139,25 +157,115 @@ async def create_prompt(
         subject_id=prompt_data.id,
         tenant_id=tenant_id,
         before_json=None,
-        after_json={"name": prompt_data.name, "target_models": prompt_data.target_models, "mas_risk_level": prompt_data.mas_risk_level},
+        after_json={"name": prompt_data.name, "target_models": prompt_data.target_models, "mas_risk_level": prompt_data.mas_risk_level, "requires_approval": requires_approval},
         result="success"
     )
     db.add(audit_log)
-    db.commit()
+
+    # If approval is required, create approval request and workflow instance
+    if requires_approval:
+        try:
+            # Create approval request
+            approval_request = ApprovalRequest(
+                id=str(uuid.uuid4()),
+                prompt_id=prompt.id,
+                requested_by=current_user["user_id"],
+                requested_at=datetime.utcnow(),
+                status="pending",
+                tenant_id=tenant_id,
+                evidence_required=False,
+                auto_approve=False
+            )
+            db.add(approval_request)
+            db.flush()  # Get the ID without committing
+
+            # Try to find an active prompt approval workflow
+            workflow_def = db.query(WorkflowDefinition).filter(
+                WorkflowDefinition.category == "approval",
+                WorkflowDefinition.status == WorkflowStatus.ACTIVE,
+                WorkflowDefinition.tenant_id == tenant_id
+            ).first()
+
+            # If workflow exists, create workflow instance
+            if workflow_def:
+                workflow_instance = WorkflowInstance(
+                    id=str(uuid.uuid4()),
+                    workflow_definition_id=workflow_def.id,
+                    status=WorkflowInstanceStatus.PENDING,
+                    title=f"Prompt Approval: {prompt.name}",
+                    description=f"Approval request for prompt '{prompt.name}' version {prompt.version}",
+                    resource_type="prompt",
+                    resource_id=prompt.id,
+                    initiated_by=current_user["user_id"],
+                    current_step=0,
+                    context_json={
+                        "prompt_id": prompt.id,
+                        "prompt_version": prompt.version,
+                        "prompt_name": prompt.name,
+                        "mas_risk_level": prompt.mas_risk_level,
+                        "requested_by": current_user["user_id"],
+                        "requested_by_name": current_user.get("name", "Unknown User")
+                    },
+                    steps_json=[],
+                    tenant_id=tenant_id,
+                    due_date=datetime.utcnow() + timedelta(minutes=workflow_def.timeout_minutes)
+                )
+                db.add(workflow_instance)
+                db.flush()
+
+                # Link approval request to workflow instance
+                approval_request.workflow_instance_id = workflow_instance.id
+                approval_request.workflow_step = 0
+
+            db.commit()
+
+            # Log the approval request creation
+            approval_audit_log = AuditLog(
+                id=str(uuid.uuid4()),
+                actor=current_user["user_id"],
+                action="create_approval_request",
+                subject=approval_request.id,
+                subject_type="approval_request",
+                subject_id=approval_request.id,
+                tenant_id=tenant_id,
+                before_json=None,
+                after_json={
+                    "prompt_id": prompt.id,
+                    "status": "pending",
+                    "workflow_instance_id": approval_request.workflow_instance_id
+                },
+                result="success"
+            )
+            db.add(approval_audit_log)
+
+        except Exception as e:
+            # Log error but don't fail the prompt creation
+            error_audit_log = AuditLog(
+                id=str(uuid.uuid4()),
+                actor=current_user["user_id"],
+                action="approval_workflow_error",
+                subject=f"{prompt_data.id}@{prompt_data.version}",
+                subject_type="prompt",
+                subject_id=prompt_data.id,
+                tenant_id=tenant_id,
+                before_json=None,
+                after_json={"error": str(e), "requires_approval": requires_approval},
+                result="error"
+            )
+            db.add(error_audit_log)
+            db.commit()
 
     return prompt
 
 @router.put("/{prompt_id}/{version}", response_model=PromptResponse)
 async def update_prompt(
-    request: Request,
     prompt_id: str,
     version: str,
     prompt_update: PromptUpdate = Body(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Update a prompt version"""
-    # Get current user using our helper function
-    current_user = await get_current_user(request)
 
     prompt = db.query(Prompt).filter(
         Prompt.id == prompt_id,
@@ -219,14 +327,12 @@ async def update_prompt(
 
 @router.delete("/{prompt_id}/{version}")
 async def delete_prompt(
-    request: Request,
     prompt_id: str,
     version: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete a prompt version"""
-    # Get current user using our helper function
-    current_user = await get_current_user(request)
 
     prompt = db.query(Prompt).filter(
         Prompt.id == prompt_id,
@@ -251,6 +357,11 @@ async def delete_prompt(
         else:
             # Handle case where current_user might not be a dict
             tenant_id = getattr(current_user, "tenant", getattr(current_user, "tenant_id", "demo-tenant"))
+
+    # Delete related approval requests first to avoid foreign key constraint violations
+    approval_requests = db.query(ApprovalRequest).filter(ApprovalRequest.prompt_id == prompt_id).all()
+    for approval_request in approval_requests:
+        db.delete(approval_request)
 
     db.delete(prompt)
     db.commit()

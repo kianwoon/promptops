@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useQuery, useQueries } from '@tanstack/react-query'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -35,6 +36,14 @@ import { FlowDesigner } from '@/components/approval/FlowDesigner'
 import { FlowTemplateSelector } from '@/components/approval/FlowTemplateSelector'
 import { authenticatedFetch } from '@/lib/httpInterceptor'
 
+// API request function matching the implementation in api.ts
+const API_BASE = '/v1'
+async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const url = `${API_BASE}${endpoint}`
+  // Use the authenticated HTTP client
+  return authenticatedFetch<T>(url, options)
+}
+
 // Import the enhanced types
 import type {
   ApprovalFlow as EnhancedApprovalFlow,
@@ -53,9 +62,10 @@ import {
   useDeleteApprovalFlow,
   useApprovalRequests,
   useAvailableRoles,
-  useApprovalFlowStats,
-  useCreateFlowFromTemplate
+  useApprovalFlowStats
 } from '@/hooks/useApprovalFlows'
+import { useUsers } from '@/hooks/api'
+import toast from 'react-hot-toast'
 
 
 export function PromptApprovalWorkflow() {
@@ -116,11 +126,100 @@ export function PromptApprovalWorkflow() {
   const { data: roles = [] } = useAvailableRoles()
   const { data: flowStats } = useApprovalFlowStats()
   const { data: approvalRequests = [] } = useApprovalRequests()
+  const { data: users = [] } = useUsers()
+
+  
+  // Create mappings for better display
+  const userNameMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    users.forEach((user: any) => {
+      if (user.id && !map[user.id]) {
+        map[user.id] = user.name || user.email || user.id
+      }
+    })
+    return map
+  }, [users])
+
+  // Get unique prompt IDs from approval requests
+  const uniquePromptIds = useMemo(() => {
+    return [...new Set(approvalRequests.map((r: any) => r.prompt_id))]
+  }, [approvalRequests])
+
+  // Use useQueries to fetch multiple prompts without hooks order violation
+  const promptQueries = useQueries({
+    queries: uniquePromptIds.map((promptId) => ({
+      queryKey: ['prompts', promptId, 'versions'],
+      queryFn: () => apiRequest<any[]>(`/prompts/${promptId}`),
+      enabled: !!promptId,
+    }))
+  })
+
+  // Create prompt details map from query results
+  const promptDetailsMap = useMemo(() => {
+    const map: Record<string, any> = {}
+    promptQueries.forEach((query, index) => {
+      const promptId = uniquePromptIds[index]
+      if (query.data && query.data.length > 0) {
+        map[promptId] = query.data[0] // Get latest version
+      }
+    })
+    return map
+  }, [promptQueries, uniquePromptIds])
+
+  // Fetch module details for each unique module_id using existing hooks
+  const uniqueModuleIds = useMemo(() => {
+    return [...new Set(Object.values(promptDetailsMap).map((p: any) => p?.module_id).filter(Boolean))]
+  }, [promptDetailsMap])
+
+  // Use useQueries to fetch multiple modules without hooks order violation
+  const moduleQueries = useQueries({
+    queries: uniqueModuleIds.map((moduleId) => ({
+      queryKey: ['modules', moduleId, 'versions'],
+      queryFn: () => apiRequest<any[]>(`/modules/${moduleId}`),
+      enabled: !!moduleId,
+    }))
+  })
+
+  // Create module details map from query results
+  const moduleDetailsMap = useMemo(() => {
+    const map: Record<string, any> = {}
+    moduleQueries.forEach((query, index) => {
+      const moduleId = uniqueModuleIds[index]
+      if (query.data && query.data.length > 0) {
+        map[moduleId] = query.data[0] // Get latest version
+      }
+    })
+    return map
+  }, [moduleQueries, uniqueModuleIds])
+
+  // Create a mapping of prompt IDs to module slot names
+  const moduleSlotMap = useMemo(() => {
+    const map: Record<string, string> = {}
+
+    approvalRequests.forEach((request: any) => {
+      if (request.prompt_id && !map[request.prompt_id]) {
+        const prompt = promptDetailsMap[request.prompt_id]
+
+        if (prompt && prompt.module_id) {
+          const module = moduleDetailsMap[prompt.module_id]
+
+          if (module && module.slot) {
+            map[request.prompt_id] = module.slot
+          } else {
+            map[request.prompt_id] = `Module ${prompt.module_id}`
+          }
+        } else {
+          map[request.prompt_id] = 'Unknown Module'
+        }
+      }
+    })
+
+    return map
+  }, [approvalRequests, promptDetailsMap, moduleDetailsMap])
 
   const createFlowMutation = useCreateApprovalFlow()
   const updateFlowMutation = useUpdateApprovalFlow()
   const deleteFlowMutation = useDeleteApprovalFlow()
-  const createFlowFromTemplate = useCreateFlowFromTemplate()
 
   // Status update mutation
   const updateFlowStatusMutation = useMutation({
@@ -152,8 +251,10 @@ export function PromptApprovalWorkflow() {
 
   const filteredRequests = useMemo(() => {
     return approvalRequests.filter((request: any) => {
-      const matchesSearch = request.resource_name?.toLowerCase().includes(requestsSearchQuery.toLowerCase()) ||
-                          request.requested_by?.toLowerCase().includes(requestsSearchQuery.toLowerCase())
+      const moduleSlot = moduleSlotMap[request.prompt_id] || request.prompt_id
+      const requestedByName = userNameMap[request.requested_by] || request.requested_by
+      const matchesSearch = moduleSlot?.toLowerCase().includes(requestsSearchQuery.toLowerCase()) ||
+                          requestedByName?.toLowerCase().includes(requestsSearchQuery.toLowerCase())
       const matchesStatus = filterStatus === 'all' || request.status === filterStatus
       const matchesType = filterType === 'all' || request.request_type === filterType
 
@@ -409,7 +510,7 @@ export function PromptApprovalWorkflow() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Prompt Name</TableHead>
+                    <TableHead>Module Slot</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Requested By</TableHead>
                     <TableHead>Current Step</TableHead>
@@ -421,13 +522,13 @@ export function PromptApprovalWorkflow() {
                 <TableBody>
                   {filteredRequests.map((request: any) => (
                     <TableRow key={request.id}>
-                      <TableCell className="font-medium">{request.resource_name}</TableCell>
+                      <TableCell className="font-medium">{moduleSlotMap[request.prompt_id] || request.prompt_id}</TableCell>
                       <TableCell>
-                        <Badge variant={request.request_type === 'create' ? 'default' : 'secondary'}>
-                          {request.request_type}
+                        <Badge variant="default">
+                          Create
                         </Badge>
                       </TableCell>
-                      <TableCell>{request.requested_by}</TableCell>
+                      <TableCell>{userNameMap[request.requested_by] || request.requested_by}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
                           {request.current_step_id || 'Pending'}
@@ -723,6 +824,68 @@ export function PromptApprovalWorkflow() {
               className="bg-red-600 hover:bg-red-700"
             >
               {deleteFlowMutation.isPending ? 'Deleting...' : 'Delete Flow'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Review Request Dialog */}
+      <Dialog open={!!selectedRequest} onOpenChange={() => setSelectedRequest(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Review Approval Request</DialogTitle>
+            <DialogDescription>
+              Review the details of this prompt approval request
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRequest && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium">Module</Label>
+                <p className="text-sm text-muted-foreground">
+                  {moduleSlotMap[selectedRequest.prompt_id] || selectedRequest.prompt_id}
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Prompt ID</Label>
+                <p className="text-sm text-muted-foreground font-mono">
+                  {selectedRequest.prompt_id}
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Requested By</Label>
+                <p className="text-sm text-muted-foreground">
+                  {userNameMap[selectedRequest.requested_by] || selectedRequest.requested_by}
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Requested At</Label>
+                <p className="text-sm text-muted-foreground">
+                  {new Date(selectedRequest.requested_at).toLocaleString()}
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Status</Label>
+                <Badge variant={
+                  selectedRequest.status === 'approved' ? 'default' :
+                  selectedRequest.status === 'rejected' ? 'destructive' : 'secondary'
+                }>
+                  {selectedRequest.status}
+                </Badge>
+              </div>
+              {selectedRequest.comments && (
+                <div>
+                  <Label className="text-sm font-medium">Comments</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedRequest.comments}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedRequest(null)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

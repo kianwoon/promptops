@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { UserCreate, UserUpdate } from '@/types/api'
+import { useRoles } from '@/hooks/api'
 
 interface UserFormProps {
   isOpen: boolean
@@ -35,6 +36,9 @@ export function UserForm({
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Fetch available roles
+  const { data: roles, isLoading: rolesLoading } = useRoles()
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -71,7 +75,7 @@ export function UserForm({
           ...(formData.role !== user.role && { role: formData.role }),
           ...(formData.organization !== user.organization && { organization: formData.organization }),
           ...(formData.phone !== user.phone && { phone: formData.phone }),
-          ...(formData.companySize !== user.companySize && { companySize: formData.companySize }),
+          ...(formData.companySize !== user.companySize && { company_size: formData.companySize }),
         }
       : {
           name: formData.name,
@@ -79,7 +83,7 @@ export function UserForm({
           role: formData.role,
           organization: formData.organization || undefined,
           phone: formData.phone || undefined,
-          companySize: formData.companySize || undefined,
+          company_size: formData.companySize || undefined,
         }
 
     onSubmit(submitData)
@@ -145,12 +149,22 @@ export function UserForm({
             <div className="col-span-3">
               <Select value={formData.role} onValueChange={(value) => handleInputChange('role', value)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a role" />
+                  <SelectValue placeholder={rolesLoading ? "Loading roles..." : "Select a role"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="viewer">Viewer</SelectItem>
-                  <SelectItem value="user">User</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  {rolesLoading ? (
+                    <SelectItem value="" disabled>Loading roles...</SelectItem>
+                  ) : roles?.map((role) => (
+                    <SelectItem key={role.name} value={role.name}>
+                      {role.name.charAt(0).toUpperCase() + role.name.slice(1)}
+                    </SelectItem>
+                  )) || (
+                    <>
+                      <SelectItem value="viewer">Viewer</SelectItem>
+                      <SelectItem value="user">User</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>

@@ -40,13 +40,15 @@ interface UserData {
   id: string
   name: string
   email: string
-  role: 'admin' | 'user' | 'viewer'
+  role: 'admin' | 'user' | 'viewer' | 'editor' | 'approver'
   organization: string
   status: 'active' | 'inactive' | 'pending'
   lastLogin: string | null
   createdAt: string
   avatar?: string
   is_active?: boolean
+  phone?: string
+  companySize?: string
 }
 
 export function UserManagement() {
@@ -103,10 +105,12 @@ export function UserManagement() {
     role: user.role,
     organization: user.organization || 'No Organization',
     status: user.is_active !== false ? 'active' : 'inactive',
-    lastLogin: null, // API doesn't provide this yet
+    lastLogin: user.last_login || null,
     createdAt: user.createdAt || new Date().toISOString(),
     avatar: user.avatar,
-    is_active: user.is_active !== false
+    is_active: user.is_active !== false,
+    phone: user.phone,
+    companySize: user.company_size
   })) || []
 
   const filteredUsers = apiUsers.filter(user => {

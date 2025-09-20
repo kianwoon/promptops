@@ -95,6 +95,21 @@ export function PromptEditor({
     return risk || 'low'
   }
 
+  // Get appropriate button text based on user role and approval requirements
+  const getSaveButtonText = () => {
+    if (!user) return 'Create'
+
+    const userRole = user.role?.toLowerCase() || ''
+
+    // For new prompts that require approval, show "Submit for Approval"
+    if (isNew && !['admin', 'approver'].includes(userRole)) {
+      return 'Submit for Approval'
+    }
+
+    // For admin/approver users or updates, show standard text
+    return isNew ? 'Create' : 'Save'
+  }
+
   
   // Force cache bust - try different approach
   console.log('CACHE BUST: v4')
@@ -218,39 +233,53 @@ export function PromptEditor({
       warnings.push('Prompt content seems too short for effective use')
     }
 
-    // Sensitive content detection - improved context-aware validation
-    const sensitiveKeywords = ['password', 'secret']
-    const hasSensitiveContent = sensitiveKeywords.some(keyword =>
-      content.toLowerCase().includes(keyword)
-    )
+    // Sensitive content detection - more targeted validation with role-based exemptions
+    // Skip strict validation only for users with highest privileges (admin, approver)
+    // Editors still get validation but with more targeted rules
+    const userRole = user?.role?.toLowerCase() || ''
+    const skipStrictValidation = ['admin', 'approver'].includes(userRole)
+    const isEditor = ['editor'].includes(userRole)
 
-    // Special handling for 'personal information' - only flag if not in compliance/guideline context
-    const hasPersonalInfo = content.toLowerCase().includes('personal information')
-    const hasComplianceGuidance = content.toLowerCase().includes('do not') ||
-                                content.toLowerCase().includes('avoid') ||
-                                content.toLowerCase().includes('should not') ||
-                                content.toLowerCase().includes('guideline') ||
-                                content.toLowerCase().includes('policy') ||
-                                content.toLowerCase().includes('compliance') ||
-                                content.toLowerCase().includes('privacy') ||
-                                content.toLowerCase().includes('governance') ||
-                                content.toLowerCase().includes('security') ||
-                                content.toLowerCase().includes('protect') ||
-                                content.toLowerCase().includes('collect')
+    if (!skipStrictValidation) {
+      // More targeted sensitive keywords - focus on actual sensitive data, not technical terms
+      const sensitiveKeywords = [
+        'password',
+        'secret'
+      ]
 
-    // Allow 'confidential' when used in legitimate compliance/governance contexts
-    const hasConfidential = content.toLowerCase().includes('confidential')
-    const hasConfidentialContext = content.toLowerCase().includes('compliance') ||
-                                content.toLowerCase().includes('governance') ||
-                                content.toLowerCase().includes('privacy') ||
-                                content.toLowerCase().includes('security') ||
-                                content.toLowerCase().includes('audit')
+      // Check for context that makes these keywords legitimately sensitive
+      const hasSensitiveContext = sensitiveKeywords.some(keyword => {
+        const keywordIndex = content.toLowerCase().indexOf(keyword)
+        if (keywordIndex === -1) return false
 
-    // Only flag personal information if it's not in a compliance/guidance context
-    const shouldFlagPersonalInfo = hasPersonalInfo && !hasComplianceGuidance
+        // Look for surrounding context that indicates actual sensitive data
+        const surroundingText = content.substring(
+          Math.max(0, keywordIndex - 30),
+          Math.min(content.length, keywordIndex + keyword.length + 30)
+        ).toLowerCase()
 
-    if (hasSensitiveContent || shouldFlagPersonalInfo || (hasConfidential && !hasConfidentialContext)) {
-      errors.push('Prompt contains potentially sensitive content that requires additional safeguards')
+        // Context patterns that suggest actual sensitive information
+        const sensitiveContexts = [
+          'your', 'my', 'real', 'actual', 'current', 'live', 'production',
+          'credentials', 'login', 'auth', 'token', 'key', 'secret'
+        ]
+
+        return sensitiveContexts.some(context => surroundingText.includes(context))
+      })
+
+      // More specific detection for actual sensitive patterns, not compliance content
+      const hasPersonalInfoPattern = /(ssn|social security|credit card|bank account)/i.test(content)
+      const hasCredentialPattern = /(username.*password|password.*username)/i.test(content)
+
+      // For editors, only flag the most obvious sensitive patterns (very restricted)
+      // For regular users, flag all sensitive patterns
+      const shouldFlagError = isEditor
+        ? hasPersonalInfoPattern  // Editors only blocked for highly sensitive personal info (SSN, credit cards, etc.)
+        : hasSensitiveContext || hasPersonalInfoPattern || hasCredentialPattern  // Regular users blocked for all patterns
+
+      if (shouldFlagError) {
+        errors.push('Prompt contains potentially sensitive content that requires additional safeguards')
+      }
     }
 
     return {
@@ -261,6 +290,9 @@ export function PromptEditor({
   }
 
   const handleSave = async () => {
+    // Get user role for approval workflow
+    const userRole = user?.role?.toLowerCase() || ''
+
     // Validate that content is not empty
     if (!content.trim()) {
       setValidation({
@@ -298,6 +330,30 @@ export function PromptEditor({
         }
 
               const result = await createPrompt.mutateAsync(newPrompt)
+
+        // Auto-submit all prompts for approval (except for admin and approver roles)
+        if (userRole && !['admin', 'approver'].includes(userRole)) {
+          try {
+            await createApprovalRequest.mutateAsync({
+              prompt_id: result.data.id,
+              requested_by: user.id,
+              status: 'pending'
+            })
+            // Show success message for auto-submission
+            setValidation(prev => ({
+              ...prev,
+              warnings: [...prev.warnings, 'Prompt has been automatically submitted for approval']
+            }))
+          } catch (approvalError) {
+            console.error('Failed to auto-submit for approval:', approvalError)
+            // Don't fail the save if approval submission fails
+            setValidation(prev => ({
+              ...prev,
+              warnings: [...prev.warnings, 'Prompt saved but approval submission failed. Please submit manually.']
+            }))
+          }
+        }
+
         onSave?.(result.data)
       } else if (promptId && version) {
         const updateData: PromptUpdate = {
@@ -313,11 +369,40 @@ export function PromptEditor({
           mas_risk_level: masRiskLevel
         }
 
+        const userRole = user?.role?.toLowerCase() || ''
         const result = await updatePrompt.mutateAsync({
           promptId,
           version,
           prompt: updateData
         })
+
+        // Check if prompt update needs approval (for non-admin/approver roles)
+        if (userRole && !['admin', 'approver'].includes(userRole)) {
+          // Check if there's already a pending approval request
+          const existingPendingRequest = approvalRequests?.find(req => req.status === 'pending')
+          if (!existingPendingRequest) {
+            try {
+              await createApprovalRequest.mutateAsync({
+                prompt_id: promptId,
+                requested_by: user.id,
+                status: 'pending'
+              })
+              // Show success message for auto-submission
+              setValidation(prev => ({
+                ...prev,
+                warnings: [...prev.warnings, 'Prompt update has been automatically submitted for approval']
+              }))
+            } catch (approvalError) {
+              console.error('Failed to auto-submit for approval:', approvalError)
+              // Don't fail the save if approval submission fails
+              setValidation(prev => ({
+                ...prev,
+                warnings: [...prev.warnings, 'Prompt updated but approval submission failed. Please submit manually.']
+              }))
+            }
+          }
+        }
+
         onSave?.(result.data)
       }
     } catch (error) {
@@ -547,7 +632,7 @@ export function PromptEditor({
 
           <Button onClick={handleSave} disabled={!validation.isValid}>
             <Save className="w-4 h-4 mr-2" />
-            {isNew ? 'Create' : 'Save'}
+            {getSaveButtonText()}
           </Button>
         </div>
       </div>

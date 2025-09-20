@@ -1,15 +1,69 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Edit, Trash2, ArrowLeft, FileText, Shield, AlertTriangle, CheckCircle, Clock, TestTube, Award, Check } from 'lucide-react'
+import { Plus, Edit, Trash2, ArrowLeft, FileText, Shield, AlertTriangle, CheckCircle, Clock, TestTube, Award, Check, XCircle } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { usePrompts, useDeletePrompt, useProject, useModule, useAIAssistantProviders } from '@/hooks/api'
+import { usePrompts, useDeletePrompt, useProject, useModule, useAIAssistantProviders, useApprovalRequests } from '@/hooks/api'
 import { PromptEditor } from './PromptEditor'
 import { formatDistanceToNow } from 'date-fns'
-import type { Prompt } from '@/types/api'
+import type { Prompt, ApprovalRequest } from '@/types/api'
+
+// Helper functions for approval status
+const getApprovalStatusColor = (status?: string) => {
+  switch (status) {
+    case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    case 'approved': return 'bg-green-100 text-green-800 border-green-200'
+    case 'rejected': return 'bg-red-100 text-red-800 border-red-200'
+    default: return 'bg-gray-100 text-gray-800 border-gray-200'
+  }
+}
+
+const getApprovalStatusIcon = (status?: string) => {
+  switch (status) {
+    case 'pending': return <Clock className="w-4 h-4" />
+    case 'approved': return <CheckCircle className="w-4 h-4" />
+    case 'rejected': return <XCircle className="w-4 h-4" />
+    default: return null
+  }
+}
+
+const getApprovalStatusText = (status?: string) => {
+  switch (status) {
+    case 'pending': return 'Under Review'
+    case 'approved': return 'Approved'
+    case 'rejected': return 'Rejected'
+    default: return 'Not Submitted'
+  }
+}
+
+// Approval Status Badge Component
+function ApprovalStatusBadge({ promptId }: { promptId: string }) {
+  const { data: approvalRequests, isLoading } = useApprovalRequests(promptId)
+
+  if (isLoading) {
+    return (
+      <Badge variant="outline" className="flex items-center gap-2">
+        <div className="w-4 h-4 bg-gray-200 rounded animate-pulse" />
+        Loading...
+      </Badge>
+    )
+  }
+
+  const latestRequest = approvalRequests?.[0] // Get the most recent approval request
+
+  return (
+    <Badge
+      variant="outline"
+      className={`flex items-center gap-2 ${getApprovalStatusColor(latestRequest?.status)}`}
+    >
+      {getApprovalStatusIcon(latestRequest?.status)}
+      {getApprovalStatusText(latestRequest?.status)}
+    </Badge>
+  )
+}
 
 interface ModulePromptsProps {
   projectId: string
@@ -186,8 +240,8 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {/* Risk Level Badge */}
-                  <div className="flex items-center justify-between">
+                  {/* Risk Level and Approval Status Badges */}
+                  <div className="flex items-center justify-between gap-2">
                     <Badge
                       variant="outline"
                       className={`flex items-center gap-2 ${getRiskLevelColor(prompt.mas_risk_level)}`}
@@ -195,6 +249,7 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
                       {getRiskLevelIcon(prompt.mas_risk_level)}
                       {(prompt.mas_risk_level || 'low').toUpperCase()} Risk
                     </Badge>
+                    <ApprovalStatusBadge promptId={prompt.id} />
                   </div>
 
                   {/* Description */}

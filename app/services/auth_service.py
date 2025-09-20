@@ -99,9 +99,65 @@ class GoogleOAuthService:
             logger.error("ID token verification failed", error=str(e))
             raise Exception(f"Invalid ID token: {str(e)}")
 
+class GitHubOAuthService:
+    def __init__(self):
+        self.client_id = settings.github_client_id
+        self.client_secret = settings.github_client_secret
+        self.redirect_uri = settings.github_redirect_uri
+        self.token_url = "https://github.com/login/oauth/access_token"
+        self.userinfo_url = "https://api.github.com/user"
+
+    async def exchange_code_for_tokens(self, code: str) -> Dict[str, Any]:
+        """Exchange GitHub authorization code for access token"""
+        try:
+            data = {
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": self.redirect_uri,
+            }
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(self.token_url, data=data, headers={
+                    "Accept": "application/json"
+                })
+                response.raise_for_status()
+
+                return response.json()
+
+        except httpx.HTTPError as e:
+            logger.error("HTTP error exchanging code for tokens", error=str(e))
+            raise Exception("Failed to exchange authorization code")
+        except Exception as e:
+            logger.error("Error exchanging code for tokens", error=str(e))
+            raise Exception("Failed to exchange authorization code")
+
+    async def get_user_info(self, access_token: str) -> Dict[str, Any]:
+        """Get user information from GitHub using access token"""
+        try:
+            headers = {
+                "Authorization": f"token {access_token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(self.userinfo_url, headers=headers)
+                response.raise_for_status()
+
+                return response.json()
+
+        except httpx.HTTPError as e:
+            logger.error("HTTP error getting user info", error=str(e))
+            raise Exception("Failed to get user information")
+        except Exception as e:
+            logger.error("Error getting user info", error=str(e))
+            raise Exception("Failed to get user information")
+
 class AuthService:
     def __init__(self):
         self.google_oauth = GoogleOAuthService()
+        self.github_oauth = GitHubOAuthService()
         self.secret_key = settings.secret_key
         self.algorithm = settings.algorithm
         self.access_token_expire_minutes = settings.access_token_expire_minutes
@@ -193,6 +249,54 @@ class AuthService:
         except Exception as e:
             logger.error("Google authentication failed", error=str(e))
             raise Exception(f"Google authentication failed: {str(e)}")
+
+    async def authenticate_with_github(self, code: str, db: Session) -> Dict[str, Any]:
+        """Authenticate user with GitHub OAuth"""
+        try:
+            # Exchange code for tokens
+            tokens = await self.github_oauth.exchange_code_for_tokens(code)
+
+            # Get user info
+            user_info = await self.github_oauth.get_user_info(tokens["access_token"])
+
+            # Create or update user
+            user = await self.get_or_create_github_user(user_info, db)
+
+            # Update last login
+            user.last_login = datetime.utcnow()
+            db.commit()
+
+            # Create JWT tokens
+            access_token = self.create_access_token(
+                data={
+                    "sub": user.id,
+                    "email": user.email,
+                    "role": user.role.value,
+                    "tenant_id": user.organization or "default-tenant"
+                }
+            )
+            refresh_token = self.create_refresh_token(
+                data={"sub": user.id, "email": user.email}
+            )
+
+            return {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "name": user.name,
+                    "role": user.role.value,
+                    "organization": user.organization or "",
+                    "avatar": user.avatar,
+                    "provider_id": user.provider_id,
+                    "created_at": user.created_at.isoformat(),
+                }
+            }
+
+        except Exception as e:
+            logger.error("GitHub authentication failed", error=str(e))
+            raise Exception(f"GitHub authentication failed: {str(e)}")
     
     async def get_or_create_google_user(self, user_info: Dict[str, Any], id_token_payload: Dict[str, Any], db: Session) -> User:
         """Get existing user or create new one from Google OAuth data"""
@@ -244,7 +348,67 @@ class AuthService:
             logger.error("Error creating/updating Google user", error=str(e))
             db.rollback()
             raise Exception("Failed to create or update user")
-    
+
+    async def get_or_create_github_user(self, user_info: Dict[str, Any], db: Session) -> User:
+        """Get existing user or create new one from GitHub OAuth data"""
+        try:
+            # GitHub user info structure: id, login, name, email, avatar_url
+            github_id = str(user_info["id"])
+            github_username = user_info["login"]
+            github_name = user_info.get("name") or github_username
+            github_email = user_info.get("email")
+            github_avatar = user_info.get("avatar_url")
+
+            # Check if user exists by GitHub provider ID
+            user = db.query(User).filter(User.provider_id == github_id).first()
+
+            if user:
+                # Update user info if needed
+                if user.name != github_name or (github_email and user.email != github_email):
+                    user.name = github_name
+                    if github_email:
+                        user.email = github_email
+                    user.updated_at = datetime.utcnow()
+                return user
+
+            # Check if user exists by email (if email is available)
+            if github_email:
+                user = db.query(User).filter(User.email == github_email).first()
+
+                if user:
+                    # Link GitHub account to existing user
+                    user.provider = AuthProvider.GITHUB
+                    user.provider_id = github_id
+                    user.is_verified = True
+                    user.updated_at = datetime.utcnow()
+                    return user
+
+            # Create new user - use GitHub ID as user ID
+            user = User(
+                id=github_id,
+                email=github_email or f"{github_username}@github.local",  # Fallback email for users without public email
+                name=github_name,
+                provider=AuthProvider.GITHUB,
+                provider_id=github_id,
+                is_verified=True,
+                avatar=github_avatar,
+                role=UserRole.VIEWER,  # Default role for new users
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+            logger.info("Created new GitHub OAuth user", user_id=user.id, email=user.email)
+            return user
+
+        except Exception as e:
+            logger.error("Error creating/updating GitHub user", error=str(e))
+            db.rollback()
+            raise Exception("Failed to create or update user")
+
     async def refresh_access_token(self, refresh_token: str, db: Session) -> str:
         """Refresh access token using refresh token"""
         try:

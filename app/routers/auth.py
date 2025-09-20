@@ -20,6 +20,9 @@ security = HTTPBearer()
 class GoogleAuthRequest(BaseModel):
     code: str
 
+class GitHubAuthRequest(BaseModel):
+    code: str
+
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
@@ -108,6 +111,33 @@ async def google_oauth_callback(
         
     except Exception as e:
         logger.error("Google OAuth callback failed", error=str(e))
+        # Redirect to frontend with error
+        error_url = f"http://localhost:3000/auth/error?error={str(e)}"
+        return RedirectResponse(url=error_url)
+
+@router.get("/github/callback")
+async def github_oauth_callback(
+    code: str,
+    state: str = None,
+    db: Session = Depends(get_db)
+):
+    """Handle GitHub OAuth callback and redirect to frontend"""
+    from fastapi.responses import RedirectResponse
+
+    try:
+        auth_service = AuthService()
+        result = await auth_service.authenticate_with_github(code, db)
+
+        logger.info("GitHub OAuth authentication successful", email=result["user"]["email"])
+
+        # Redirect to frontend with tokens in URL parameters
+        frontend_url = "http://localhost:3000/auth/success"
+        redirect_params = f"?access_token={result['access_token']}&refresh_token={result['refresh_token']}"
+
+        return RedirectResponse(url=f"{frontend_url}{redirect_params}")
+
+    except Exception as e:
+        logger.error("GitHub OAuth callback failed", error=str(e))
         # Redirect to frontend with error
         error_url = f"http://localhost:3000/auth/error?error={str(e)}"
         return RedirectResponse(url=error_url)

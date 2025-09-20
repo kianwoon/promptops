@@ -615,7 +615,7 @@ export const useApprovalRequests = (promptId?: string) =>
   useQuery({
     queryKey: ['approval-requests', promptId],
     queryFn: () => {
-      const endpoint = promptId ? `/approval-requests?prompt_id=${promptId}` : '/approval-requests'
+      const endpoint = promptId ? `/approval-requests/?prompt_id=${promptId}` : '/approval-requests/'
       return apiRequest<ApprovalRequest[]>(endpoint)
     },
     enabled: promptId !== undefined,
@@ -842,3 +842,10 @@ export const useDeleteAIAssistantProvider = () => {
     },
   })
 }
+
+// Roles API
+export const useRoles = () =>
+  useQuery({
+    queryKey: ['roles'],
+    queryFn: () => apiRequest<Array<{ name: string; description: string; is_system: boolean; is_active: boolean }>>('/roles'),
+  })

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react'
 import { generateGoogleAuthUrl, handleGoogleCallback, storeAuthTokens, getAccessToken, refreshToken, isAccessTokenValid } from '@/lib/googleAuth'
+import { generateGithubAuthUrl, handleGithubCallback } from '@/lib/githubAuth'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 
 export interface User {
@@ -13,7 +14,7 @@ export interface User {
   companySize?: string
   createdAt?: string
   lastLogin?: string
-  provider?: 'local' | 'google'
+  provider?: 'local' | 'google' | 'github'
   providerId?: string
   isVerified?: boolean
 }
@@ -33,7 +34,9 @@ interface AuthState {
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>
   loginWithGoogle: () => void
+  loginWithGithub: () => void
   handleGoogleCallback: (code: string) => Promise<void>
+  handleGithubCallback: (code: string) => Promise<void>
   register: (userData: any) => Promise<void>
   logout: () => void
   updateUser: (userData: Partial<User>) => void
@@ -222,13 +225,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     }
 
-    // Check for Google OAuth callback
+    // Check for OAuth callbacks
     const urlParams = new URLSearchParams(window.location.search)
     const code = urlParams.get('code')
 
-    if (code && window.location.pathname === '/auth/google/callback') {
-      // Handle Google OAuth callback
-      handleGoogleAuthCallback(code)
+    if (code) {
+      if (window.location.pathname === '/auth/google/callback') {
+        // Handle Google OAuth callback
+        handleGoogleAuthCallback(code)
+      } else if (window.location.pathname === '/auth/github/callback') {
+        // Handle GitHub OAuth callback
+        handleGithubAuthCallback(code)
+      }
     }
   }, [dbUser, dbUserLoading])
 
@@ -363,9 +371,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
+  const loginWithGithub = (): void => {
+    try {
+      const authUrl = generateGithubAuthUrl()
+      // Open in new tab to avoid redirect issues
+      window.open(authUrl, '_blank')
+    } catch (error) {
+      console.error('AuthContext: GitHub login error:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to initiate GitHub login'
+      dispatch({ type: 'LOGIN_ERROR', payload: errorMessage })
+    }
+  }
+
   const handleGoogleCallback = async (code: string): Promise<void> => {
     dispatch({ type: 'LOGIN_START' })
-    
+
     try {
       const response = await handleGoogleCallback(code)
       const user: User = {
@@ -398,6 +418,89 @@ export function AuthProvider({ children }: AuthProviderProps) {
       refetchDbUser()
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Google authentication failed'
+      dispatch({ type: 'LOGIN_ERROR', payload: errorMessage })
+      throw error
+    }
+  }
+
+  const handleGithubAuthCallback = async (code: string) => {
+    dispatch({ type: 'LOGIN_START' })
+
+    try {
+      const response = await handleGithubCallback(code)
+      const user: User = {
+        id: response.user.id,
+        email: response.user.email,
+        name: response.user.name,
+        role: response.user.role || 'user',
+        organization: response.user.organization || '',
+        avatar: response.user.avatar,
+        provider: 'github',
+        providerId: response.user.provider_id,
+        isVerified: true,
+        createdAt: response.user.created_at,
+        lastLogin: new Date().toISOString(),
+      }
+
+      // Store auth tokens
+      storeAuthTokens({
+        access_token: response.access_token,
+        refresh_token: response.refresh_token,
+      })
+
+      // Store user data
+      localStorage.setItem('user', JSON.stringify(user))
+      localStorage.setItem('isAuthenticated', 'true')
+
+      dispatch({ type: 'LOGIN_SUCCESS', payload: user })
+
+      // Clear URL parameters
+      window.history.replaceState({}, document.title, '/dashboard')
+
+      // Refetch fresh user data from database
+      refetchDbUser()
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'GitHub authentication failed'
+      dispatch({ type: 'LOGIN_ERROR', payload: errorMessage })
+      throw error
+    }
+  }
+
+  const handleGithubCallback = async (code: string): Promise<void> => {
+    dispatch({ type: 'LOGIN_START' })
+
+    try {
+      const response = await handleGithubCallback(code)
+      const user: User = {
+        id: response.user.id,
+        email: response.user.email,
+        name: response.user.name,
+        role: response.user.role || 'user',
+        organization: response.user.organization || '',
+        avatar: response.user.avatar,
+        provider: 'github',
+        providerId: response.user.provider_id,
+        isVerified: true,
+        createdAt: response.user.created_at,
+        lastLogin: new Date().toISOString(),
+      }
+
+      // Store auth tokens
+      storeAuthTokens({
+        access_token: response.access_token,
+        refresh_token: response.refresh_token,
+      })
+
+      // Store user data
+      localStorage.setItem('user', JSON.stringify(user))
+      localStorage.setItem('isAuthenticated', 'true')
+
+      dispatch({ type: 'LOGIN_SUCCESS', payload: user })
+
+      // Refetch fresh user data from database
+      refetchDbUser()
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'GitHub authentication failed'
       dispatch({ type: 'LOGIN_ERROR', payload: errorMessage })
       throw error
     }
@@ -572,7 +675,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     ...state,
     login,
     loginWithGoogle,
+    loginWithGithub,
     handleGoogleCallback,
+    handleGithubCallback,
     register,
     logout,
     updateUser,

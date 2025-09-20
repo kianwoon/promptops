@@ -49,6 +49,7 @@ class UserRole(enum.Enum):
 class AuthProvider(enum.Enum):
     LOCAL = "local"
     GOOGLE = "google"
+    GITHUB = "github"
 
 class User(Base):
     __tablename__ = "users"

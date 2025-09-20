@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton'
+import { GitHubLoginButton } from '@/components/auth/GitHubLoginButton'
 
 interface LoginForm {
   email: string
@@ -217,8 +218,9 @@ export function Login() {
                 </div>
               </div>
 
-              <div className="mt-4">
+              <div className="mt-4 space-y-3">
                 <GoogleLoginButton className="w-full" />
+                <GitHubLoginButton className="w-full" />
               </div>
             </div>
 
