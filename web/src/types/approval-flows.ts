@@ -121,6 +121,39 @@ export interface ApprovalRequest {
   attachments?: RequestAttachment[]
   comments?: RequestComment[]
   metadata: RequestMetadata
+  workflow_context?: WorkflowContext
+}
+
+export interface WorkflowContext {
+  has_workflow?: boolean
+  workflow_instance_id?: string
+  workflow_name?: string
+  workflow_description?: string
+  current_step?: number
+  total_steps?: number
+  workflow_status?: string
+  current_step_info?: WorkflowStepInfo
+  evidence_required?: boolean
+  current_evidence?: Record<string, any>
+  initiated_by?: string
+  created_at?: string
+  due_date?: string
+}
+
+export interface WorkflowStepInfo {
+  step_id?: string
+  step_name?: string
+  step_type?: string
+  step_description?: string
+  step_order?: number
+  required_roles?: string[]
+  min_approvals?: number
+  is_parallel?: boolean
+  timeout_hours?: number
+  status?: string
+  assigned_at?: string
+  started_at?: string
+  completed_at?: string
 }
 
 export type RequestStatus =

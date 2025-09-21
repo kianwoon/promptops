@@ -61,8 +61,8 @@ export function useCurrentUser(): UseCurrentUserResult {
       }
 
       const normalizedRole = (dbUser?.role || authUser.role || 'viewer').toLowerCase()
-      const role = ['admin', 'user', 'viewer'].includes(normalizedRole)
-        ? (normalizedRole as 'admin' | 'user' | 'viewer')
+      const role = ['admin', 'user', 'viewer', 'editor', 'approver'].includes(normalizedRole)
+        ? (normalizedRole as 'admin' | 'user' | 'viewer' | 'editor' | 'approver')
         : 'viewer'
 
       const avatarFromDb = dbUser?.avatar ?? undefined

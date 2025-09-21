@@ -82,7 +82,7 @@ export function UserManagement() {
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>('all')
-  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user' | 'viewer'>('all')
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user' | 'viewer' | 'editor' | 'approver'>('all')
   const [selectedUsers, setSelectedUsers] = useState<string[]>([])
 
   // Form states

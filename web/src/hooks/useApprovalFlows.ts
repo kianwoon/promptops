@@ -761,10 +761,14 @@ export interface ApprovalPermissionCheck {
   current_step_roles: string[]
   is_step_approver: boolean
   is_system_admin: boolean
+  current_step?: number
+  current_step_name?: string
+  workflow_context?: Record<string, any>
   permission_details: {
     role_based_access: boolean
     step_specific_access: boolean
     flow_admin_access: boolean
+    workflow_enabled?: boolean
   }
 }
 
@@ -784,21 +788,50 @@ export const useApprovalPermissions = (requestId?: string, options?: UseQueryOpt
           current_step_roles: [],
           is_step_approver: false,
           is_system_admin: false,
+          current_step: 0,
+          current_step_name: 'Step 1',
+          workflow_context: {},
           permission_details: {
             role_based_access: false,
             step_specific_access: false,
-            flow_admin_access: false
+            flow_admin_access: false,
+            workflow_enabled: false
           }
         }
       }
 
       try {
-        return await apiRequest<ApprovalPermissionCheck>(`/${requestId}/permissions`)
+        const response = await apiRequest<ApprovalPermissionCheck>(`/${requestId}/permissions`)
+
+        // Ensure the response has all required fields for compatibility
+        return {
+          can_approve: response.can_approve || false,
+          can_reject: response.can_reject || false,
+          can_escalate: response.can_escalate || false,
+          can_view_details: response.can_view_details || true,
+          required_roles: response.required_roles || ['admin'],
+          user_roles: response.user_roles || [],
+          current_step_roles: response.current_step_roles || response.required_roles || ['admin'],
+          is_step_approver: response.is_step_approver || false,
+          is_system_admin: response.is_system_admin || false,
+          current_step: response.current_step || 0,
+          current_step_name: response.current_step_name || 'Step 1',
+          workflow_context: response.workflow_context || {},
+          permission_details: {
+            role_based_access: response.permission_details?.role_based_access || true,
+            step_specific_access: response.permission_details?.step_specific_access || false,
+            flow_admin_access: response.permission_details?.flow_admin_access || false,
+            workflow_enabled: response.permission_details?.workflow_enabled || false
+          }
+        }
       } catch (error) {
-        // Fallback to client-side permission check if backend endpoint doesn't exist
+        console.warn('Failed to get approval permissions from backend, using fallback:', error)
+
+        // Enhanced fallback with better error handling
         const { useAuth } = await import('@/contexts/AuthContext')
         const auth = useAuth()
         const userRole = auth.user?.role || 'viewer'
+        const userRoles = auth.user?.roles || [userRole]
 
         // Default role-based permissions for approval - admin only
         const adminRoles = ['admin']
@@ -810,14 +843,18 @@ export const useApprovalPermissions = (requestId?: string, options?: UseQueryOpt
           can_escalate: adminRoles.includes(userRole),
           can_view_details: true,
           required_roles: approverRoles,
-          user_roles: [userRole],
+          user_roles: userRoles,
           current_step_roles: approverRoles,
           is_step_approver: approverRoles.includes(userRole),
           is_system_admin: adminRoles.includes(userRole),
+          current_step: 0,
+          current_step_name: 'Step 1',
+          workflow_context: {},
           permission_details: {
             role_based_access: true,
             step_specific_access: false,
-            flow_admin_access: adminRoles.includes(userRole)
+            flow_admin_access: adminRoles.includes(userRole),
+            workflow_enabled: false
           }
         }
       }

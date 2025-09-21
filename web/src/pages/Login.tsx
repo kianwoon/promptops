@@ -29,7 +29,7 @@ interface User {
   id: string
   email: string
   name: string
-  role: 'admin' | 'user' | 'viewer'
+  role: 'admin' | 'user' | 'viewer' | 'editor' | 'approver'
   organization: string
   avatar?: string
 }

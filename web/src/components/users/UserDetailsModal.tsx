@@ -13,7 +13,7 @@ interface UserDetailsModalProps {
     id: string
     name: string
     email: string
-    role: 'admin' | 'user' | 'viewer'
+    role: 'admin' | 'user' | 'viewer' | 'editor' | 'approver'
     organization: string
     status: 'active' | 'inactive' | 'pending'
     lastLogin: string | null

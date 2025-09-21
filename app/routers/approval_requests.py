@@ -9,7 +9,11 @@ logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models import ApprovalRequest, Prompt, AuditLog, WorkflowDefinition, WorkflowInstance, WorkflowInstanceStatus
-from app.schemas import ApprovalRequestCreate, ApprovalRequestResponse, ApprovalRequestUpdate, PromptComparisonResponse, PromptResponse
+from app.schemas import (
+    ApprovalRequestCreate, ApprovalRequestResponse, ApprovalRequestResponseEnhanced,
+    ApprovalRequestUpdate, PromptComparisonResponse, PromptResponse,
+    WorkflowContext, WorkflowStepInfo
+)
 from app.auth import get_current_user
 from app.auth.approval_permissions import check_specific_approval_access
 from app.auth.workflow_approval_permissions import (
@@ -72,7 +76,7 @@ async def check_approval_permissions(
         }
 
     except Exception as e:
-        logger.error("Error checking approval permissions", error=str(e))
+        logger.error(f"Error checking approval permissions: {str(e)}")
         return {
             "has_approval_permissions": False,
             "can_approve": False,
@@ -82,7 +86,7 @@ async def check_approval_permissions(
             "required_roles": ["admin", "approver"]
         }
 
-@router.get("/", response_model=List[ApprovalRequestResponse])
+@router.get("/", response_model=List[ApprovalRequestResponseEnhanced])
 async def list_approval_requests(
     prompt_id: Optional[str] = None,
     status: Optional[str] = None,
@@ -109,7 +113,7 @@ async def list_approval_requests(
 
     requests = query.offset(skip).limit(limit).all()
 
-    # Convert result to match the response schema
+    # Convert result to match the enhanced response schema
     result = []
     for request in requests:
         approval_request = request[0]
@@ -120,7 +124,68 @@ async def list_approval_requests(
         prompt_created_by = request[5]
         prompt_created_at = request[6]
 
-        result.append(ApprovalRequestResponse(
+        # Build workflow context - always create one for consistency
+        workflow_context = WorkflowContext(
+            has_workflow=False,
+            workflow_instance_id=None,
+            workflow_name=None,
+            workflow_description=None,
+            current_step=None,
+            total_steps=None,
+            workflow_status=None,
+            current_step_info=None,
+            evidence_required=approval_request.evidence_required or False,
+            current_evidence=approval_request.evidence or {},
+            initiated_by=None,
+            created_at=None,
+            due_date=None
+        )
+        if approval_request.workflow_instance_id:
+            try:
+                workflow_instance = db.query(WorkflowInstance).filter(
+                    WorkflowInstance.id == approval_request.workflow_instance_id
+                ).first()
+
+                if workflow_instance:
+                    workflow_def = db.query(WorkflowDefinition).filter(
+                        WorkflowDefinition.id == workflow_instance.workflow_definition_id
+                    ).first()
+
+                    if workflow_def and workflow_def.steps_json:
+                        current_step_info = None
+                        if approval_request.workflow_step is not None and approval_request.workflow_step < len(workflow_def.steps_json):
+                            step_config = workflow_def.steps_json[approval_request.workflow_step]
+                            current_step_info = WorkflowStepInfo(
+                                step_number=approval_request.workflow_step + 1,
+                                name=step_config.get("name", f"Step {approval_request.workflow_step + 1}"),
+                                description=step_config.get("description", ""),
+                                step_type=step_config.get("step_type", "manual_approval"),
+                                required_roles=step_config.get("approval_roles", []),
+                                required_users=step_config.get("approval_users", []),
+                                is_current_step=True,
+                                is_completed=workflow_instance.status == WorkflowInstanceStatus.COMPLETED,
+                                status=workflow_instance.status.value
+                            )
+
+                        # Update workflow_context with workflow details
+                        workflow_context.has_workflow = True
+                        workflow_context.workflow_instance_id = workflow_instance.id
+                        workflow_context.workflow_name = workflow_def.name
+                        workflow_context.workflow_description = workflow_def.description
+                        workflow_context.current_step = approval_request.workflow_step
+                        workflow_context.total_steps = len(workflow_def.steps_json) if workflow_def.steps_json else 1
+                        workflow_context.workflow_status = workflow_instance.status.value
+                        workflow_context.current_step_info = current_step_info
+                        workflow_context.evidence_required = approval_request.evidence_required or False
+                        workflow_context.current_evidence = approval_request.evidence or {}
+                        workflow_context.initiated_by = workflow_instance.initiated_by
+                        workflow_context.created_at = workflow_instance.created_at
+                        workflow_context.due_date = workflow_instance.due_date
+            except Exception as e:
+                logger.warning(f"Error building workflow context for request {approval_request.id}: {e}")
+                # Keep the default workflow_context (has_workflow=False)
+
+        result.append(ApprovalRequestResponseEnhanced(
             id=approval_request.id,
             prompt_id=approval_request.prompt_id,
             requested_by=approval_request.requested_by,
@@ -135,7 +200,15 @@ async def list_approval_requests(
             prompt_description=prompt_description,
             prompt_is_active=prompt_is_active,
             prompt_created_by=prompt_created_by,
-            prompt_created_at=prompt_created_at
+            prompt_created_at=prompt_created_at,
+            workflow_instance_id=approval_request.workflow_instance_id,
+            workflow_step=approval_request.workflow_step,
+            evidence_required=approval_request.evidence_required or False,
+            evidence=approval_request.evidence,
+            workflow_context=workflow_context,
+            user_can_approve=False,  # Will be computed by frontend
+            user_can_reject=False,   # Will be computed by frontend
+            user_has_permission=False  # Will be computed by frontend
         ))
 
     return result
@@ -204,7 +277,7 @@ async def get_approval_request_permissions(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get permissions for a specific approval request"""
+    """Get permissions for a specific approval request with workflow step context"""
     try:
         from app.auth.rbac import rbac_service, Permission
         from app.auth.approval_permissions import get_approval_permission_error_message
@@ -212,15 +285,25 @@ async def get_approval_request_permissions(
         user_roles = current_user.get("roles", [])
         user_id = current_user.get("user_id", current_user.get("sub", ""))
 
-        # Get the approval request to check if user is involved
+        # Get the approval request
         approval_request = db.query(ApprovalRequest).filter(ApprovalRequest.id == request_id).first()
         if not approval_request:
             raise HTTPException(status_code=404, detail="Approval request not found")
 
-        # Check if user is the requester (can always view their own requests)
+        # Check if user is the requester
         is_requester = approval_request.requested_by == user_id
 
-        # Check general approval permissions
+        # Use WorkflowApprovalService for step-specific permissions
+        workflow_service = WorkflowApprovalService(db)
+
+        # Check workflow-specific permissions
+        workflow_permissions = workflow_service.check_workflow_approval_permissions(
+            approval_request_id=request_id,
+            user_id=user_id,
+            user_roles=user_roles
+        )
+
+        # Check general approval permissions as fallback
         can_approve = rbac_service.can_perform_action(
             user_roles=user_roles,
             action=Permission.APPROVE_PROMPT.value,
@@ -233,66 +316,81 @@ async def get_approval_request_permissions(
             resource_type="approval_request"
         )
 
+        # Combine general and workflow-specific permissions
+        final_can_approve = workflow_permissions.get("can_approve", can_approve)
+        final_can_reject = workflow_permissions.get("can_reject", can_reject)
+
         # Additional permissions based on request status and user involvement
-        can_view_details = is_requester or can_approve or can_reject
+        can_view_details = is_requester or final_can_approve or final_can_reject
         can_edit = is_requester and approval_request.status == "pending"
         can_delete = is_requester or "admin" in user_roles
 
-        has_approval_permissions = can_approve or can_reject
+        has_approval_permissions = final_can_approve or final_can_reject
 
-        # Get required roles from workflow definition
-        required_roles = ["admin"]  # Default to admin only
-        try:
-            # Find active workflow instance for this approval request
+        # Get step-specific roles from workflow permissions
+        step_required_roles = workflow_permissions.get("required_roles", ["admin"])
+        current_step = workflow_permissions.get("current_step", 0) or 0
+        current_step_name = workflow_permissions.get("current_step_name", f"Step {current_step + 1}")
+
+        # Get workflow context for enhanced UI display
+        workflow_context = {}
+        if approval_request.workflow_instance_id:
             workflow_instance = db.query(WorkflowInstance).filter(
-                WorkflowInstance.resource_id == request_id,
-                WorkflowInstance.resource_type == "approval_request",
-                WorkflowInstance.status.in_([WorkflowInstanceStatus.PENDING, WorkflowInstanceStatus.IN_PROGRESS])
+                WorkflowInstance.id == approval_request.workflow_instance_id
             ).first()
 
             if workflow_instance:
-                # Get workflow definition to extract required roles
                 workflow_def = db.query(WorkflowDefinition).filter(
                     WorkflowDefinition.id == workflow_instance.workflow_definition_id
                 ).first()
 
-                if workflow_def and workflow_def.steps_json:
-                    # Extract required roles from workflow steps
-                    steps = workflow_def.steps_json
-                    if isinstance(steps, list) and steps:
-                        # Look for approval steps and their required roles
-                        for step in steps:
-                            if step.get("step_type") in ["MANUAL_APPROVAL", "PARALLEL_APPROVAL", "SEQUENTIAL_APPROVAL"] or \
-                               step.get("type") in ["manual_approval", "parallel_approval", "sequential_approval"]:
-                                # Check both approval_roles and required_roles fields
-                                step_roles = step.get("approval_roles", []) or step.get("required_roles", [])
-                                if step_roles:
-                                    required_roles = step_roles
-                                    break
-        except Exception as e:
-            logger.warning(f"Error getting required roles from workflow: {e}, defaulting to admin only")
-            required_roles = ["admin"]
+                if workflow_def:
+                    workflow_context = {
+                        "workflow_name": workflow_def.name,
+                        "workflow_description": workflow_def.description,
+                        "total_steps": len(workflow_def.steps_json) if workflow_def.steps_json else 1,
+                        "workflow_status": workflow_instance.status.value,
+                        "current_step": current_step,
+                        "current_step_name": current_step_name,
+                        "workflow_instance_id": approval_request.workflow_instance_id
+                    }
+
+        # Check if user is a step approver
+        user_has_step_access = any(role in step_required_roles for role in user_roles)
 
         return {
-            "can_approve": can_approve,
-            "can_reject": can_reject,
+            "can_approve": final_can_approve,
+            "can_reject": final_can_reject,
+            "can_escalate": "admin" in user_roles,
             "can_view_details": can_view_details,
             "can_edit": can_edit,
             "can_delete": can_delete,
-            "can_escalate": "admin" in user_roles,
             "is_requester": is_requester,
             "has_approval_permissions": has_approval_permissions,
-            "required_roles": required_roles,
+            "required_roles": step_required_roles,
             "user_roles": user_roles,
             "user_id": user_id,
             "request_status": approval_request.status,
+            # Enhanced workflow-specific fields for frontend
+            "current_step_roles": step_required_roles,
+            "is_step_approver": user_has_step_access,
+            "is_system_admin": "admin" in user_roles,
+            "current_step": current_step,
+            "current_step_name": current_step_name,
+            "workflow_context": workflow_context,
+            "permission_details": {
+                "role_based_access": True,
+                "step_specific_access": len(step_required_roles) > 0,
+                "flow_admin_access": "admin" in user_roles,
+                "workflow_enabled": approval_request.workflow_instance_id is not None
+            },
             "message": get_approval_permission_error_message(user_roles) if not has_approval_permissions else "User has approval permissions"
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error checking approval request permissions", error=str(e))
+        logger.error(f"Error checking approval request permissions: {str(e)}")
         return {
             "can_approve": False,
             "can_reject": False,
@@ -306,6 +404,19 @@ async def get_approval_request_permissions(
             "user_roles": current_user.get("roles", []),
             "user_id": current_user.get("user_id", current_user.get("sub", "")),
             "request_status": "unknown",
+            # Enhanced fields for consistency
+            "current_step_roles": ["admin"],
+            "is_step_approver": False,
+            "is_system_admin": False,
+            "current_step": 0,
+            "current_step_name": "Step 1",
+            "workflow_context": {},
+            "permission_details": {
+                "role_based_access": False,
+                "step_specific_access": False,
+                "flow_admin_access": False,
+                "workflow_enabled": False
+            },
             "message": f"Error checking permissions: {str(e)}"
         }
 
@@ -373,7 +484,7 @@ async def create_approval_request(
 
     except Exception as e:
         # Fallback to simple creation if workflow service fails
-        logger.error("Workflow creation failed, falling back to simple creation", error=str(e))
+        logger.error(f"Workflow creation failed, falling back to simple creation: {str(e)}")
         request_id = str(uuid.uuid4())
 
         approval_request = ApprovalRequest(
@@ -486,10 +597,10 @@ async def update_approval_request(
                 evidence=getattr(request_update, 'evidence', None)
             )
 
-            logger.info("Workflow approval action processed", result=workflow_result)
+            logger.info(f"Workflow approval action processed: {workflow_result}")
 
         except Exception as e:
-            logger.error("Workflow approval processing failed", error=str(e))
+            logger.error(f"Workflow approval processing failed: {str(e)}")
             # Continue with basic update if workflow processing fails
 
     # Store original values for audit log
@@ -627,7 +738,7 @@ async def approve_request_with_workflow(
         }
 
     except Exception as e:
-        logger.error("Workflow approval failed", error=str(e))
+        logger.error(f"Workflow approval failed: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Approval failed: {str(e)}"
@@ -671,7 +782,7 @@ async def reject_request_with_workflow(
         }
 
     except Exception as e:
-        logger.error("Workflow rejection failed", error=str(e))
+        logger.error(f"Workflow rejection failed: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Rejection failed: {str(e)}"
@@ -713,7 +824,7 @@ async def delete_approval_request(
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        logger.error("Error checking delete permissions", error=str(e))
+        logger.error(f"Error checking delete permissions: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail="Error checking permissions for deletion"
@@ -895,7 +1006,7 @@ async def get_approval_request_comparison(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error getting approval request comparison", error=str(e))
+        logger.error(f"Error getting approval request comparison: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Error getting comparison: {str(e)}"

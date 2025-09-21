@@ -7,7 +7,7 @@ export interface User {
   id: string
   email: string
   name: string
-  role: 'admin' | 'user' | 'viewer'
+  role: 'admin' | 'user' | 'viewer' | 'editor' | 'approver'
   organization: string
   avatar?: string
   phone?: string
@@ -113,6 +113,28 @@ const rolePermissions = {
     'evaluations:create',
     'evaluations:read',
     'analytics:read',
+  ],
+  editor: [
+    'templates:create',
+    'templates:read',
+    'templates:update',
+    'templates:delete',
+    'deployments:read',
+    'evaluations:create',
+    'evaluations:read',
+    'analytics:read',
+    'approval-requests:read',
+    'approval-requests:create',
+    'approval-requests:update',
+  ],
+  approver: [
+    'templates:read',
+    'deployments:read',
+    'evaluations:read',
+    'analytics:read',
+    'approval-requests:read',
+    'approval-requests:approve',
+    'approval-requests:reject',
   ],
   viewer: [
     'templates:read',
@@ -533,7 +555,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         id: data.user.id,
         email: data.user.email,
         name: data.user.name,
-        role: data.user.role as 'admin' | 'user' | 'viewer',
+        role: data.user.role as 'admin' | 'user' | 'viewer' | 'editor' | 'approver',
         organization: data.user.organization || '',
         avatar: data.user.avatar,
         phone: data.user.phone,
@@ -598,7 +620,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         id: data.user.id,
         email: data.user.email,
         name: data.user.name,
-        role: data.user.role as 'admin' | 'user' | 'viewer',
+        role: data.user.role as 'admin' | 'user' | 'viewer' | 'editor' | 'approver',
         organization: data.user.organization || '',
         avatar: data.user.avatar,
         phone: data.user.phone,

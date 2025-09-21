@@ -30,7 +30,8 @@ import {
   Layers,
   Play,
   Pause,
-  Lock
+  Lock,
+  Info
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { FlowDesigner } from '@/components/approval/FlowDesigner'
@@ -542,7 +543,12 @@ export function PromptApprovalWorkflow() {
                       <TableCell>{userNameMap[request.requested_by] || request.requested_by}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {request.current_step_id || 'Pending'}
+                          {request.workflow_context?.has_workflow && request.workflow_context?.total_steps && request.workflow_context?.current_step !== undefined
+                            ? `${request.workflow_context.current_step + 1}/${request.workflow_context.total_steps}`
+                            : request.workflow_context?.has_workflow === false
+                              ? 'N/A'
+                              : 'Single Step'
+                          }
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -1085,11 +1091,42 @@ export function PromptApprovalWorkflow() {
                       </div>
                     </div>
 
+                    {/* Workflow Step Information */}
+                    {permissions.workflow_context && permissions.workflow_context.total_steps > 1 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">Current Step:</span>
+                          <div className="flex items-center space-x-2">
+                            <Badge variant="outline" className="text-xs">
+                              {permissions.current_step_name || `Step ${permissions.current_step! + 1}`}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {permissions.current_step! + 1} of {permissions.workflow_context.total_steps}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Workflow Progress */}
+                        {permissions.workflow_context.workflow_name && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">Workflow:</span>
+                            <span className="text-xs text-muted-foreground">
+                              {permissions.workflow_context.workflow_name}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Required Roles Display */}
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Required Roles:</span>
+                      <span className="text-sm font-medium">
+                        {permissions.workflow_context && permissions.workflow_context.total_steps > 1
+                          ? `Step ${permissions.current_step! + 1} Required Roles:`
+                          : 'Required Roles:'}
+                      </span>
                       <div className="flex space-x-1">
-                        {permissions.required_roles.map((role, index) => (
+                        {permissions.current_step_roles.map((role, index) => (
                           <Badge key={index} variant="secondary" className="text-xs">
                             {role}
                           </Badge>
@@ -1125,8 +1162,24 @@ export function PromptApprovalWorkflow() {
                           <span className="text-sm font-medium">Insufficient Permissions</span>
                         </div>
                         <p className="text-xs text-yellow-700 mt-1">
-                          You don't have the required roles to approve or reject this request.
+                          {permissions.workflow_context && permissions.workflow_context.total_steps > 1
+                            ? `You don't have the required roles (${permissions.current_step_roles.join(', ')}) for ${permissions.current_step_name || `Step ${permissions.current_step! + 1}`}.`
+                            : `You don't have the required roles (${permissions.current_step_roles.join(', ')}) to approve or reject this request.`
+                          }
                           Contact your administrator if you believe this is an error.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Step-specific Access Indicator */}
+                    {permissions.permission_details?.step_specific_access && permissions.workflow_context?.total_steps > 1 && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-md p-2">
+                        <div className="flex items-center space-x-2 text-blue-800">
+                          <Info className="h-4 w-4" />
+                          <span className="text-sm font-medium">Step-Specific Access</span>
+                        </div>
+                        <p className="text-xs text-blue-700 mt-1">
+                          This request is part of a multi-step workflow. Your access is determined by the roles required for the current step.
                         </p>
                       </div>
                     )}
