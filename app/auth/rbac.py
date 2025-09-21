@@ -430,7 +430,7 @@ class RBACService:
             return False
 
         except Exception as e:
-            logger.error("RBAC check failed", error=str(e), action=action, resource_type=resource_type)
+            logger.error(f"RBAC check failed: {str(e)}", action=action, resource_type=resource_type)
             return False
 
     def _role_has_permission(self, role: UserRole, action: str) -> bool:
@@ -750,7 +750,7 @@ class RBACService:
             return True, custom_role
 
         except Exception as e:
-            logger.error("Failed to create custom role", error=str(e), role=role_name)
+            logger.error(f"Failed to create custom role: {str(e)}", role=role_name)
             return False, f"Failed to create custom role: {str(e)}"
 
     def update_custom_role(
@@ -811,7 +811,7 @@ class RBACService:
             return True, role
 
         except Exception as e:
-            logger.error("Failed to update custom role", error=str(e), role=role_name)
+            logger.error(f"Failed to update custom role: {str(e)}", role=role_name)
             return False, f"Failed to update custom role: {str(e)}"
 
     def delete_custom_role(self, role_name: str, deleted_by: str = None) -> Tuple[bool, str]:
@@ -835,7 +835,7 @@ class RBACService:
             return True, f"Role '{role_name}' deleted successfully"
 
         except Exception as e:
-            logger.error("Failed to delete custom role", error=str(e), role=role_name)
+            logger.error(f"Failed to delete custom role: {str(e)}", role=role_name)
             return False, f"Failed to delete custom role: {str(e)}"
 
     def get_custom_role(self, role_name: str) -> Optional[CustomRole]:
@@ -928,7 +928,7 @@ class RBACService:
             return True, template
 
         except Exception as e:
-            logger.error("Failed to create permission template", error=str(e), name=name)
+            logger.error(f"Failed to create permission template: {str(e)}", name=name)
             return False, f"Failed to create permission template: {str(e)}"
 
     def get_permission_template(self, template_id: str) -> Optional[PermissionTemplate]:
@@ -987,7 +987,7 @@ class RBACService:
                 return False, f"Role '{role_name}' not found"
 
         except Exception as e:
-            logger.error("Failed to apply permission template", error=str(e), role=role_name, template=template_id)
+            logger.error(f"Failed to apply permission template: {str(e)}", role=role_name, template=template_id)
             return False, f"Failed to apply permission template: {str(e)}"
 
     # ========== ROLE INHERITANCE MANAGEMENT ==========
@@ -1021,7 +1021,7 @@ class RBACService:
             return True, inheritance
 
         except Exception as e:
-            logger.error("Failed to add role inheritance", error=str(e), parent=parent_role, child=child_role)
+            logger.error(f"Failed to add role inheritance: {str(e)}", parent=parent_role, child=child_role)
             return False, f"Failed to add role inheritance: {str(e)}"
 
     def remove_role_inheritance(self, parent_role: str, child_role: str) -> Tuple[bool, str]:
@@ -1036,7 +1036,7 @@ class RBACService:
             return False, f"Inheritance between '{parent_role}' and '{child_role}' not found"
 
         except Exception as e:
-            logger.error("Failed to remove role inheritance", error=str(e), parent=parent_role, child=child_role)
+            logger.error(f"Failed to remove role inheritance: {str(e)}", parent=parent_role, child=child_role)
             return False, f"Failed to remove role inheritance: {str(e)}"
 
     def get_role_hierarchy(self, role_name: str) -> Dict[str, List[str]]:
@@ -1129,7 +1129,7 @@ class RBACService:
             return True, permission
 
         except Exception as e:
-            logger.error("Failed to grant resource permission", error=str(e), role=role_name, resource=resource_id)
+            logger.error(f"Failed to grant resource permission: {str(e)}", role=role_name, resource=resource_id)
             return False, f"Failed to grant resource permission: {str(e)}"
 
     def revoke_resource_permission(
@@ -1164,7 +1164,7 @@ class RBACService:
                 return False, f"No permissions found for role '{role_name}' on resource '{resource_id}'"
 
         except Exception as e:
-            logger.error("Failed to revoke resource permission", error=str(e), role=role_name, resource=resource_id)
+            logger.error(f"Failed to revoke resource permission: {str(e)}", role=role_name, resource=resource_id)
             return False, f"Failed to revoke resource permission: {str(e)}"
 
     def get_resource_permissions(self, resource_type: str, resource_id: str) -> List[ResourceSpecificPermission]:
@@ -1318,7 +1318,7 @@ class RBACService:
             return True, review
 
         except Exception as e:
-            logger.error("Failed to create access review", error=str(e), title=title)
+            logger.error(f"Failed to create access review: {str(e)}", title=title)
             return False, f"Failed to create access review: {str(e)}"
 
     def get_access_review(self, review_id: str) -> Optional[AccessReview]:
@@ -1374,7 +1374,7 @@ class RBACService:
             return True, review
 
         except Exception as e:
-            logger.error("Failed to perform access review", error=str(e), review_id=review_id)
+            logger.error(f"Failed to perform access review: {str(e)}", review_id=review_id)
             return False, f"Failed to perform access review: {str(e)}"
 
     # ========== ENHANCED PERMISSION CHECKING ==========
@@ -1482,7 +1482,7 @@ class RBACService:
             return result
 
         except Exception as e:
-            logger.error("Enhanced permission check failed", error=str(e), action=action, resource_type=resource_type)
+            logger.error(f"Enhanced permission check failed: {str(e)}", action=action, resource_type=resource_type)
             result["reason"] = f"Permission check failed: {str(e)}"
             return result
 

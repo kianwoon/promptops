@@ -65,7 +65,7 @@ async def create_provider(
                 AIAssistantProvider.status == AIAssistantProviderStatus.active.value
             ).first()
         except Exception as e:
-            logger.error("Database error:", error=str(e))
+            logger.error(f"Database error: {str(e)}")
             # If table doesn't exist, create it and proceed
             try:
                 from app.database import engine
@@ -108,7 +108,7 @@ async def create_provider(
             logger.info("Provider successfully committed to database", provider_id=provider_id)
         except Exception as e:
             db.rollback()
-            logger.error("Database commit failed", error=str(e))
+            logger.error(f"Database commit failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
         # Skip service creation for now to isolate database issues
@@ -156,7 +156,7 @@ async def create_provider(
             raise HTTPException(status_code=500, detail="Error processing provider data")
 
     except Exception as e:
-        logger.error("Failed to create provider", error=str(e))
+        logger.error(f"Failed to create provider: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/providers", response_model=List[AIAssistantProviderResponse])
@@ -227,14 +227,14 @@ async def get_providers(
         return result
 
     except Exception as e:
-        logger.error("Database query error:", error=str(e))
+        logger.error(f"Database query error: {str(e)}")
         # If table doesn't exist, create it and return empty list
         try:
             from app.database import engine
             Base.metadata.create_all(bind=engine)
             return []
         except Exception as create_error:
-            logger.error("Failed to create table:", error=str(create_error))
+            logger.error(f"Failed to create table: {str(create_error)}")
             return []
 
 @router.get("/providers/{provider_id}", response_model=AIAssistantProviderResponse)
@@ -356,7 +356,7 @@ async def update_provider(
             service_provider = ai_assistant_service.create_provider_from_config(provider_config)
             ai_assistant_service.register_provider(provider_id, service_provider)
         except Exception as e:
-            logger.error("Failed to update service provider", error=str(e))
+            logger.error(f"Failed to update service provider: {str(e)}")
             # Don't fail the request, just log the error
 
     logger.info("Provider updated", provider_id=provider_id, user_id=current_user.id)

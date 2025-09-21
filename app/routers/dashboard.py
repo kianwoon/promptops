@@ -99,7 +99,7 @@ async def get_dashboard_usage(
         }
 
     except Exception as e:
-        logger.error("Failed to get dashboard usage", error=str(e))
+        logger.error(f"Failed to get dashboard usage: {str(e)}")
         return {
             "error": str(e),
             "summary": {
@@ -151,7 +151,7 @@ async def get_recent_activity(
         }
 
     except Exception as e:
-        logger.error("Failed to get recent activity", error=str(e))
+        logger.error(f"Failed to get recent activity: {str(e)}")
         return {
             "activities": [],
             "total": 0,
@@ -203,7 +203,7 @@ async def get_dashboard_stats(
         }
 
     except Exception as e:
-        logger.error("Failed to get dashboard stats", error=str(e))
+        logger.error(f"Failed to get dashboard stats: {str(e)}")
         return {
             "overview": {
                 "total_projects": 0,

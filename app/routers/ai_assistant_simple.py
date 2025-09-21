@@ -82,7 +82,7 @@ async def get_providers(
             return mock_providers
         return []
     except Exception as e:
-        logger.error("Error getting providers:", error=str(e))
+        logger.error(f"Error getting providers: {str(e)}")
         return []
 
 @router.post("/providers", response_model=AIAssistantProviderResponse)
@@ -115,7 +115,7 @@ async def create_provider(
         mock_providers.append(mock_provider)
         return mock_provider
     except Exception as e:
-        logger.error("Error creating provider:", error=str(e))
+        logger.error(f"Error creating provider: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/system-prompts", response_model=List[AIAssistantSystemPromptResponse])
@@ -130,7 +130,7 @@ async def get_system_prompts(
             return mock_system_prompts_response
         return []
     except Exception as e:
-        logger.error("Error getting system prompts:", error=str(e))
+        logger.error(f"Error getting system prompts: {str(e)}")
         return []
 
 @router.post("/system-prompts", response_model=AIAssistantSystemPromptResponse)
@@ -159,7 +159,7 @@ async def create_system_prompt(
         mock_system_prompts_response.append(mock_prompt)
         return mock_prompt
     except Exception as e:
-        logger.error("Error creating system prompt:", error=str(e))
+        logger.error(f"Error creating system prompt: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/providers/{provider_id}/test", response_model=AIAssistantProviderTestResponse)
@@ -179,7 +179,7 @@ async def test_provider(
             created_at=datetime.now()
         )
     except Exception as e:
-        logger.error("Error testing provider:", error=str(e))
+        logger.error(f"Error testing provider: {str(e)}")
         return AIAssistantProviderTestResponse(
             success=False,
             error_message=str(e),
@@ -205,7 +205,7 @@ async def chat(
             created_at=datetime.now()
         )
     except Exception as e:
-        logger.error("Error in chat:", error=str(e))
+        logger.error(f"Error in chat: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate-prompt", response_model=AIAssistantPromptGenerationResponse)
@@ -254,5 +254,5 @@ Create a comprehensive prompt that addresses the user's requirements while ensur
             created_at=datetime.now()
         )
     except Exception as e:
-        logger.error("Error generating prompt:", error=str(e))
+        logger.error(f"Error generating prompt: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

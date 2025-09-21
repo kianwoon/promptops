@@ -82,7 +82,7 @@ class PerformanceMonitor:
                 await self._store_metrics(metrics, AggregationPeriod.HOURLY)
 
             except Exception as e:
-                logger.error("System metrics collection failed", error=str(e))
+                logger.error(f"System metrics collection failed: {str(e)}")
                 # Continue running even if one collection fails
 
     async def _collect_database_metrics_loop(self):
@@ -101,7 +101,7 @@ class PerformanceMonitor:
                 await self._store_metrics(metrics, AggregationPeriod.HOURLY)
 
             except Exception as e:
-                logger.error("Database metrics collection failed", error=str(e))
+                logger.error(f"Database metrics collection failed: {str(e)}")
                 # Continue running even if one collection fails
 
     async def _collect_application_metrics_loop(self):
@@ -120,7 +120,7 @@ class PerformanceMonitor:
                 await self._store_metrics(metrics, AggregationPeriod.HOURLY)
 
             except Exception as e:
-                logger.error("Application metrics collection failed", error=str(e))
+                logger.error(f"Application metrics collection failed: {str(e)}")
                 # Continue running even if one collection fails
 
     def _collect_system_metrics(self) -> Dict[str, Any]:
@@ -165,7 +165,7 @@ class PerformanceMonitor:
             }
 
         except Exception as e:
-            logger.error("Failed to collect system metrics", error=str(e))
+            logger.error(f"Failed to collect system metrics: {str(e)}")
             return {}
 
     def _collect_database_metrics(self) -> Dict[str, Any]:
@@ -244,7 +244,7 @@ class PerformanceMonitor:
             return metrics
 
         except Exception as e:
-            logger.error("Failed to collect database metrics", error=str(e))
+            logger.error(f"Failed to collect database metrics: {str(e)}")
             return {}
 
     def _collect_application_metrics(self) -> Dict[str, Any]:
@@ -288,7 +288,7 @@ class PerformanceMonitor:
             return metrics
 
         except Exception as e:
-            logger.error("Failed to collect application metrics", error=str(e))
+            logger.error(f"Failed to collect application metrics: {str(e)}")
             return {}
 
     async def _store_metrics(self, metrics: Dict[str, Any], period: AggregationPeriod):
@@ -327,7 +327,7 @@ class PerformanceMonitor:
                 logger.debug("Performance metrics stored", metrics_count=len(metrics))
 
         except Exception as e:
-            logger.error("Failed to store performance metrics", error=str(e))
+            logger.error(f"Failed to store performance metrics: {str(e)}")
 
     def get_system_health(self) -> Dict[str, Any]:
         """Get current system health status"""
@@ -396,7 +396,7 @@ class PerformanceMonitor:
             }
 
         except Exception as e:
-            logger.error("Failed to get system health", error=str(e))
+            logger.error(f"Failed to get system health: {str(e)}")
             return {
                 'health_score': 0,
                 'health_status': 'error',

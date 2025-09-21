@@ -171,7 +171,7 @@ class ModelTestingService:
 
         except Exception as e:
             response_time = int((time.time() - start_time) * 1000)
-            logger.error("Error testing provider", provider_id=provider.id, error=str(e))
+            logger.error(f"Error testing provider: {str(e)}", provider_id=provider.id)
             return ModelTestResult(
                 provider_id=provider.id,
                 provider_name=provider.name,

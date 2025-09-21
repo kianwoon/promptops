@@ -177,7 +177,7 @@ async def create_provider(
                    user_id=current_user["user_id"])
         return created_provider
     except ValueError as e:
-        logger.warning("Provider creation validation failed", error=str(e))
+        logger.warning(f"Provider creation validation failed: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error("Error creating provider", user_id=current_user.get("user_id"), error=str(e))
@@ -446,7 +446,7 @@ async def health_check(db: Session = Depends(get_db)):
         health = service.health_check()
         return health
     except Exception as e:
-        logger.error("Health check failed", error=str(e))
+        logger.error(f"Health check failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Health check failed")
 
 # Generate Prompt Endpoint
@@ -522,10 +522,10 @@ async def generate_prompt(
                 generated_content = generation_result["generated_content"]
             else:
                 # If AI generation fails, return an error response instead of using hardcoded templates
-                logger.error("AI generation failed", error=generation_result.get("error"))
+                logger.error(f"AI generation failed: {generation_result.get('error')}")
                 raise HTTPException(status_code=500, detail=f"AI generation failed: {generation_result.get('error', 'Unknown error')}")
         except Exception as e:
-            logger.error("AI service generation failed", error=str(e))
+            logger.error(f"AI service generation failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to generate prompt: {str(e)}")
 
         # Generate MAS FEAT compliance fields using AI provider
@@ -575,7 +575,7 @@ Respond in JSON format with keys: mas_intent, mas_fairness_notes, mas_risk_level
                 mas_risk_level = "low"
                 mas_testing_notes = "AI-generated prompt requiring human review."
         except Exception as e:
-            logger.warning("MAS field generation failed, using fallback", error=str(e))
+            logger.warning(f"MAS field generation failed, using fallback: {str(e)}")
             # Fallback if MAS generation fails
             mas_intent = "To assist users effectively while ensuring fair and transparent interactions."
             mas_fairness_notes = "Designed with fairness considerations and regular bias audits."
@@ -599,5 +599,5 @@ Respond in JSON format with keys: mas_intent, mas_fairness_notes, mas_risk_level
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to generate prompt", error=str(e))
+        logger.error(f"Failed to generate prompt: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate prompt: {str(e)}")

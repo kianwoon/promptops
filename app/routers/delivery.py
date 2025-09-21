@@ -87,7 +87,7 @@ async def get_prompt_runtime(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to get prompt runtime", error=str(e), prompt_id=prompt_id, version=version)
+        logger.error(f"Failed to get prompt runtime: {str(e)}", prompt_id=prompt_id, version=version)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/runtime/{prompt_id}/latest")
@@ -163,7 +163,7 @@ async def get_latest_prompt_runtime(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to get latest prompt runtime", error=str(e), prompt_id=prompt_id)
+        logger.error(f"Failed to get latest prompt runtime: {str(e)}", prompt_id=prompt_id)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/runtime/{prompt_id}/{version}/rollback")
@@ -204,7 +204,7 @@ async def rollback_prompt_runtime(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to rollback prompt runtime", error=str(e), prompt_id=prompt_id, version=version)
+        logger.error(f"Failed to rollback prompt runtime: {str(e)}", prompt_id=prompt_id, version=version)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/runtime/{prompt_id}/cache/invalidate")
@@ -236,7 +236,7 @@ async def invalidate_prompt_cache(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to invalidate prompt cache", error=str(e), prompt_id=prompt_id, version=version)
+        logger.error(f"Failed to invalidate prompt cache: {str(e)}", prompt_id=prompt_id, version=version)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/runtime/cache/stats")
@@ -252,7 +252,7 @@ async def get_cache_stats(
         return stats
 
     except Exception as e:
-        logger.error("Failed to get cache stats", error=str(e))
+        logger.error(f"Failed to get cache stats: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/runtime/health")
@@ -279,7 +279,7 @@ async def runtime_health_check(
         }
 
     except Exception as e:
-        logger.error("Runtime health check failed", error=str(e))
+        logger.error(f"Runtime health check failed: {str(e)}")
         return {
             "status": "unhealthy",
             "redis_connected": False,

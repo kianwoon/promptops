@@ -17,6 +17,7 @@ from app.models import (
     AIAssistantSystemPromptType, AIAssistantConversationStatus, AIAssistantMessageRole
 )
 from app.database import Base
+from app.config import settings
 from app.schemas import (
     AIAssistantProviderCreate, AIAssistantProviderUpdate, AIAssistantProviderResponse,
     AIAssistantProviderEditResponse,
@@ -59,7 +60,7 @@ class AIAssistantService:
             logger.info("Refreshed User table metadata", columns_found=len(user_table_info))
 
         except Exception as e:
-            logger.warning("Failed to refresh User table metadata", error=str(e))
+            logger.warning(f"Failed to refresh User table metadata: {str(e)}")
             # Don't raise the exception as this is a best-effort operation
 
     def _format_provider_response(self, provider: AIAssistantProvider) -> AIAssistantProviderResponse:
@@ -99,7 +100,8 @@ class AIAssistantService:
 
     def _pick_fallback_provider(self, user_id: str) -> Optional[AIAssistantProvider]:
         """Select the best available provider when no default is configured"""
-        return (
+        # First try user's own active providers
+        user_provider = (
             self.db.query(AIAssistantProvider)
             .filter(
                 AIAssistantProvider.user_id == user_id,
@@ -111,6 +113,50 @@ class AIAssistantService:
             )
             .first()
         )
+
+        if user_provider:
+            return user_provider
+
+        # CRITICAL FIX: If no user providers, fall back to system-wide default providers
+        # This ensures all users can access AI Assistant functionality
+        logger.info(f"No user providers found for {user_id}, falling back to system-wide providers")
+
+        # Try to find any default provider in the system
+        system_default_provider = (
+            self.db.query(AIAssistantProvider)
+            .filter(
+                AIAssistantProvider.is_default == True,
+                AIAssistantProvider.status == AIAssistantProviderStatus.active
+            )
+            .order_by(
+                AIAssistantProvider.last_used_at.desc(),
+                AIAssistantProvider.created_at.asc()
+            )
+            .first()
+        )
+
+        if system_default_provider:
+            return system_default_provider
+
+        # Final fallback: any active provider in the system
+        any_active_provider = (
+            self.db.query(AIAssistantProvider)
+            .filter(
+                AIAssistantProvider.status == AIAssistantProviderStatus.active
+            )
+            .order_by(
+                AIAssistantProvider.last_used_at.desc(),
+                AIAssistantProvider.created_at.asc()
+            )
+            .first()
+        )
+
+        if any_active_provider:
+            logger.info(f"Using system-wide active provider for user {user_id}")
+            return any_active_provider
+
+        logger.warning(f"No active providers found in the system for user {user_id}")
+        return None
 
     def _clear_default_provider(self, user_id: str, exclude_id: Optional[str] = None) -> None:
         """Unset the default flag for all providers belonging to the user"""
@@ -139,13 +185,13 @@ class AIAssistantService:
         include_all: bool = False,
         tenant_id: Optional[str] = None
     ) -> List[AIAssistantProviderResponse]:
-        """Get AI assistant providers, optionally including tenant-shared defaults."""
+        """Get AI assistant providers, with fallback to shared providers for system-wide access."""
         try:
             base_query = self.db.query(AIAssistantProvider)
-
             providers: List[AIAssistantProvider] = []
 
             if include_all:
+                # Admin users can see all providers
                 query = base_query
                 if tenant_id:
                     query = query.join(User, User.id == AIAssistantProvider.user_id).filter(
@@ -157,17 +203,17 @@ class AIAssistantService:
                     )
                 providers = query.order_by(AIAssistantProvider.created_at.desc()).all()
             else:
-                # Providers owned by the user
+                # Regular users get their own providers plus shared providers
+                # Start with user's own providers
                 user_providers = (
                     base_query
                     .filter(AIAssistantProvider.user_id == user_id)
                     .order_by(AIAssistantProvider.created_at.desc())
                     .all()
                 )
-
                 providers.extend(user_providers)
 
-                # Include tenant-level default providers for shared access
+                # Add tenant-level shared providers
                 if tenant_id:
                     shared_query = (
                         self.db.query(AIAssistantProvider)
@@ -178,7 +224,6 @@ class AIAssistantService:
                             AIAssistantProvider.status == AIAssistantProviderStatus.active
                         )
                     )
-
                     shared_providers = shared_query.all()
 
                     existing_ids = {p.id for p in providers}
@@ -187,9 +232,40 @@ class AIAssistantService:
                             providers.append(provider)
                             existing_ids.add(provider.id)
 
+                # CRITICAL FIX: If no providers found, add system-wide active providers
+                # This ensures all users have access to AI Assistant functionality
+                if not providers:
+                    logger.info(f"No providers found for user {user_id}, falling back to system-wide providers")
+
+                    # Get all active default providers as system-wide fallback
+                    system_wide_query = (
+                        base_query
+                        .filter(
+                            AIAssistantProvider.is_default == True,
+                            AIAssistantProvider.status == AIAssistantProviderStatus.active
+                        )
+                        .order_by(AIAssistantProvider.created_at.desc())
+                    )
+                    system_providers = system_wide_query.all()
+
+                    # If no default providers, get any active providers as final fallback
+                    if not system_providers:
+                        logger.info(f"No default providers found, using any active providers for user {user_id}")
+                        system_wide_query = (
+                            base_query
+                            .filter(
+                                AIAssistantProvider.status == AIAssistantProviderStatus.active
+                            )
+                            .order_by(AIAssistantProvider.created_at.desc())
+                        )
+                        system_providers = system_wide_query.all()
+
+                    providers.extend(system_providers)
+
+            logger.info(f"Returning {len(providers)} providers for user {user_id}")
             return [self._format_provider_response(p) for p in providers]
         except Exception as e:
-            logger.error("Error getting providers", user_id=user_id, error=str(e))
+            logger.error(f"Error getting providers for user {user_id}: {str(e)}")
             return []
 
     def get_provider(
@@ -228,7 +304,7 @@ class AIAssistantService:
 
             return self._format_provider_response(provider)
         except Exception as e:
-            logger.error("Error getting provider", provider_id=provider_id, user_id=user_id, error=str(e))
+            logger.error(f"Error getting provider {provider_id} for user {user_id}: {str(e)}")
             return None
 
     def get_provider_for_edit(
@@ -284,7 +360,7 @@ class AIAssistantService:
                 is_default=getattr(provider, "is_default", False)
             )
         except Exception as e:
-            logger.error("Error getting provider for edit", provider_id=provider_id, user_id=user_id, error=str(e))
+            logger.error(f"Error getting provider {provider_id} for edit for user {user_id}: {str(e)}")
             return None
 
     def get_provider_model(
@@ -389,7 +465,7 @@ class AIAssistantService:
             return self._format_provider_response(provider)
         except Exception as e:
             self.db.rollback()
-            logger.error("Error creating provider", user_id=user_id, error=str(e))
+            logger.error(f"Error creating provider for user {user_id}: {str(e)}")
             raise e
 
     def update_provider(
@@ -462,7 +538,7 @@ class AIAssistantService:
             return self._format_provider_response(provider)
         except Exception as e:
             self.db.rollback()
-            logger.error("Error updating provider", provider_id=provider_id, user_id=user_id, error=str(e))
+            logger.error(f"Error updating provider {provider_id} for user {user_id}: {str(e)}")
             return None
 
     def delete_provider(
@@ -513,7 +589,7 @@ class AIAssistantService:
             return True
         except Exception as e:
             self.db.rollback()
-            logger.error("Error deleting provider", provider_id=provider_id, user_id=user_id, error=str(e))
+            logger.error(f"Error deleting provider {provider_id} for user {user_id}: {str(e)}")
             return False
 
     def test_provider(
@@ -571,7 +647,7 @@ class AIAssistantService:
                 return self._test_generic_provider(provider, test_request)
 
         except Exception as e:
-            logger.error("Error testing provider", provider_id=provider_id, user_id=user_id, error=str(e))
+            logger.error(f"Error testing provider {provider_id} for user {user_id}: {str(e)}")
             return AIAssistantProviderTestResponse(
                 success=False,
                 response_time_ms=0,
@@ -603,8 +679,8 @@ class AIAssistantService:
                 base_url=provider.api_base_url if provider.api_base_url else None
             )
 
-            # Use provided model or default
-            model = provider.model_name or "gpt-3.5-turbo"
+            # Use provided model or default from configuration
+            model = provider.model_name or settings.default_openai_model
 
             start_time = time.time()
 
@@ -697,8 +773,8 @@ class AIAssistantService:
                 base_url=provider.api_base_url if provider.api_base_url else None
             )
 
-            # Use provided model or default
-            model = provider.model_name or "claude-3-sonnet-20240229"
+            # Use provided model or default from configuration
+            model = provider.model_name or settings.default_anthropic_model
 
             start_time = time.time()
 
@@ -787,8 +863,8 @@ class AIAssistantService:
             # Configure Gemini API
             genai.configure(api_key=provider.api_key)
 
-            # Use provided model or default
-            model = provider.model_name or "gemini-pro"
+            # Use provided model or default from configuration
+            model = provider.model_name or settings.default_gemini_model
 
             start_time = time.time()
 
@@ -891,7 +967,7 @@ class AIAssistantService:
                 }
             elif provider.provider_type == "openrouter":
                 payload = {
-                    "model": provider.model_name or "openai/gpt-3.5-turbo",
+                    "model": provider.model_name or settings.default_openrouter_model,
                     "messages": [{"role": "user", "content": test_request.test_message}],
                     "max_tokens": 50
                 }
@@ -908,7 +984,7 @@ class AIAssistantService:
                     "method": "test",
                     "params": {
                         "message": test_request.test_message,
-                        "model": provider.model_name or "default"
+                        "model": provider.model_name or settings.default_generic_model
                     },
                     "id": 1
                 }
@@ -941,7 +1017,7 @@ class AIAssistantService:
                         error_message=None,
                         response_data={
                             "provider": provider.provider_type,
-                            "model": provider.model_name or "default",
+                            "model": provider.model_name or settings.default_generic_model,
                             "test_message": test_request.test_message,
                             "response": "HTTP connection successful",
                             "http_status": response.status_code,
@@ -957,7 +1033,7 @@ class AIAssistantService:
                         error_message=f"HTTP {response.status_code}: {response.text[:200]}",
                         response_data={
                             "provider": provider.provider_type,
-                            "model": provider.model_name or "default",
+                            "model": provider.model_name or settings.default_generic_model,
                             "http_status": response.status_code,
                             "response_preview": response.text[:200] + "..." if len(response.text) > 200 else response.text
                         },
@@ -1016,7 +1092,7 @@ class AIAssistantService:
 
             return system_prompt
         except Exception as e:
-            logger.error("Failed to get system prompt by type", error=str(e), user_id=user_id, prompt_type=prompt_type)
+            logger.error(f"Failed to get system prompt by type {prompt_type} for user {user_id}: {str(e)}")
             return None
 
     def get_system_prompt_for_provider(self, provider_id: str, prompt_type: str) -> Optional[AIAssistantSystemPrompt]:
@@ -1089,7 +1165,7 @@ class AIAssistantService:
                 for p in prompts
             ]
         except Exception as e:
-            logger.error("Error getting system prompts", user_id=user_id, error=str(e))
+            logger.error(f"Error getting system prompts for user {user_id}: {str(e)}")
             return []
 
     def create_system_prompt(self, user_id: str, prompt_data: AIAssistantSystemPromptCreate) -> AIAssistantSystemPromptResponse:
@@ -1150,7 +1226,7 @@ class AIAssistantService:
             )
         except Exception as e:
             self.db.rollback()
-            logger.error("Error creating system prompt", user_id=user_id, error=str(e))
+            logger.error(f"Error creating system prompt for user {user_id}: {str(e)}")
             raise e
 
     # System Prompt Management Methods
@@ -1200,7 +1276,7 @@ class AIAssistantService:
             )
         except Exception as e:
             self.db.rollback()
-            logger.error("Error updating system prompt", prompt_id=prompt_id, user_id=user_id, error=str(e))
+            logger.error(f"Error updating system prompt {prompt_id} for user {user_id}: {str(e)}")
             return None
 
     def delete_system_prompt(self, prompt_id: str, user_id: str) -> bool:
@@ -1224,7 +1300,7 @@ class AIAssistantService:
             return True
         except Exception as e:
             self.db.rollback()
-            logger.error("Error deleting system prompt", prompt_id=prompt_id, user_id=user_id, error=str(e))
+            logger.error(f"Error deleting system prompt {prompt_id} for user {user_id}: {str(e)}")
             return False
 
     # Default Provider Management
@@ -1287,7 +1363,7 @@ class AIAssistantService:
 
             return self._format_provider_response(provider)
         except Exception as e:
-            logger.error("Error getting default provider", user_id=user_id, error=str(e), exc_info=True)
+            logger.error(f"Error getting default provider for user {user_id}: {str(e)}", exc_info=True)
             return None
 
     def set_default_provider(
@@ -1334,7 +1410,7 @@ class AIAssistantService:
             return self._format_provider_response(provider_model)
         except Exception as e:
             self.db.rollback()
-            logger.error("Error setting default provider", user_id=user_id, provider_id=provider_id, error=str(e))
+            logger.error(f"Error setting default provider {provider_id} for user {user_id}: {str(e)}")
             raise
 
     def clear_default_provider(self, user_id: str) -> None:
@@ -1353,7 +1429,7 @@ class AIAssistantService:
             self.db.commit()
         except Exception as e:
             self.db.rollback()
-            logger.error("Error clearing default provider", user_id=user_id, error=str(e))
+            logger.error(f"Error clearing default provider for user {user_id}: {str(e)}")
             raise
 
     # Health Check
@@ -1400,7 +1476,7 @@ class AIAssistantService:
                 return await self._generate_with_generic(provider, ai_prompt)
 
         except Exception as e:
-            logger.error("Failed to generate prompt", error=str(e), provider_id=provider_id, user_id=user_id)
+            logger.error(f"Failed to generate prompt for provider {provider_id} user {user_id}: {str(e)}")
             raise
 
     async def _generate_with_anthropic(self, provider: AIAssistantProvider, prompt: str) -> Dict[str, Any]:
@@ -1415,7 +1491,7 @@ class AIAssistantService:
             }
 
             payload = {
-                "model": provider.model_name or "claude-3-sonnet-20240229",
+                "model": provider.model_name or settings.default_anthropic_model,
                 "max_tokens": 2000,
                 "messages": [
                     {
@@ -1443,10 +1519,10 @@ class AIAssistantService:
                         }
                     else:
                         error_text = await response.text()
-                        logger.error("Anthropic API error", status=response.status, error=error_text)
+                        logger.error(f"Anthropic API error: status {response.status}, error {error_text}")
                         raise Exception(f"Anthropic API error: {response.status}")
         except Exception as e:
-            logger.error("Anthropic generation failed", error=str(e))
+            logger.error(f"Anthropic generation failed: {str(e)}")
             raise
 
     async def _generate_with_openai(self, provider: AIAssistantProvider, prompt: str) -> Dict[str, Any]:
@@ -1460,7 +1536,7 @@ class AIAssistantService:
             }
 
             payload = {
-                "model": provider.model_name or "gpt-3.5-turbo",
+                "model": provider.model_name or settings.default_openai_model,
                 "messages": [
                     {
                         "role": "user",
@@ -1488,10 +1564,10 @@ class AIAssistantService:
                         }
                     else:
                         error_text = await response.text()
-                        logger.error("OpenAI API error", status=response.status, error=error_text)
+                        logger.error(f"OpenAI API error: status {response.status}, error {error_text}")
                         raise Exception(f"OpenAI API error: {response.status}")
         except Exception as e:
-            logger.error("OpenAI generation failed", error=str(e))
+            logger.error(f"OpenAI generation failed: {str(e)}")
             raise
 
     async def _generate_with_openrouter(self, provider: AIAssistantProvider, prompt: str) -> Dict[str, Any]:
@@ -1505,7 +1581,7 @@ class AIAssistantService:
             }
 
             payload = {
-                "model": provider.model_name or "openai/gpt-3.5-turbo",
+                "model": provider.model_name or settings.default_openrouter_model,
                 "messages": [
                     {
                         "role": "user",
@@ -1533,10 +1609,10 @@ class AIAssistantService:
                         }
                     else:
                         error_text = await response.text()
-                        logger.error("OpenRouter API error", status=response.status, error=error_text)
+                        logger.error(f"OpenRouter API error: status {response.status}, error {error_text}")
                         raise Exception(f"OpenRouter API error: {response.status}")
         except Exception as e:
-            logger.error("OpenRouter generation failed", error=str(e))
+            logger.error(f"OpenRouter generation failed: {str(e)}")
             raise
 
     async def _generate_with_generic(self, provider: AIAssistantProvider, prompt: str) -> Dict[str, Any]:
@@ -1580,10 +1656,10 @@ class AIAssistantService:
                         }
                     else:
                         error_text = await response.text()
-                        logger.error("Generic API error", status=response.status, error=error_text)
+                        logger.error(f"Generic API error: status {response.status}, error {error_text}")
                         raise Exception(f"Generic API error: {response.status}")
         except Exception as e:
-            logger.error("Generic generation failed", error=str(e))
+            logger.error(f"Generic generation failed: {str(e)}")
             raise
 
     def health_check(self) -> Dict[str, Any]:
@@ -1603,7 +1679,7 @@ class AIAssistantService:
                 "timestamp": datetime.utcnow().isoformat()
             }
         except Exception as e:
-            logger.error("Health check failed", error=str(e))
+            logger.error(f"Health check failed: {str(e)}")
             return {
                 "status": "unhealthy",
                 "error": str(e),

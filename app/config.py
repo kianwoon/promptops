@@ -61,6 +61,15 @@ class Settings(BaseSettings):
     user_emails: List[str] = []
     user_domains: List[str] = []
 
+    # AI Assistant Model Configuration
+    # Default fallback models for different provider types
+    default_openai_model: str = "gpt-3.5-turbo"
+    default_anthropic_model: str = "claude-3-5-haiku-20241022"
+    default_glm_model: str = "GLM-4.5"
+    default_openrouter_model: str = "openai/gpt-3.5-turbo"
+    default_gemini_model: str = "gemini-pro"
+    default_generic_model: str = "default"
+
     class Config:
         env_file = ".env"
 

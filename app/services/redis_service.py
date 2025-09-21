@@ -30,7 +30,7 @@ class RedisPromptService:
             await self.redis_client.ping()
             logger.info("Redis connection established successfully")
         except Exception as e:
-            logger.error("Failed to connect to Redis", error=str(e))
+            logger.error(f"Failed to connect to Redis: {str(e)}")
             raise
 
     async def close(self):
@@ -77,7 +77,7 @@ class RedisPromptService:
             return True
 
         except Exception as e:
-            logger.error("Failed to cache prompt", error=str(e), prompt_id=prompt_id, version=version)
+            logger.error(f"Failed to cache prompt: {str(e)}", prompt_id=prompt_id, version=version)
             return False
 
     async def get_cached_prompt(self, prompt_id: str, version: str) -> Optional[Dict[str, Any]]:
@@ -97,7 +97,7 @@ class RedisPromptService:
             return None
 
         except Exception as e:
-            logger.error("Failed to retrieve cached prompt", error=str(e), prompt_id=prompt_id, version=version)
+            logger.error(f"Failed to retrieve cached prompt: {str(e)}", prompt_id=prompt_id, version=version)
             return None
 
     async def get_latest_cached_prompt(self, prompt_id: str) -> Optional[Dict[str, Any]]:
@@ -129,7 +129,7 @@ class RedisPromptService:
             return latest_data
 
         except Exception as e:
-            logger.error("Failed to get latest cached prompt", error=str(e), prompt_id=prompt_id)
+            logger.error(f"Failed to get latest cached prompt: {str(e)}", prompt_id=prompt_id)
             return None
 
     async def publish_prompt_update(self, prompt_id: str, version: str, action: str = "update"):
@@ -154,7 +154,7 @@ class RedisPromptService:
             logger.info("Prompt update published", prompt_id=prompt_id, version=version, action=action)
 
         except Exception as e:
-            logger.error("Failed to publish prompt update", error=str(e), prompt_id=prompt_id, version=version)
+            logger.error(f"Failed to publish prompt update: {str(e)}", prompt_id=prompt_id, version=version)
 
     async def rollback_prompt(self, prompt_id: str, target_version: str) -> bool:
         """Rollback prompt to specific version"""
@@ -198,7 +198,7 @@ class RedisPromptService:
             return success
 
         except Exception as e:
-            logger.error("Failed to rollback prompt", error=str(e), prompt_id=prompt_id, target_version=target_version)
+            logger.error(f"Failed to rollback prompt: {str(e)}", prompt_id=prompt_id, target_version=target_version)
             return False
 
     async def invalidate_prompt_cache(self, prompt_id: str, version: Optional[str] = None) -> bool:
@@ -222,7 +222,7 @@ class RedisPromptService:
             return True
 
         except Exception as e:
-            logger.error("Failed to invalidate prompt cache", error=str(e), prompt_id=prompt_id, version=version)
+            logger.error(f"Failed to invalidate prompt cache: {str(e)}", prompt_id=prompt_id, version=version)
             return False
 
     async def get_project_prompts(self, project_id: str) -> Dict[str, Any]:
@@ -240,7 +240,7 @@ class RedisPromptService:
             return {}
 
         except Exception as e:
-            logger.error("Failed to get project prompts", error=str(e), project_id=project_id)
+            logger.error(f"Failed to get project prompts: {str(e)}", project_id=project_id)
             return {}
 
     async def get_module_prompts(self, module_id: str) -> Dict[str, Any]:
@@ -258,7 +258,7 @@ class RedisPromptService:
             return {}
 
         except Exception as e:
-            logger.error("Failed to get module prompts", error=str(e), module_id=module_id)
+            logger.error(f"Failed to get module prompts: {str(e)}", module_id=module_id)
             return {}
 
     async def _update_indices(self, prompt_id: str, version: str, prompt_data: Dict[str, Any]):
@@ -273,7 +273,7 @@ class RedisPromptService:
             pass
 
         except Exception as e:
-            logger.error("Failed to update indices", error=str(e), prompt_id=prompt_id)
+            logger.error(f"Failed to update indices: {str(e)}", prompt_id=prompt_id)
 
     async def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
@@ -293,7 +293,7 @@ class RedisPromptService:
             }
 
         except Exception as e:
-            logger.error("Failed to get cache stats", error=str(e))
+            logger.error(f"Failed to get cache stats: {str(e)}")
             return {"error": str(e)}
 
 # Global Redis service instance

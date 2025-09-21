@@ -213,6 +213,27 @@ export const useUpdateApprovalFlow = () => {
   })
 }
 
+export const useUpdateFlowStatus = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ flowId, status }: { flowId: string; status: 'active' | 'inactive' | 'draft' | 'archived' }) => {
+      return apiRequest<any>(`/flows/${flowId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status }),
+      }, FLOWS_API_BASE)
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['approval-flows'] })
+      queryClient.invalidateQueries({ queryKey: ['approval-flows', variables.flowId] })
+      toast.success('Flow status updated successfully')
+    },
+    onError: (error) => {
+      toast.error(`Failed to update flow status: ${error.message}`)
+    },
+  })
+}
+
 export const useDeleteApprovalFlow = () => {
   const queryClient = useQueryClient()
 

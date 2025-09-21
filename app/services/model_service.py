@@ -89,7 +89,14 @@ class AnthropicProvider(ModelProviderInterface):
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key
-        self.models = ["claude-3-sonnet-20240229", "claude-3-opus-20240229", "claude-3-haiku-20240307"]
+        self.models = [
+            "claude-opus-4-1-20250805",
+            "claude-opus-4-20250514",
+            "claude-sonnet-4-20250514",
+            "claude-3-7-sonnet-20250219",
+            "claude-3-5-haiku-20241022",
+            "claude-3-haiku-20240307"
+        ]
 
     async def test_prompt(self, prompt: str) -> Dict[str, Any]:
         """Test prompt with Anthropic"""
@@ -104,7 +111,7 @@ class AnthropicProvider(ModelProviderInterface):
                 "success": True,
                 "response_time": response_time,
                 "quality_score": quality_score,
-                "model_used": "claude-3-sonnet-20240229",
+                "model_used": "claude-3-5-haiku-20241022",
                 "token_count": len(prompt.split()),
                 "estimated_cost": 0.003
             }
@@ -122,8 +129,11 @@ class AnthropicProvider(ModelProviderInterface):
             "capabilities": ["chat", "completion", "multimodal"],
             "pricing": {
                 "claude-3-haiku-20240307": 0.00025,
-                "claude-3-sonnet-20240229": 0.003,
-                "claude-3-opus-20240229": 0.015
+                "claude-3-5-haiku-20241022": 0.001,
+                "claude-3-7-sonnet-20250219": 0.003,
+                "claude-sonnet-4-20250514": 0.003,
+                "claude-opus-4-20250514": 0.015,
+                "claude-opus-4-1-20250805": 0.015
             }
         }
 
@@ -275,7 +285,7 @@ class ModelProviderService:
                 }
 
         except Exception as e:
-            logger.error("Prompt compatibility test failed", provider=provider, error=str(e))
+            logger.error(f"Prompt compatibility test failed: {str(e)}", provider=provider)
             return {
                 "status": CompatibilityStatus.NOT_SUPPORTED.value,
                 "error": str(e),

@@ -147,6 +147,7 @@ export function ProjectDetail() {
     id: '',
     version: '1.0.0',
     module_id: '',
+    content: '',
     name: '',
     description: '',
     target_models: [],
@@ -200,11 +201,18 @@ export function ProjectDetail() {
     }
 
     try {
-      await createPrompt.mutateAsync(createPromptForm)
+      // If main content is empty, use the first model-specific prompt content
+      const formData = { ...createPromptForm }
+      if (!formData.content.trim() && formData.model_specific_prompts.length > 0) {
+        formData.content = formData.model_specific_prompts[0].content
+      }
+
+      await createPrompt.mutateAsync(formData)
       setCreatePromptForm({
         id: '',
         version: '1.0.0',
         module_id: '',
+        content: '',
         name: '',
         description: '',
         target_models: [],
@@ -465,10 +473,7 @@ export function ProjectDetail() {
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Create New Prompt</DialogTitle>
-                  <DialogDescription>
-                    Create a new prompt with model-specific variations for different LLM providers.
-                  </DialogDescription>
+                  <DialogTitle className="sr-only">Create New Prompt</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleCreatePrompt} className="space-y-6">
                   {/* Basic Info */}
@@ -514,7 +519,7 @@ export function ProjectDetail() {
                         required
                       >
                         <option value="">Select a module</option>
-                        {[...(modules || [])].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)).map((module) => (
+                        {[...(modules || [])].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).map((module) => (
                           <option key={module.id} value={module.id}>
                             {module.slot}
                           </option>
@@ -531,6 +536,20 @@ export function ProjectDetail() {
                         placeholder="Describe what this prompt does and its purpose"
                         rows={3}
                       />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="prompt-content">Main Prompt Content</Label>
+                      <Textarea
+                        id="prompt-content"
+                        value={createPromptForm.content}
+                        onChange={(e) => setCreatePromptForm({ ...createPromptForm, content: e.target.value })}
+                        placeholder="Enter the main prompt content that will be used as the base for all model-specific variations"
+                        rows={6}
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        This is the base prompt content. If left empty, the first model-specific prompt will be used as the main content.
+                      </p>
                     </div>
 
                     <div className="space-y-2">
@@ -777,7 +796,7 @@ export function ProjectDetail() {
             </div>
           ) : filteredModules.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {filteredModules.map((module, index) => {
+              {filteredModules.map((module) => {
                 const modulePromptCount = promptCounts[module.id] || 0;
                 const canDelete = modulePromptCount === 0;
 

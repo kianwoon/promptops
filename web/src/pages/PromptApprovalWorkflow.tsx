@@ -65,7 +65,8 @@ import {
   useApprovalRequests,
   useAvailableRoles,
   useApprovalFlowStats,
-  useApprovalPermissions
+  useApprovalPermissions,
+  useUpdateFlowStatus
 } from '@/hooks/useApprovalFlows'
 import { useUsers, useModules, usePrompts, useUpdateApprovalRequest, useApprovalRequestComparison } from '@/hooks/api'
 import { SimpleDiffView } from '@/components/SimpleDiffView'
@@ -132,15 +133,18 @@ export function PromptApprovalWorkflow() {
   const { data: flowStats } = useApprovalFlowStats()
   const { data: approvalRequests = [] } = useApprovalRequests()
   const { data: users = [] } = useUsers()
-  const { data: modules = [] } = useModules()
+
+    const { data: modules = [] } = useModules()
   const { data: prompts = [] } = usePrompts()
   const { user: authUser } = useAuth()
 
+  
   // State for search and filters
   const [flowsSearchQuery, setFlowsSearchQuery] = useState('')
   const [requestsSearchQuery, setRequestsSearchQuery] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
   const [filterType, setFilterType] = useState<'all' | 'create' | 'edit'>('all')
+  const [approvalTab, setApprovalTab] = useState<'all' | 'pending' | 'approved'>('pending')
   const [selectedRequest, setSelectedRequest] = useState<any>(null)
   const updateApprovalRequest = useUpdateApprovalRequest()
   const [approvalComments, setApprovalComments] = useState('')
@@ -150,7 +154,7 @@ export function PromptApprovalWorkflow() {
   const createFlowMutation = useCreateApprovalFlow()
   const updateFlowMutation = useUpdateApprovalFlow()
   const deleteFlowMutation = useDeleteApprovalFlow()
-  const updateFlowStatusMutation = useUpdateApprovalFlow() // Reuse update mutation for status changes
+  const updateFlowStatusMutation = useUpdateFlowStatus() // Dedicated mutation for status changes
 
   // Permission checking for selected request - moved after state initialization
   const { data: permissions, isLoading: permissionsLoading } = useApprovalPermissions(
@@ -165,46 +169,125 @@ export function PromptApprovalWorkflow() {
   // Debug: Log when selectedRequest changes
   console.log('🔍 [DEBUG] selectedRequest:', selectedRequest)
 
+  // Helper function to get user ID safely
+  const getUserId = (): string | null => {
+    if (!authUser) return null
+
+    // First try to get from auth context
+    if (authUser.id) return authUser.id
+
+    // Fallback: try to get from JWT token in localStorage
+    try {
+      const token = localStorage.getItem('access_token')
+      if (token) {
+        const payload = token.split('.')[1]
+        const decoded = JSON.parse(atob(payload))
+        return decoded.sub || decoded.user_id
+      }
+    } catch (error) {
+      console.error('Error parsing JWT token:', error)
+    }
+
+    return null
+  }
+
   // Handle approval actions
   const handleApprove = async () => {
     if (!selectedRequest || !authUser) return
 
+    const approverId = getUserId()
+    if (!approverId) {
+      toast.error('User ID not found. Please log in again.')
+      return
+    }
+
     try {
-      await updateApprovalRequest.mutateAsync({
+      const requestData = {
+        status: 'approved',
+        comments: approvalComments,
+        approver: approverId
+      }
+      console.log('🔍 [DEBUG] Sending approval request:', requestData)
+      console.log('🔍 [DEBUG] Selected request before approval:', selectedRequest)
+
+      const result = await updateApprovalRequest.mutateAsync({
         requestId: selectedRequest.id,
-        request: {
-          status: 'approved',
-          comments: approvalComments,
-          approver: authUser.id // Use actual user ID from auth context
-        }
+        request: requestData
       })
+
+      console.log('🔍 [DEBUG] Approval result:', result)
+
       setSelectedRequest(null)
       setApprovalComments('')
-      // Refresh the approval requests list
+
+      // Enhanced query invalidation for workflow progression
+      console.log('🔄 [DEBUG] Invalidating queries after approval...')
       queryClient.invalidateQueries({ queryKey: ['approval-requests'] })
-      toast.success('Request approved successfully')
+      queryClient.invalidateQueries({ queryKey: ['approval-request', selectedRequest.id] })
+      queryClient.invalidateQueries({ queryKey: ['workflow-context', selectedRequest.id] })
+      queryClient.invalidateQueries({ queryKey: ['approval-permissions', selectedRequest.id] })
+
+      // Show enhanced success message
+      if (result?.workflow_progressed) {
+        if (result?.final_step) {
+          toast.success('Request approved and workflow completed!')
+        } else if (result?.next_step) {
+          toast.success(`Request approved! Advanced to ${result.next_step_name || 'next step'}`)
+        } else {
+          toast.success('Request approved successfully')
+        }
+      } else {
+        toast.success('Request approved successfully')
+      }
     } catch (error) {
-      toast.error('Failed to approve request')
+      console.error('🔍 [DEBUG] Approval error:', error)
+      toast.error(`Failed to approve request: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
   const handleReject = async () => {
     if (!selectedRequest || !authUser) return
 
+    const approverId = getUserId()
+    if (!approverId) {
+      toast.error('User ID not found. Please log in again.')
+      return
+    }
+
     try {
-      await updateApprovalRequest.mutateAsync({
+      console.log('🔍 [DEBUG] Sending rejection request:', {
+        status: 'rejected',
+        rejection_reason: rejectionReason,
+        approver: approverId
+      })
+
+      const result = await updateApprovalRequest.mutateAsync({
         requestId: selectedRequest.id,
         request: {
           status: 'rejected',
           rejection_reason: rejectionReason,
-          approver: authUser.id // Use actual user ID from auth context
+          approver: approverId
         }
       })
+
+      console.log('🔍 [DEBUG] Rejection result:', result)
+
       setSelectedRequest(null)
       setRejectionReason('')
-      // Refresh the approval requests list
+
+      // Enhanced query invalidation for workflow progression
+      console.log('🔄 [DEBUG] Invalidating queries after rejection...')
       queryClient.invalidateQueries({ queryKey: ['approval-requests'] })
-      toast.success('Request rejected successfully')
+      queryClient.invalidateQueries({ queryKey: ['approval-request', selectedRequest.id] })
+      queryClient.invalidateQueries({ queryKey: ['workflow-context', selectedRequest.id] })
+      queryClient.invalidateQueries({ queryKey: ['approval-permissions', selectedRequest.id] })
+
+      // Show enhanced success message
+      if (result?.workflow_progressed) {
+        toast.success('Request rejected and workflow terminated!')
+      } else {
+        toast.success('Request rejected successfully')
+      }
     } catch (error) {
       toast.error('Failed to reject request')
     }
@@ -239,6 +322,16 @@ export function PromptApprovalWorkflow() {
     }, {} as Record<string, string>)
   }, [prompts, moduleSlotMap])
 
+  // Create prompt-to-module-id lookup map (fallback for backward compatibility)
+  const promptToModuleIdMap = useMemo(() => {
+    return prompts.reduce((acc, prompt) => {
+      if (prompt.module_id) {
+        acc[prompt.id] = prompt.module_id
+      }
+      return acc
+    }, {} as Record<string, string>)
+  }, [prompts])
+
   const userNameMap = useMemo(() => {
     return users.reduce((acc, user) => {
       acc[user.id] = user.name || user.email || `User ${user.id}`
@@ -259,17 +352,23 @@ export function PromptApprovalWorkflow() {
   }, [prompts])
 
   const filteredRequests = useMemo(() => {
-    return approvalRequests.filter((request: any) => {
-      const moduleSlot = promptToModuleMap[request.prompt_id] || request.prompt_id
-      const requestedByName = userNameMap[request.requested_by] || request.requested_by
-      const matchesSearch = moduleSlot?.toLowerCase().includes(requestsSearchQuery.toLowerCase()) ||
-                          requestedByName?.toLowerCase().includes(requestsSearchQuery.toLowerCase())
-      const matchesStatus = filterStatus === 'all' || request.status === filterStatus
-      const matchesType = filterType === 'all' || request.request_type === filterType
+    return approvalRequests
+      .filter((request: any) => {
+        const moduleId = request.prompt_module_id || promptToModuleIdMap[request.prompt_id] || request.prompt_id
+        const requestedByName = userNameMap[request.requested_by] || request.requested_by
+        const matchesSearch = moduleId?.toLowerCase().includes(requestsSearchQuery.toLowerCase()) ||
+                            requestedByName?.toLowerCase().includes(requestsSearchQuery.toLowerCase())
+        const matchesStatus = filterStatus === 'all' || request.status === filterStatus
+        const matchesType = filterType === 'all' || request.request_type === filterType
+        const matchesApprovalTab = approvalTab === 'all' || request.status === approvalTab
 
-      return matchesSearch && matchesStatus && matchesType
-    })
-  }, [approvalRequests, requestsSearchQuery, filterStatus, filterType, moduleSlotMap, userNameMap])
+        return matchesSearch && matchesStatus && matchesType && matchesApprovalTab
+      })
+      .sort((a: any, b: any) => {
+        // Sort by requested_at in descending order (newest first)
+        return new Date(b.requested_at).getTime() - new Date(a.requested_at).getTime()
+      })
+  }, [approvalRequests, requestsSearchQuery, filterStatus, filterType, approvalTab, promptToModuleIdMap, userNameMap])
 
   const filteredFlows = useMemo(() => {
     return enhancedFlows.filter(flow => {
@@ -278,6 +377,16 @@ export function PromptApprovalWorkflow() {
       return matchesSearch
     })
   }, [enhancedFlows, flowsSearchQuery])
+
+  // Calculate counts for tab counters
+  const requestCounts = useMemo(() => {
+    const all = approvalRequests.length
+    const pending = approvalRequests.filter((request: any) => request.status === 'pending').length
+    const approved = approvalRequests.filter((request: any) => request.status === 'approved').length
+    const rejected = approvalRequests.filter((request: any) => request.status === 'rejected').length
+
+    return { all, pending, approved, rejected }
+  }, [approvalRequests])
 
   // Enhanced flow designer handlers
   const handleCreateCustomFlow = () => {
@@ -298,7 +407,7 @@ export function PromptApprovalWorkflow() {
         flow: {
           name: flow.name,
           description: flow.description,
-          status: flow.status as 'active' | 'inactive' | 'draft',
+          status: flow.status as 'active' | 'inactive' | 'draft' | 'archived',
           steps: flow.steps,
         }
       }, {
@@ -352,7 +461,21 @@ export function PromptApprovalWorkflow() {
   }
 
   const handleToggleFlowStatus = (flowId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
+    // Handle different status transitions
+    let newStatus: 'active' | 'inactive' | 'draft' | 'archived'
+
+    if (currentStatus === 'active') {
+      newStatus = 'inactive'
+    } else if (currentStatus === 'inactive') {
+      newStatus = 'active'
+    } else if (currentStatus === 'draft') {
+      newStatus = 'active'
+    } else if (currentStatus === 'archived') {
+      newStatus = 'active'
+    } else {
+      newStatus = 'active' // fallback
+    }
+
     updateFlowStatusMutation.mutate({ flowId, status: newStatus })
   }
 
@@ -422,7 +545,7 @@ export function PromptApprovalWorkflow() {
                 <div className="flex items-center space-x-2">
                   <FileSignature className="h-5 w-5 text-blue-500" />
                   <div>
-                    <p className="text-2xl font-bold">{flowStats?.total_requests || 0}</p>
+                    <p className="text-2xl font-bold">{requestCounts.all}</p>
                     <p className="text-sm text-muted-foreground">Total Requests</p>
                   </div>
                 </div>
@@ -433,7 +556,7 @@ export function PromptApprovalWorkflow() {
                 <div className="flex items-center space-x-2">
                   <Clock className="h-5 w-5 text-yellow-500" />
                   <div>
-                    <p className="text-2xl font-bold">{flowStats?.pending_requests || 0}</p>
+                    <p className="text-2xl font-bold">{requestCounts.pending}</p>
                     <p className="text-sm text-muted-foreground">Pending Review</p>
                   </div>
                 </div>
@@ -444,9 +567,7 @@ export function PromptApprovalWorkflow() {
                 <div className="flex items-center space-x-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />
                   <div>
-                    <p className="text-2xl font-bold">
-                      {approvalRequests.filter((r: any) => r.status === 'approved').length}
-                    </p>
+                    <p className="text-2xl font-bold">{requestCounts.approved}</p>
                     <p className="text-sm text-muted-foreground">Approved</p>
                   </div>
                 </div>
@@ -457,9 +578,7 @@ export function PromptApprovalWorkflow() {
                 <div className="flex items-center space-x-2">
                   <XCircle className="h-5 w-5 text-red-500" />
                   <div>
-                    <p className="text-2xl font-bold">
-                      {approvalRequests.filter((r: any) => r.status === 'rejected').length}
-                    </p>
+                    <p className="text-2xl font-bold">{requestCounts.rejected}</p>
                     <p className="text-sm text-muted-foreground">Rejected</p>
                   </div>
                 </div>
@@ -510,6 +629,12 @@ export function PromptApprovalWorkflow() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <Tabs value={approvalTab} onValueChange={(value) => setApprovalTab(value as 'all' | 'pending' | 'approved')}>
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="all">All Requests ({requestCounts.all})</TabsTrigger>
+                  <TabsTrigger value="pending">Pending ({requestCounts.pending})</TabsTrigger>
+                  <TabsTrigger value="approved">Approved ({requestCounts.approved})</TabsTrigger>
+                </TabsList>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -527,7 +652,9 @@ export function PromptApprovalWorkflow() {
                     <TableRow key={request.id}>
                       <TableCell className="font-medium">
                         <div className="space-y-1">
-                          <div>{promptToModuleMap[request.prompt_id] || request.prompt_id}</div>
+                          <div>
+                            {request.prompt_module_id || request.prompt_id}
+                          </div>
                           {request.prompt_version && (
                             <div className="text-xs text-muted-foreground">
                               Version: {request.prompt_version}
@@ -542,14 +669,26 @@ export function PromptApprovalWorkflow() {
                       </TableCell>
                       <TableCell>{userNameMap[request.requested_by] || request.requested_by}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">
-                          {request.workflow_context?.has_workflow && request.workflow_context?.total_steps && request.workflow_context?.current_step !== undefined
-                            ? `${request.workflow_context.current_step + 1}/${request.workflow_context.total_steps}`
-                            : request.workflow_context?.has_workflow === false
-                              ? 'N/A'
+                        <div className="space-y-1">
+                          <Badge variant="outline">
+                            {request.workflow_context?.has_workflow && request.workflow_context?.total_steps && request.workflow_context?.current_step !== undefined
+                              ? request.workflow_context?.current_step_display || `${request.workflow_context.current_step + 1}/${request.workflow_context.total_steps}`
                               : 'Single Step'
-                          }
-                        </Badge>
+                            }
+                          </Badge>
+
+                          {/* Debug information */}
+                          {process.env.NODE_ENV === 'development' && request.workflow_context?.has_workflow && (
+                            <div className="text-xs text-muted-foreground space-y-1">
+                              <div>Step: {request.workflow_context.current_step_display}</div>
+                              <div>Progress: {request.workflow_context.step_progression?.progress_percentage || 0}%</div>
+                              <div>Remaining: {request.workflow_context.step_progression?.steps_remaining || 0} steps</div>
+                              {request.workflow_context.step_progression?.next_step_name && (
+                                <div className="text-blue-600">Next: {request.workflow_context.step_progression.next_step_name}</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant={
@@ -576,6 +715,7 @@ export function PromptApprovalWorkflow() {
                   ))}
                 </TableBody>
               </Table>
+              </Tabs>
             </CardContent>
           </Card>
         </TabsContent>
@@ -723,26 +863,36 @@ export function PromptApprovalWorkflow() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="default">
-                                custom
+                              <Badge variant={flow.flow_type === 'predefined' ? 'secondary' : 'default'}>
+                                {flow.flow_type || 'custom'}
                               </Badge>
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-wrap gap-1">
                                 {flow.steps.slice(0, 3).map((step, index) => (
-                                  <Badge key={index} variant="outline" className="text-xs">
-                                    {step.name}
+                                  <Badge key={index} variant="outline" className="text-xs" title={`${step.step_type}: ${step.description || step.name}`}>
+                                    {step.step_type === 'manual_approval' ? '👤 ' : '🤖 '}{step.name}
                                   </Badge>
                                 ))}
                                 {flow.steps.length > 3 && (
-                                  <Badge variant="outline" className="text-xs">
+                                  <Badge variant="outline" className="text-xs" title={`${flow.steps.length - 3} additional steps`}>
                                     +{flow.steps.length - 3} more
+                                  </Badge>
+                                )}
+                                {flow.steps.length === 0 && (
+                                  <Badge variant="outline" className="text-xs text-muted-foreground">
+                                    No steps
                                   </Badge>
                                 )}
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant={flow.status === 'active' ? 'default' : 'secondary'}>
+                              <Badge variant={
+                                flow.status === 'active' ? 'default' :
+                                flow.status === 'inactive' ? 'secondary' :
+                                flow.status === 'draft' ? 'outline' :
+                                'destructive'
+                              }>
                                 {flow.status}
                               </Badge>
                             </TableCell>
@@ -761,6 +911,11 @@ export function PromptApprovalWorkflow() {
                                     <>
                                       <Pause className="h-3 w-3 mr-1" />
                                       Deactivate
+                                    </>
+                                  ) : flow.status === 'archived' ? (
+                                    <>
+                                      <Play className="h-3 w-3 mr-1" />
+                                      Restore
                                     </>
                                   ) : (
                                     <>
@@ -869,7 +1024,7 @@ export function PromptApprovalWorkflow() {
                 <div>
                   <Label className="text-sm font-medium">Module</Label>
                   <p className="text-sm text-muted-foreground">
-                    {promptToModuleMap[selectedRequest.prompt_id] || 'Unknown Module'}
+                    {selectedRequest.prompt_module_id || promptToModuleMap[selectedRequest.prompt_id] || 'Unknown Module'}
                   </p>
                 </div>
                 <div>
@@ -1101,10 +1256,48 @@ export function PromptApprovalWorkflow() {
                               {permissions.current_step_name || `Step ${permissions.current_step! + 1}`}
                             </Badge>
                             <span className="text-xs text-muted-foreground">
-                              {permissions.current_step! + 1} of {permissions.workflow_context.total_steps}
+                              {permissions.workflow_context.current_step_display || `${permissions.current_step! + 1} of ${permissions.workflow_context.total_steps}`}
                             </span>
                           </div>
                         </div>
+
+                        {/* Enhanced Progress Information */}
+                        {permissions.workflow_context.step_progression && (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">Progress:</span>
+                              <span className="text-xs text-muted-foreground">
+                                {permissions.workflow_context.step_progression.progress_percentage || 0}%
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div
+                                className="bg-blue-600 h-2 rounded-full"
+                                style={{ width: `${permissions.workflow_context.step_progression.progress_percentage || 0}%` }}
+                              ></div>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {permissions.workflow_context.step_progression.steps_completed || 0} completed, {permissions.workflow_context.step_progression.steps_remaining || 0} remaining
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Debug Information */}
+                        {process.env.NODE_ENV === 'development' && (
+                          <div className="border-t pt-2 mt-2">
+                            <div className="text-xs font-mono text-muted-foreground space-y-1">
+                              <div>Instance ID: {permissions.workflow_context.workflow_instance_id}</div>
+                              <div>Step Index: {permissions.workflow_context.current_step}</div>
+                              <div>Total Steps: {permissions.workflow_context.total_steps}</div>
+                              <div>Is First Step: {permissions.workflow_context.step_progression?.is_first_step ? 'Yes' : 'No'}</div>
+                              <div>Is Last Step: {permissions.workflow_context.step_progression?.is_last_step ? 'Yes' : 'No'}</div>
+                              <div>Has Next Step: {permissions.workflow_context.step_progression?.has_next_step ? 'Yes' : 'No'}</div>
+                              {permissions.workflow_context.step_progression?.next_step_name && (
+                                <div>Next Step: {permissions.workflow_context.step_progression.next_step_name}</div>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Workflow Progress */}
                         {permissions.workflow_context.workflow_name && (

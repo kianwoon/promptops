@@ -247,10 +247,7 @@ export function ModulePrompts({ projectId, moduleId }: ModulePromptsProps) {
           </DialogTrigger>
           <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Create New Prompt</DialogTitle>
-              <DialogDescription>
-                Create a new prompt for this module with AI assistant support.
-              </DialogDescription>
+              <DialogTitle className="sr-only">Create New Prompt</DialogTitle>
             </DialogHeader>
             <PromptEditor
               projectId={projectId}

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -52,6 +53,7 @@ export function Projects() {
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
   const [createForm, setCreateForm] = useState<ProjectCreate>({ name: '', description: '', owner: user.id })
   const [updateForm, setUpdateForm] = useState<ProjectUpdate>({})
 
@@ -129,13 +131,16 @@ export function Projects() {
   }
 
   const handleDeleteProject = async (projectId: string) => {
-    if (window.confirm('Are you sure you want to delete this project? This will also delete all associated modules and prompts.')) {
-      try {
-        await deleteProject.mutateAsync(projectId)
-      } catch (error) {
-        console.error('Failed to delete project:', error)
-      }
+    try {
+      await deleteProject.mutateAsync(projectId)
+      setProjectToDelete(null)
+    } catch (error) {
+      console.error('Failed to delete project:', error)
     }
+  }
+
+  const openDeleteDialog = (project: Project) => {
+    setProjectToDelete(project)
   }
 
   const toggleSortOrder = () => {
@@ -347,7 +352,7 @@ export function Projects() {
                           Edit Project
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => handleDeleteProject(project.id)}
+                          onClick={() => openDeleteDialog(project)}
                           className="text-destructive"
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
@@ -521,6 +526,27 @@ export function Projects() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Project Confirmation Dialog */}
+      <AlertDialog open={!!projectToDelete} onOpenChange={() => setProjectToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{projectToDelete?.name}"? This action cannot be undone and will permanently delete all associated modules and prompts.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => projectToDelete && handleDeleteProject(projectToDelete.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Project
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

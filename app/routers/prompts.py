@@ -296,7 +296,7 @@ async def create_prompt(
                         "requested_by": current_user["user_id"],
                         "requested_by_name": current_user.get("name", "Unknown User")
                     },
-                    steps_json=[],
+                    steps_json=workflow_def.steps_json,
                     tenant_id=tenant_id,
                     due_date=datetime.now(timezone.utc) + timedelta(minutes=workflow_def.timeout_minutes)
                 )

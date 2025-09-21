@@ -297,7 +297,7 @@ export const useModules = (projectId?: string) =>
       const endpoint = projectId ? `/modules?project_id=${projectId}` : '/modules'
       return apiRequest<Module[]>(endpoint)
     },
-    enabled: projectId !== undefined,
+    enabled: true, // Always enabled to fetch all modules
   })
 
 export const useModuleVersions = (moduleId: string) =>
@@ -388,7 +388,7 @@ export const usePrompts = (moduleId?: string) =>
       const endpoint = moduleId ? `/prompts?module_id=${moduleId}&include_inactive=true` : '/prompts?include_inactive=true'
       return apiRequest<Prompt[]>(endpoint)
     },
-    enabled: moduleId !== undefined,
+    enabled: true, // Always enabled to fetch all prompts
   })
 
 export const usePromptVersions = (promptId: string) =>

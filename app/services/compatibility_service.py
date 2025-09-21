@@ -98,7 +98,7 @@ class CompatibilityService:
 
         except Exception as e:
             db.rollback()
-            logger.error("Failed to store compatibility results", error=str(e), prompt_id=prompt_id)
+            logger.error(f"Failed to store compatibility results: {str(e)}", prompt_id=prompt_id)
             raise
 
     def _get_cached_results(
@@ -199,7 +199,7 @@ class CompatibilityService:
                     "notes": notes.get("error", "")
                 }
             except Exception as e:
-                logger.error("Failed to parse compatibility notes", error=str(e), compatibility_id=result.id)
+                logger.error(f"Failed to parse compatibility notes: {str(e)}", compatibility_id=result.id)
 
         return {
             "prompt_id": prompt_id,
@@ -268,7 +268,7 @@ class CompatibilityService:
                 results[f"{prompt_id}@{version}"] = result
 
             except Exception as e:
-                logger.error("Batch compatibility test failed", prompt_id=prompt_id, error=str(e))
+                logger.error(f"Batch compatibility test failed: {str(e)}", prompt_id=prompt_id)
                 errors[f"{prompt_id}@{version or 'latest'}"] = str(e)
 
         # Generate batch summary

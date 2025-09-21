@@ -338,6 +338,7 @@ class ApprovalRequestResponse(BaseModel):
     prompt_is_active: bool
     prompt_created_by: str
     prompt_created_at: datetime
+    prompt_module_id: str
 
     class Config:
         from_attributes = True
@@ -394,6 +395,7 @@ class ApprovalRequestResponseEnhanced(BaseModel):
     prompt_is_active: bool
     prompt_created_by: str
     prompt_created_at: datetime
+    prompt_module_id: str
     # Workflow integration
     workflow_instance_id: Optional[str] = None
     workflow_step: Optional[int] = None
@@ -407,12 +409,6 @@ class ApprovalRequestResponseEnhanced(BaseModel):
 
     class Config:
         from_attributes = True
-
-class ApprovalRequestUpdate(BaseModel):
-    status: Optional[str] = None
-    approver: Optional[str] = None
-    rejection_reason: Optional[str] = None
-    comments: Optional[str] = None
 
 # User schemas
 class UserCreate(BaseModel):

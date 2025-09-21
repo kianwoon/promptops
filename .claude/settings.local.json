@@ -64,7 +64,9 @@
       "Bash(npx rollup:*)",
       "Bash(npx tsx:*)",
       "Bash(PYTHONPATH=/Users/kianwoonwong/Downloads/promptops/promptops-client python promptops-client/promptops/cli.py env:*)",
-      "Bash(dropdb:*)"
+      "Bash(dropdb:*)",
+      "Bash(DEFAULT_GLM_MODEL=GLM-4-TEST python -c \"from app.config import settings; print(''GLM model from env:'', settings.default_glm_model)\")",
+      "Bash(osascript:*)"
     ],
     "deny": [],
     "ask": []

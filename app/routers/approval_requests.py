@@ -101,6 +101,7 @@ async def list_approval_requests(
         Prompt.version.label('prompt_version'),
         Prompt.name.label('prompt_name'),
         Prompt.description.label('prompt_description'),
+        Prompt.module_id.label('prompt_module_id'),
         Prompt.is_active.label('prompt_is_active'),
         Prompt.created_by.label('prompt_created_by'),
         Prompt.created_at.label('prompt_created_at')
@@ -120,9 +121,10 @@ async def list_approval_requests(
         prompt_version = request[1]
         prompt_name = request[2]
         prompt_description = request[3]
-        prompt_is_active = request[4]
-        prompt_created_by = request[5]
-        prompt_created_at = request[6]
+        prompt_module_id = request[4]
+        prompt_is_active = request[5]
+        prompt_created_by = request[6]
+        prompt_created_at = request[7]
 
         # Build workflow context - always create one for consistency
         workflow_context = WorkflowContext(
@@ -152,12 +154,16 @@ async def list_approval_requests(
                     ).first()
 
                     if workflow_def and workflow_def.steps_json:
+                        steps_json = workflow_def.steps_json or []
+                        total_steps = len(steps_json)
+                        current_step = approval_request.workflow_step or 0
+
                         current_step_info = None
-                        if approval_request.workflow_step is not None and approval_request.workflow_step < len(workflow_def.steps_json):
-                            step_config = workflow_def.steps_json[approval_request.workflow_step]
+                        if current_step is not None and current_step < len(steps_json):
+                            step_config = steps_json[current_step]
                             current_step_info = WorkflowStepInfo(
-                                step_number=approval_request.workflow_step + 1,
-                                name=step_config.get("name", f"Step {approval_request.workflow_step + 1}"),
+                                step_number=current_step + 1,
+                                name=step_config.get("name", f"Step {current_step + 1}"),
                                 description=step_config.get("description", ""),
                                 step_type=step_config.get("step_type", "manual_approval"),
                                 required_roles=step_config.get("approval_roles", []),
@@ -167,13 +173,25 @@ async def list_approval_requests(
                                 status=workflow_instance.status.value
                             )
 
-                        # Update workflow_context with workflow details
+                        # Enhanced step progression information
+                        step_progression = {
+                            "is_first_step": current_step == 0,
+                            "is_last_step": current_step >= total_steps - 1,
+                            "has_next_step": current_step + 1 < total_steps,
+                            "has_previous_step": current_step > 0,
+                            "steps_completed": current_step,
+                            "steps_remaining": total_steps - current_step - 1,
+                            "progress_percentage": round(((current_step) / total_steps) * 100, 1) if total_steps > 0 else 0,
+                            "current_step_display": f"{current_step + 1}/{total_steps}" if total_steps > 0 else "Single Step"
+                        }
+
+                        # Update workflow_context with enhanced workflow details
                         workflow_context.has_workflow = True
                         workflow_context.workflow_instance_id = workflow_instance.id
                         workflow_context.workflow_name = workflow_def.name
                         workflow_context.workflow_description = workflow_def.description
-                        workflow_context.current_step = approval_request.workflow_step
-                        workflow_context.total_steps = len(workflow_def.steps_json) if workflow_def.steps_json else 1
+                        workflow_context.current_step = current_step
+                        workflow_context.total_steps = total_steps
                         workflow_context.workflow_status = workflow_instance.status.value
                         workflow_context.current_step_info = current_step_info
                         workflow_context.evidence_required = approval_request.evidence_required or False
@@ -181,6 +199,10 @@ async def list_approval_requests(
                         workflow_context.initiated_by = workflow_instance.initiated_by
                         workflow_context.created_at = workflow_instance.created_at
                         workflow_context.due_date = workflow_instance.due_date
+
+                        # Add step progression info to the context
+                        if hasattr(workflow_context, 'step_progression'):
+                            workflow_context.step_progression = step_progression
             except Exception as e:
                 logger.warning(f"Error building workflow context for request {approval_request.id}: {e}")
                 # Keep the default workflow_context (has_workflow=False)
@@ -201,6 +223,7 @@ async def list_approval_requests(
             prompt_is_active=prompt_is_active,
             prompt_created_by=prompt_created_by,
             prompt_created_at=prompt_created_at,
+            prompt_module_id=prompt_module_id,
             workflow_instance_id=approval_request.workflow_instance_id,
             workflow_step=approval_request.workflow_step,
             evidence_required=approval_request.evidence_required or False,
@@ -235,6 +258,7 @@ async def get_approval_request(
         Prompt.version.label('prompt_version'),
         Prompt.name.label('prompt_name'),
         Prompt.description.label('prompt_description'),
+        Prompt.module_id.label('prompt_module_id'),
         Prompt.is_active.label('prompt_is_active'),
         Prompt.created_by.label('prompt_created_by'),
         Prompt.created_at.label('prompt_created_at')
@@ -249,9 +273,10 @@ async def get_approval_request(
     prompt_version = request[1]
     prompt_name = request[2]
     prompt_description = request[3]
-    prompt_is_active = request[4]
-    prompt_created_by = request[5]
-    prompt_created_at = request[6]
+    prompt_module_id = request[4]
+    prompt_is_active = request[5]
+    prompt_created_by = request[6]
+    prompt_created_at = request[7]
 
     return ApprovalRequestResponse(
         id=approval_request.id,
@@ -268,7 +293,8 @@ async def get_approval_request(
         prompt_description=prompt_description,
         prompt_is_active=prompt_is_active,
         prompt_created_by=prompt_created_by,
-        prompt_created_at=prompt_created_at
+        prompt_created_at=prompt_created_at,
+        prompt_module_id=prompt_module_id
     )
 
 @router.get("/{request_id}/permissions")
@@ -424,11 +450,9 @@ async def get_approval_request_permissions(
 async def create_approval_request(
     request: Request,
     request_data: ApprovalRequestCreate = Body(...),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new approval request with optional workflow integration"""
-    # Get current user
-    current_user = await get_current_user(request)
 
     # Check if user has permission to initiate workflows
     try:
@@ -513,6 +537,9 @@ async def create_approval_request(
         actor=current_user["user_id"],
         action="create_approval_request",
         subject=request_id,
+        subject_type="approval_request",
+        subject_id=request_id,
+        tenant_id=current_user["tenant"],
         before_json=None,
         after_json={"prompt_id": request_data.prompt_id, "status": request_data.status}
     )
@@ -535,7 +562,8 @@ async def create_approval_request(
         prompt_description=prompt.description,
         prompt_is_active=prompt.is_active,
         prompt_created_by=prompt.created_by,
-        prompt_created_at=prompt.created_at
+        prompt_created_at=prompt.created_at,
+        prompt_module_id=prompt.module_id
     )
 
 @router.put("/{request_id}", response_model=ApprovalRequestResponse)
@@ -543,11 +571,9 @@ async def update_approval_request(
     request_id: str,
     request: Request,
     request_update: ApprovalRequestUpdate = Body(...),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update an approval request with workflow-aware role-based access control"""
-    # Get current user
-    current_user = await get_current_user(request)
 
     # Use workflow-aware permission checking
     try:
@@ -582,12 +608,22 @@ async def update_approval_request(
                 detail="You do not have permission to reject requests"
             )
 
+    # Store original values for audit log
+    before_data = {
+        "status": request_obj.status,
+        "approver": request_obj.approver,
+        "prompt_id": request_obj.prompt_id
+    }
+
+    # Update fields
+    update_data = request_update.model_dump(exclude_unset=True)
+
     # Use workflow service for approval/rejection actions if workflow is present
-    approval_service = WorkflowApprovalService(db)
     workflow_result = None
 
     if request_obj.workflow_instance_id and new_status in ["approved", "rejected"]:
         try:
+            approval_service = WorkflowApprovalService(db)
             action = "approve" if new_status == "approved" else "reject"
             workflow_result = approval_service.process_approval_action(
                 approval_request_id=request_id,
@@ -599,19 +635,32 @@ async def update_approval_request(
 
             logger.info(f"Workflow approval action processed: {workflow_result}")
 
+            # If workflow service handled the approval, sync the status back to the request
+            if workflow_result.get("workflow_progressed"):
+                if action == "approve":
+                    request_obj.status = "approved"
+                    request_obj.approver = approval_user["user_id"]
+                    request_obj.approved_at = datetime.now(timezone.utc)
+                    if "comments" in update_data:
+                        request_obj.comments = update_data["comments"]
+                elif action == "reject":
+                    request_obj.status = "rejected"
+                    request_obj.approver = approval_user["user_id"]
+                    request_obj.approved_at = datetime.now(timezone.utc)
+                    if "comments" in update_data:
+                        request_obj.comments = update_data["comments"]
+                # Workflow service already committed, so we don't need to update fields manually
+                logger.info(f"Workflow service handled the approval, syncing status: {request_obj.status}")
+
         except Exception as e:
             logger.error(f"Workflow approval processing failed: {str(e)}")
-            # Continue with basic update if workflow processing fails
-
-    # Store original values for audit log
-    before_data = {
-        "status": request_obj.status,
-        "approver": request_obj.approver,
-        "prompt_id": request_obj.prompt_id
-    }
-
-    # Update fields
-    update_data = request_update.model_dump(exclude_unset=True)
+            # Fall back to manual update if workflow processing fails
+            for field, value in update_data.items():
+                setattr(request_obj, field, value)
+    else:
+        # Manual field update for non-workflow cases
+        for field, value in update_data.items():
+            setattr(request_obj, field, value)
 
     # Validate status if provided
     if "status" in update_data:
@@ -623,13 +672,29 @@ async def update_approval_request(
         if update_data["status"] == "approved" and request_obj.status != "approved":
             update_data["approved_at"] = datetime.now(timezone.utc)
 
-    for field, value in update_data.items():
-        setattr(request_obj, field, value)
-
     # Auto-activate prompt when approval is granted
     if update_data.get("status") == "approved" and request_obj.status != "approved":
         prompt = db.query(Prompt).filter(Prompt.id == request_obj.prompt_id).first()
         if prompt:
+            # Validate that prompt has all required fields before activation
+            missing_fields = []
+            if not prompt.target_models:
+                missing_fields.append("target_models")
+            if not prompt.model_specific_prompts:
+                missing_fields.append("model_specific_prompts")
+            if not prompt.mas_intent:
+                missing_fields.append("mas_intent")
+            if not prompt.mas_fairness_notes:
+                missing_fields.append("mas_fairness_notes")
+            if not prompt.mas_risk_level:
+                missing_fields.append("mas_risk_level")
+
+            if missing_fields:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot approve request: Prompt is missing required fields for activation: {', '.join(missing_fields)}. Please ensure the prompt has all required fields populated before approving."
+                )
+
             # Store original values for audit log
             before_activation = {
                 "is_active": prompt.is_active,
@@ -637,34 +702,46 @@ async def update_approval_request(
                 "activated_by": prompt.activated_by
             }
 
-            # Activate the prompt
-            prompt.is_active = True
-            prompt.activated_at = datetime.now(timezone.utc)
-            prompt.activated_by = request_obj.approver or approval_user["user_id"]
-            prompt.activation_reason = "Auto-activated upon approval"
-            prompt.updated_at = datetime.now(timezone.utc)
+            try:
+                # Activate the prompt
+                prompt.is_active = True
+                prompt.activated_at = datetime.now(timezone.utc)
+                prompt.activated_by = request_obj.approver or approval_user["user_id"]
+                prompt.activation_reason = "Auto-activated upon approval"
+                prompt.updated_at = datetime.now(timezone.utc)
 
-            # Log the auto-activation
-            activation_audit_log = AuditLog(
-                id=str(uuid.uuid4()),
-                actor=request.approver or approval_user["user_id"],
-                action="auto_activate_prompt",
-                subject=f"{prompt.id}@{prompt.version}",
-                subject_type="prompt",
-                subject_id=prompt.id,
-                before_json=before_activation,
-                after_json={
-                    "is_active": True,
-                    "activated_at": prompt.activated_at.isoformat(),
-                    "activated_by": prompt.activated_by,
-                    "activation_reason": "Auto-activated upon approval"
-                },
-                result="success"
-            )
-            db.add(activation_audit_log)
+                # Log the auto-activation
+                activation_audit_log = AuditLog(
+                    id=str(uuid.uuid4()),
+                    actor=request_obj.approver or approval_user["user_id"],
+                    action="auto_activate_prompt",
+                    subject=f"{prompt.id}@{prompt.version}",
+                    subject_type="prompt",
+                    subject_id=prompt.id,
+                    tenant_id=approval_user.get("tenant", current_user.get("tenant")),
+                    before_json=before_activation,
+                    after_json={
+                        "is_active": True,
+                        "activated_at": prompt.activated_at.isoformat(),
+                        "activated_by": prompt.activated_by,
+                        "activation_reason": "Auto-activated upon approval"
+                    },
+                    result="success"
+                )
+                db.add(activation_audit_log)
 
-    db.commit()
-    db.refresh(request_obj)
+            except Exception as e:
+                logger.error(f"Failed to auto-activate prompt {prompt.id}: {str(e)}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to activate prompt: {str(e)}"
+                )
+
+    # Single commit point for all changes
+    if not request_obj.workflow_instance_id or not workflow_result:
+        # Only commit if workflow service didn't already commit
+        db.commit()
+        db.refresh(request_obj)
 
     # Log the update
     audit_log = AuditLog(
@@ -672,6 +749,9 @@ async def update_approval_request(
         actor=approval_user["user_id"],
         action="update_approval_request",
         subject=request_id,
+        subject_type="approval_request",
+        subject_id=request_id,
+        tenant_id=approval_user.get("tenant", current_user.get("tenant")),
         before_json=before_data,
         after_json={"status": request_obj.status, "approver": request_obj.approver, "prompt_id": request_obj.prompt_id}
     )
@@ -697,7 +777,8 @@ async def update_approval_request(
         prompt_description=prompt.description if prompt else None,
         prompt_is_active=prompt.is_active if prompt else False,
         prompt_created_by=prompt.created_by if prompt else "",
-        prompt_created_at=prompt.created_at if prompt else datetime.now(timezone.utc)
+        prompt_created_at=prompt.created_at if prompt else datetime.now(timezone.utc),
+        prompt_module_id=prompt.module_id if prompt else ""
     )
 
 @router.post("/{request_id}/approve")
@@ -705,10 +786,9 @@ async def approve_request_with_workflow(
     request_id: str,
     request: Request,
     approval_data: dict = Body(...),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Approve an approval request with workflow progression"""
-    current_user = await get_current_user(request)
 
     # Use workflow-aware permission checking
     approval_user = await check_workflow_approval_permission(request_id, current_user, db)
@@ -749,10 +829,9 @@ async def reject_request_with_workflow(
     request_id: str,
     request: Request,
     rejection_data: dict = Body(...),
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Reject an approval request with workflow progression"""
-    current_user = await get_current_user(request)
 
     # Use workflow-aware permission checking
     approval_user = await check_workflow_approval_permission(request_id, current_user, db)
@@ -846,6 +925,9 @@ async def delete_approval_request(
         actor=current_user["user_id"],
         action="delete_approval_request",
         subject=request_id,
+        subject_type="approval_request",
+        subject_id=request_id,
+        tenant_id=current_user["tenant"],
         before_json=request_data,
         after_json=None
     )
@@ -904,7 +986,8 @@ async def get_approval_request_comparison(
             prompt_description=request_data[3],
             prompt_is_active=request_data[4],
             prompt_created_by=request_data[5],
-            prompt_created_at=request_data[6]
+            prompt_created_at=request_data[6],
+            prompt_module_id=request_data[7]
         )
 
         # Create new prompt version response (the one being requested for approval)

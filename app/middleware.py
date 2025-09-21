@@ -53,7 +53,7 @@ class ClientAPIMiddleware(BaseHTTPMiddleware):
                 )
 
         except Exception as e:
-            logger.error("Failed to log client API usage", error=str(e))
+            logger.error(f"Failed to log client API usage: {str(e)}")
 
     async def extract_usage_data(self, request: Request, response: Response, processing_time_ms: int) -> Dict[str, Any]:
         """Extract usage data from request and response"""
@@ -270,7 +270,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
             # For now, we'll just log it. You can extend this to save to the AuditLog model.
 
         except Exception as e:
-            logger.error("Failed to create audit log entry", error=str(e))
+            logger.error(f"Failed to create audit log entry: {str(e)}")
 
     def map_request_to_audit_action(self, request: Request, request_info: Dict[str, Any]) -> tuple[str, str, str]:
         """Map HTTP request to audit action and subject"""

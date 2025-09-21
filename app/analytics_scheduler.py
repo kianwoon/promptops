@@ -98,7 +98,7 @@ class AnalyticsScheduler:
                 logger.info("Hourly aggregation completed", hour=process_hour)
 
             except Exception as e:
-                logger.error("Hourly aggregation failed", error=str(e))
+                logger.error(f"Hourly aggregation failed: {str(e)}")
                 # Continue running even if one aggregation fails
 
             # Wait before next attempt
@@ -135,7 +135,7 @@ class AnalyticsScheduler:
                 logger.info("Daily aggregation completed", date=process_date)
 
             except Exception as e:
-                logger.error("Daily aggregation failed", error=str(e))
+                logger.error(f"Daily aggregation failed: {str(e)}")
                 # Continue running even if one aggregation fails
 
             # Wait before next attempt
@@ -170,7 +170,7 @@ class AnalyticsScheduler:
                         await self._send_alert_notifications(triggered_alerts)
 
             except Exception as e:
-                logger.error("Alert monitoring failed", error=str(e))
+                logger.error(f"Alert monitoring failed: {str(e)}")
                 # Continue running even if one check fails
 
     async def _cache_cleanup_loop(self):
@@ -197,7 +197,7 @@ class AnalyticsScheduler:
                         logger.info("Cache cleanup completed", entries_deleted=expired_entries)
 
             except Exception as e:
-                logger.error("Cache cleanup failed", error=str(e))
+                logger.error(f"Cache cleanup failed: {str(e)}")
                 # Continue running even if one cleanup fails
 
     async def _data_retention_loop(self):
@@ -227,7 +227,7 @@ class AnalyticsScheduler:
                 logger.info("Data retention cleanup completed")
 
             except Exception as e:
-                logger.error("Data retention cleanup failed", error=str(e))
+                logger.error(f"Data retention cleanup failed: {str(e)}")
                 # Continue running even if one cleanup fails
 
     async def _enforce_retention_policies(self, db: Session):

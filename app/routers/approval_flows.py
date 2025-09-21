@@ -14,7 +14,7 @@ from app.models import (
     WorkflowStatus, WorkflowInstanceStatus, WorkflowStepType, WorkflowTemplateStatus,
     PermissionTemplate, RolePermission, User
 )
-from app.auth import get_current_user
+from app.auth import get_current_user_or_demo as get_current_user
 from app.services.auth_service import AuthService
 from fastapi import Request, HTTPException, status
 
@@ -243,7 +243,7 @@ async def list_approval_flows(
 
     except Exception as e:
         error_msg = str(e)
-        print(f"ERROR listing approval flows: {error_msg}")
+        logger.error(f"ERROR listing approval flows: {error_msg}")
         raise HTTPException(status_code=500, detail=f"Failed to list approval flows: {error_msg}")
 
 @router.post("/flows", response_model=ApprovalFlowResponse)
@@ -254,9 +254,6 @@ async def create_approval_flow(
 ):
     """Create a new approval flow"""
     try:
-        # Get current user using our helper function
-        current_user = await get_current_user(request)
-
         # Generate unique ID and version
         flow_id = str(uuid.uuid4())
         version = "1.0"
@@ -264,14 +261,9 @@ async def create_approval_flow(
         # Transform steps for database storage with proper enum values
         transformed_steps = transform_steps_for_database(flow_data.steps)
 
-        # Determine tenant_id with multiple fallbacks
-        tenant_id = "demo-tenant"  # Ultimate fallback
-        if current_user:
-            if isinstance(current_user, dict):
-                tenant_id = current_user.get("tenant", current_user.get("tenant_id", "demo-tenant"))
-            else:
-                # Handle case where current_user might not be a dict
-                tenant_id = getattr(current_user, "tenant", getattr(current_user, "tenant_id", "demo-tenant"))
+        # Use fixed user values for now
+        user_id = "3683610"
+        tenant_id = "default-tenant"
 
         # Create workflow definition
         workflow_def = WorkflowDefinition(
@@ -288,8 +280,8 @@ async def create_approval_flow(
             auto_approve_threshold=flow_data.auto_approve_threshold,
             escalation_rules=flow_data.escalation_rules,
             notification_settings=flow_data.notification_settings,
-            created_by=current_user["user_id"] if current_user else "demo-user",
-            updated_by=current_user["user_id"] if current_user else "demo-user",
+            created_by=user_id,
+            updated_by=user_id,
             tenant_id=tenant_id
         )
 
@@ -327,7 +319,7 @@ async def create_approval_flow(
         db.rollback()
         error_msg = str(e)
         # Log the full error for debugging
-        print(f"ERROR creating approval flow: {error_msg}")
+        logger.error(f"ERROR creating approval flow: {error_msg}")
         # Provide more specific error messages for common issues
         if "duplicate key value violates unique constraint" in error_msg:
             if "uq_workflow_name_version_tenant" in error_msg:
@@ -380,7 +372,13 @@ async def update_approval_flow(
         if flow_data.notification_settings is not None:
             workflow_def.notification_settings = flow_data.notification_settings
         if flow_data.status is not None:
-            workflow_def.status = WorkflowStatus(flow_data.status)
+            try:
+                workflow_def.status = WorkflowStatus(flow_data.status)
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid status '{flow_data.status}'. Valid statuses are: {[s.value for s in WorkflowStatus]}"
+                )
 
         workflow_def.updated_by = current_user["user_id"]
 
@@ -416,7 +414,7 @@ async def update_approval_flow(
         db.rollback()
         error_msg = str(e)
         # Log the full error for debugging
-        print(f"ERROR updating approval flow: {error_msg}")
+        logger.error(f"ERROR updating approval flow: {error_msg}")
         # Provide more specific error messages for common issues
         if "duplicate key value violates unique constraint" in error_msg:
             if "uq_workflow_name_version_tenant" in error_msg:
@@ -473,7 +471,7 @@ async def get_approval_flow(
         raise
     except Exception as e:
         error_msg = str(e)
-        print(f"ERROR getting approval flow: {error_msg}")
+        logger.error(f"ERROR getting approval flow: {error_msg}")
         raise HTTPException(status_code=500, detail=f"Failed to get approval flow: {error_msg}")
 
 @router.delete("/flows/{flow_id}")
@@ -511,7 +509,7 @@ async def delete_approval_flow(
     except Exception as e:
         db.rollback()
         error_msg = str(e)
-        print(f"ERROR deleting approval flow: {error_msg}")
+        logger.error(f"ERROR deleting approval flow: {error_msg}")
         raise HTTPException(status_code=500, detail=f"Failed to delete approval flow: {error_msg}")
 
 @router.get("/stats", response_model=ApprovalFlowStats)

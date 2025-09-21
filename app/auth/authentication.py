@@ -12,6 +12,10 @@ def validate_jwt_structure(token: str) -> bool:
         logger.error("JWT validation failed: Empty or invalid token type")
         return False
 
+    # Remove any 'Bearer ' prefix if present
+    if token.startswith('Bearer '):
+        token = token[7:]
+
     # Check for proper JWT format (header.payload.signature)
     if token.count('.') != 2:
         logger.error("JWT validation failed: Invalid token format - expected 3 segments")
@@ -22,7 +26,39 @@ def validate_jwt_structure(token: str) -> bool:
         logger.error("JWT validation failed: Invalid token length")
         return False
 
-    return True
+    # Try to decode the header and payload to check they're valid base64
+    try:
+        import base64
+        import json
+
+        # Split token into parts
+        header_b64, payload_b64, signature = token.split('.')
+
+        # Add padding if needed and decode header
+        header_b64 += '=' * (-len(header_b64) % 4)
+        header_data = base64.b64decode(header_b64).decode('utf-8')
+        header = json.loads(header_data)
+
+        # Add padding if needed and decode payload
+        payload_b64 += '=' * (-len(payload_b64) % 4)
+        payload_data = base64.b64decode(payload_b64).decode('utf-8')
+        payload = json.loads(payload_data)
+
+        # Basic validation of JWT structure
+        if not isinstance(header, dict) or not isinstance(payload, dict):
+            logger.error("JWT validation failed: Invalid header or payload structure")
+            return False
+
+        # Check for required claims
+        if 'exp' not in payload:
+            logger.error("JWT validation failed: Missing expiration claim")
+            return False
+
+        return True
+
+    except (ValueError, TypeError, json.JSONDecodeError, base64.binascii.Error) as e:
+        logger.error(f"JWT validation failed: Invalid base64 encoding - {str(e)}")
+        return False
 
 security = HTTPBearer()
 
@@ -66,10 +102,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             raise credentials_exception
 
     except JWTError as e:
-        logger.error("JWT decode error", error=str(e))
+        logger.error(f"JWT decode error: {str(e)}")
         raise credentials_exception
     except Exception as e:
-        logger.error("Unexpected JWT validation error", error=str(e))
+        logger.error(f"Unexpected JWT validation error: {str(e)}")
         raise credentials_exception
 
     return {

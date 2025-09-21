@@ -375,9 +375,9 @@ export function ApiKeysPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {projectsLoading ? (
-                      <SelectItem value="">Loading projects...</SelectItem>
+                      <div className="py-2 px-3 text-sm text-muted-foreground">Loading projects...</div>
                     ) : projects.length === 0 ? (
-                      <SelectItem value="">No projects found</SelectItem>
+                      <div className="py-2 px-3 text-sm text-muted-foreground">No projects found</div>
                     ) : (
                       projects.map((project) => (
                         <SelectItem key={project.id} value={project.id}>
@@ -431,7 +431,7 @@ export function ApiKeysPage() {
               <div className="space-y-2">
                 <Label htmlFor="scopes">Permissions (Scopes)</Label>
                 <Select
-                  value={formData.allowed_scopes[0]}
+                  value={formData.allowed_scopes[0] || 'read'}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, allowed_scopes: [value] }))}
                 >
                   <SelectTrigger>

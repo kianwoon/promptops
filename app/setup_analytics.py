@@ -38,7 +38,7 @@ class AnalyticsSetup:
             logger.info("Analytics database tables created successfully")
 
         except Exception as e:
-            logger.error("Failed to create analytics tables", error=str(e))
+            logger.error(f"Failed to create analytics tables: {str(e)}")
             raise
 
     def setup_default_alerts(self):
@@ -114,7 +114,7 @@ class AnalyticsSetup:
             logger.info("Default alerts setup completed")
 
         except Exception as e:
-            logger.error("Failed to setup default alerts", error=str(e))
+            logger.error(f"Failed to setup default alerts: {str(e)}")
             raise
 
     def setup_retention_policies(self):
@@ -182,7 +182,7 @@ class AnalyticsSetup:
             logger.info("Data retention policies setup completed")
 
         except Exception as e:
-            logger.error("Failed to setup retention policies", error=str(e))
+            logger.error(f"Failed to setup retention policies: {str(e)}")
             raise
 
     def setup_database_indexes(self):
@@ -214,7 +214,7 @@ class AnalyticsSetup:
             logger.info("Database indexes setup completed")
 
         except Exception as e:
-            logger.error("Failed to setup database indexes", error=str(e))
+            logger.error(f"Failed to setup database indexes: {str(e)}")
             raise
 
     def backfill_historical_data(self):
@@ -273,14 +273,14 @@ class AnalyticsSetup:
                         logger.info("Backfill progress", progress_percent=round(progress, 2))
 
                 except Exception as e:
-                    logger.error("Failed to backfill date", date=current_date, error=str(e))
+                    logger.error(f"Failed to backfill date: {str(e)}", date=current_date)
                     # Continue with next date
                     current_date += timedelta(days=1)
 
             logger.info("Historical data backfill completed")
 
         except Exception as e:
-            logger.error("Failed to backfill historical data", error=str(e))
+            logger.error(f"Failed to backfill historical data: {str(e)}")
             raise
 
     def setup_analytics_cache(self):
@@ -300,7 +300,7 @@ class AnalyticsSetup:
             logger.info("Analytics cache setup completed", config=cache_config)
 
         except Exception as e:
-            logger.error("Failed to setup analytics cache", error=str(e))
+            logger.error(f"Failed to setup analytics cache: {str(e)}")
             raise
 
     async def start_background_services(self):
@@ -321,7 +321,7 @@ class AnalyticsSetup:
             logger.info("Background analytics services started successfully")
 
         except Exception as e:
-            logger.error("Failed to start background services", error=str(e))
+            logger.error(f"Failed to start background services: {str(e)}")
             raise
 
     def run_setup(self, backfill_data: bool = False):
@@ -363,7 +363,7 @@ class AnalyticsSetup:
             }
 
         except Exception as e:
-            logger.error("Analytics setup failed", error=str(e))
+            logger.error(f"Analytics setup failed: {str(e)}")
             raise
 
     def verify_setup(self):
@@ -386,7 +386,7 @@ class AnalyticsSetup:
             return verification_results
 
         except Exception as e:
-            logger.error("Setup verification failed", error=str(e))
+            logger.error(f"Setup verification failed: {str(e)}")
             raise
 
     def _verify_tables(self):
@@ -470,7 +470,7 @@ async def main():
         return result, verification
 
     except Exception as e:
-        logger.error("Analytics setup failed", error=str(e))
+        logger.error(f"Analytics setup failed: {str(e)}")
         raise
 
 if __name__ == "__main__":

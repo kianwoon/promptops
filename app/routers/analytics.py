@@ -60,7 +60,7 @@ async def get_usage_overview(
         )
         return usage_stats
     except Exception as e:
-        logger.error("Failed to get usage overview", error=str(e))
+        logger.error(f"Failed to get usage overview: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve usage statistics"
@@ -256,7 +256,7 @@ async def get_performance_metrics(
         metrics = analytics_service.get_performance_metrics(start_date, end_date, period_enum)
         return {"metrics": metrics}
     except Exception as e:
-        logger.error("Failed to get performance metrics", error=str(e))
+        logger.error(f"Failed to get performance metrics: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve performance metrics"
@@ -446,7 +446,7 @@ async def create_analytics_export(
             "message": "Analytics export job created successfully"
         }
     except Exception as e:
-        logger.error("Failed to create analytics export", error=str(e))
+        logger.error(f"Failed to create analytics export: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create analytics export"
@@ -580,7 +580,7 @@ async def get_dashboard_summary(
             "last_updated": now.isoformat()
         }
     except Exception as e:
-        logger.error("Failed to get dashboard summary", error=str(e))
+        logger.error(f"Failed to get dashboard summary: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve dashboard summary"

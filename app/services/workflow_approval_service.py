@@ -108,7 +108,7 @@ class WorkflowApprovalService:
 
         except Exception as e:
             self.db.rollback()
-            logger.error("Error creating workflow approval request", error=str(e))
+            logger.error(f"Error creating workflow approval request: {str(e)}")
             raise
 
     def check_workflow_approval_permissions(
@@ -205,7 +205,7 @@ class WorkflowApprovalService:
             }
 
         except Exception as e:
-            logger.error("Error checking workflow approval permissions", error=str(e))
+            logger.error(f"Error checking workflow approval permissions: {str(e)}")
             raise
 
     def process_approval_action(
@@ -252,7 +252,7 @@ class WorkflowApprovalService:
 
         except Exception as e:
             self.db.rollback()
-            logger.error("Error processing approval action", error=str(e))
+            logger.error(f"Error processing approval action: {str(e)}")
             raise
 
     def _find_workflow_definition(
@@ -383,11 +383,18 @@ class WorkflowApprovalService:
 
     def _advance_workflow(self, request: ApprovalRequest, user_id: str) -> Dict[str, Any]:
         """Advance the workflow to the next step"""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        logger.info(f"🔄 [WORKFLOW_ADVANCEMENT] Starting step advancement for request {request.id}")
+        logger.info(f"🔄 [WORKFLOW_ADVANCEMENT] Current workflow_step: {request.workflow_step}")
+
         workflow_instance = self.db.query(WorkflowInstance).filter(
             WorkflowInstance.id == request.workflow_instance_id
         ).first()
 
         if not workflow_instance:
+            logger.error(f"❌ [WORKFLOW_ADVANCEMENT] Workflow instance not found for request {request.id}")
             raise ValueError("Workflow instance not found")
 
         workflow_def = self.db.query(WorkflowDefinition).filter(
@@ -395,17 +402,46 @@ class WorkflowApprovalService:
         ).first()
 
         if not workflow_def:
+            logger.error(f"❌ [WORKFLOW_ADVANCEMENT] Workflow definition not found for instance {workflow_instance.id}")
             raise ValueError("Workflow definition not found")
 
         current_step = request.workflow_step
         next_step = current_step + 1
 
+        logger.info(f"🔄 [WORKFLOW_ADVANCEMENT] Step advancement details:")
+        logger.info(f"  - Request ID: {request.id}")
+        logger.info(f"  - Workflow Instance ID: {workflow_instance.id}")
+        logger.info(f"  - Workflow Definition ID: {workflow_def.id}")
+        logger.info(f"  - Current Step: {current_step}")
+        logger.info(f"  - Next Step: {next_step}")
+        logger.info(f"  - Total Steps in Definition: {len(workflow_def.steps_json) if workflow_def.steps_json else 0}")
+        logger.info(f"  - Workflow Instance Current Step: {workflow_instance.current_step}")
+
+        if workflow_def.steps_json:
+            logger.info(f"  - Steps JSON: {workflow_def.steps_json}")
+        else:
+            logger.warning(f"  - ⚠️  Steps JSON is empty or None!")
+
         # Check if this is the last step
+        logger.info(f"🔍 [STEP_DECISION] Checking if next_step ({next_step}) is beyond final step")
+        logger.info(f"  - Total steps: {len(workflow_def.steps_json)}")
+        logger.info(f"  - Final step index: {len(workflow_def.steps_json) - 1}")
+        logger.info(f"  - Is beyond final step: {next_step >= len(workflow_def.steps_json)}")
+
         if next_step >= len(workflow_def.steps_json):
             # Complete the workflow
+            logger.info(f"🎯 [WORKFLOW_COMPLETION] Completing workflow for request {request.id}")
+            logger.info(f"  - Next step ({next_step}) >= total steps - 1 ({len(workflow_def.steps_json) - 1})")
+            logger.info(f"  - Setting workflow instance status to COMPLETED")
+            logger.info(f"  - This was the final step in the workflow")
+
             workflow_instance.status = WorkflowInstanceStatus.COMPLETED
             workflow_instance.current_step = len(workflow_def.steps_json) - 1
             workflow_instance.completed_at = datetime.now(timezone.utc)
+
+            logger.info(f"✅ [WORKFLOW_COMPLETION] Workflow completed successfully")
+            logger.info(f"  - Final step: {workflow_instance.current_step}")
+            logger.info(f"  - Completed at: {workflow_instance.completed_at}")
 
             return {
                 "status": "completed",
@@ -415,22 +451,35 @@ class WorkflowApprovalService:
             }
         else:
             # Move to next step
+            logger.info(f"➡️ [WORKFLOW_ADVANCEMENT] Advancing to next step for request {request.id}")
+            logger.info(f"  - Current step: {current_step} → Next step: {next_step}")
+            logger.info(f"  - Setting workflow_instance.current_step to {next_step}")
+
             workflow_instance.current_step = next_step
             workflow_instance.updated_at = datetime.now(timezone.utc)
 
             # Update approval request for next step
+            logger.info(f"  - Updating approval request workflow_step to {next_step}")
+            logger.info(f"  - Resetting approval request status to 'pending'")
+
             request.workflow_step = next_step
             request.status = "pending"  # Reset for next step approval
 
             # Get next step configuration
             next_step_config = self._get_workflow_step(workflow_def, next_step)
+            next_step_name = next_step_config.get('name', f'Step {next_step}')
+
+            logger.info(f"✅ [WORKFLOW_ADVANCEMENT] Successfully advanced to next step")
+            logger.info(f"  - Next step name: {next_step_name}")
+            logger.info(f"  - Next step order: {next_step_config.get('order', 'N/A')}")
+            logger.info(f"  - Next step type: {next_step_config.get('step_type', 'N/A')}")
 
             return {
                 "status": "advanced",
-                "message": f"Request approved, advanced to step {next_step}: {next_step_config.get('name', f'Step {next_step}')}",
+                "message": f"Request approved, advanced to step {next_step}: {next_step_name}",
                 "workflow_progressed": True,
                 "next_step": next_step,
-                "next_step_name": next_step_config.get("name", f"Step {next_step}")
+                "next_step_name": next_step_name
             }
 
     def _reject_workflow(self, request: ApprovalRequest, user_id: str) -> Dict[str, Any]:
@@ -457,6 +506,8 @@ class WorkflowApprovalService:
             action=f"approval_{action}",
             subject=request.id,
             subject_type="approval_request",
+            subject_id=request.id,
+            tenant_id=request.tenant_id,
             before_json={"status": "pending"},
             after_json={
                 "status": request.status,

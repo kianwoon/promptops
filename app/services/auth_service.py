@@ -94,10 +94,10 @@ class GoogleOAuthService:
                 return response.json()
                 
         except httpx.HTTPError as e:
-            logger.error("HTTP error exchanging code for tokens", error=str(e))
+            logger.error(f"HTTP error exchanging code for tokens: {str(e)}")
             raise Exception("Failed to exchange authorization code")
         except Exception as e:
-            logger.error("Error exchanging code for tokens", error=str(e))
+            logger.error(f"Error exchanging code for tokens: {str(e)}")
             raise Exception("Failed to exchange authorization code")
     
     async def get_user_info(self, access_token: str) -> Dict[str, Any]:
@@ -112,10 +112,10 @@ class GoogleOAuthService:
                 return response.json()
                 
         except httpx.HTTPError as e:
-            logger.error("HTTP error getting user info", error=str(e))
+            logger.error(f"HTTP error getting user info: {str(e)}")
             raise Exception("Failed to get user information")
         except Exception as e:
-            logger.error("Error getting user info", error=str(e))
+            logger.error(f"Error getting user info: {str(e)}")
             raise Exception("Failed to get user information")
     
     async def verify_id_token(self, id_token: str) -> Dict[str, Any]:
@@ -147,7 +147,7 @@ class GoogleOAuthService:
             return payload
             
         except Exception as e:
-            logger.error("ID token verification failed", error=str(e))
+            logger.error(f"ID token verification failed: {str(e)}")
             raise Exception(f"Invalid ID token: {str(e)}")
 
 class GitHubOAuthService:
@@ -178,10 +178,10 @@ class GitHubOAuthService:
                 return response.json()
 
         except httpx.HTTPError as e:
-            logger.error("HTTP error exchanging code for tokens", error=str(e))
+            logger.error(f"HTTP error exchanging code for tokens: {str(e)}")
             raise Exception("Failed to exchange authorization code")
         except Exception as e:
-            logger.error("Error exchanging code for tokens", error=str(e))
+            logger.error(f"Error exchanging code for tokens: {str(e)}")
             raise Exception("Failed to exchange authorization code")
 
     async def get_user_info(self, access_token: str) -> Dict[str, Any]:
@@ -199,10 +199,10 @@ class GitHubOAuthService:
                 return response.json()
 
         except httpx.HTTPError as e:
-            logger.error("HTTP error getting user info", error=str(e))
+            logger.error(f"HTTP error getting user info: {str(e)}")
             raise Exception("Failed to get user information")
         except Exception as e:
-            logger.error("Error getting user info", error=str(e))
+            logger.error(f"Error getting user info: {str(e)}")
             raise Exception("Failed to get user information")
 
 class AuthService:
@@ -244,6 +244,10 @@ class AuthService:
                 logger.error("JWT verification failed: Empty or invalid token type", token_type=token_type)
                 raise Exception("Invalid token")
 
+            # Remove any 'Bearer ' prefix if present
+            if token.startswith('Bearer '):
+                token = token[7:]
+
             # Check for proper JWT format (header.payload.signature)
             if token.count('.') != 2:
                 logger.error("JWT verification failed: Invalid token format - expected 3 segments", token_type=token_type)
@@ -252,6 +256,38 @@ class AuthService:
             # Check for reasonable token length
             if len(token) < 30 or len(token) > 5000:
                 logger.error("JWT verification failed: Invalid token length", token_type=token_type, token_length=len(token))
+                raise Exception("Invalid token")
+
+            # Try to decode the header and payload to check they're valid base64
+            try:
+                import base64
+                import json
+
+                # Split token into parts
+                header_b64, payload_b64, signature = token.split('.')
+
+                # Add padding if needed and decode header
+                header_b64 += '=' * (-len(header_b64) % 4)
+                header_data = base64.b64decode(header_b64).decode('utf-8')
+                header = json.loads(header_data)
+
+                # Add padding if needed and decode payload
+                payload_b64 += '=' * (-len(payload_b64) % 4)
+                payload_data = base64.b64decode(payload_b64).decode('utf-8')
+                payload = json.loads(payload_data)
+
+                # Basic validation of JWT structure
+                if not isinstance(header, dict) or not isinstance(payload, dict):
+                    logger.error("JWT verification failed: Invalid header or payload structure", token_type=token_type)
+                    raise Exception("Invalid token")
+
+                # Check for required claims
+                if 'exp' not in payload:
+                    logger.error("JWT verification failed: Missing expiration claim", token_type=token_type)
+                    raise Exception("Invalid token")
+
+            except (ValueError, TypeError, json.JSONDecodeError, base64.binascii.Error) as e:
+                logger.error(f"JWT verification failed: Invalid base64 encoding - {str(e)}", token_type=token_type)
                 raise Exception("Invalid token")
 
             payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
@@ -263,10 +299,10 @@ class AuthService:
             return payload
 
         except JWTError as e:
-            logger.error("JWT verification error", error=str(e), token_type=token_type)
+            logger.error(f"JWT verification error: {str(e)}", token_type=token_type)
             raise Exception("Invalid token")
         except Exception as e:
-            logger.error("Unexpected JWT verification error", error=str(e), token_type=token_type)
+            logger.error(f"Unexpected JWT verification error: {str(e)}", token_type=token_type)
             raise Exception("Invalid token")
     
     async def authenticate_with_google(self, code: str, db: Session) -> Dict[str, Any]:
@@ -317,7 +353,7 @@ class AuthService:
             }
             
         except Exception as e:
-            logger.error("Google authentication failed", error=str(e))
+            logger.error(f"Google authentication failed: {str(e)}")
             raise Exception(f"Google authentication failed: {str(e)}")
 
     async def authenticate_with_github(self, code: str, db: Session) -> Dict[str, Any]:
@@ -365,7 +401,7 @@ class AuthService:
             }
 
         except Exception as e:
-            logger.error("GitHub authentication failed", error=str(e))
+            logger.error(f"GitHub authentication failed: {str(e)}")
             raise Exception(f"GitHub authentication failed: {str(e)}")
     
     async def get_or_create_google_user(self, user_info: Dict[str, Any], id_token_payload: Dict[str, Any], db: Session) -> User:
@@ -415,7 +451,7 @@ class AuthService:
             return user
             
         except Exception as e:
-            logger.error("Error creating/updating Google user", error=str(e))
+            logger.error(f"Error creating/updating Google user: {str(e)}")
             db.rollback()
             raise Exception("Failed to create or update user")
 
@@ -475,7 +511,7 @@ class AuthService:
             return user
 
         except Exception as e:
-            logger.error("Error creating/updating GitHub user", error=str(e))
+            logger.error(f"Error creating/updating GitHub user: {str(e)}")
             db.rollback()
             raise Exception("Failed to create or update user")
 
@@ -506,7 +542,7 @@ class AuthService:
             return access_token
             
         except Exception as e:
-            logger.error("Token refresh failed", error=str(e))
+            logger.error(f"Token refresh failed: {str(e)}")
             raise Exception("Failed to refresh token")
     
     async def get_current_user(self, token: str, db: Session) -> Optional[User]:
@@ -535,5 +571,5 @@ class AuthService:
                 return None
 
         except Exception as e:
-            logger.error("Error getting current user", error=str(e))
+            logger.error(f"Error getting current user: {str(e)}")
             return None

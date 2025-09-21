@@ -37,7 +37,7 @@ async def get_current_user(
         user = await auth_service.get_current_user(credentials.credentials, db)
         return user
     except Exception as e:
-        logger.error("Authentication failed", error=str(e))
+        logger.error(f"Authentication failed: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
 # Provider Endpoints
@@ -180,5 +180,5 @@ async def health_check(db: Session = Depends(get_db)):
         health = service.health_check()
         return health
     except Exception as e:
-        logger.error("Health check failed", error=str(e))
+        logger.error(f"Health check failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Health check failed")

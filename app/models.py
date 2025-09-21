@@ -171,13 +171,13 @@ class Module(Base):
 
     # Foreign key
     __table_args__ = (
-        ForeignKeyConstraint(['project_id'], ['projects.id']),
+        ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='CASCADE'),
         UniqueConstraint('id', name='uq_modules_id'),
     )
 
     # Relationships
     project = relationship("Project", back_populates="modules")
-    prompts = relationship("Prompt", back_populates="module")
+    prompts = relationship("Prompt", back_populates="module", cascade="all, delete-orphan")
 
 class Variant(Base):
     __tablename__ = "variants"
@@ -249,7 +249,7 @@ class Project(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    modules = relationship("Module", back_populates="project")
+    modules = relationship("Module", back_populates="project", cascade="all, delete-orphan")
     owner_user = relationship("User", foreign_keys=[owner], back_populates="owned_projects")
 
     @hybrid_property
@@ -310,7 +310,7 @@ class Prompt(Base):
 
     # Foreign key
     __table_args__ = (
-        ForeignKeyConstraint(['module_id'], ['modules.id']),
+        ForeignKeyConstraint(['module_id'], ['modules.id'], ondelete='CASCADE'),
         UniqueConstraint('id', name='uq_prompts_id'),
     )
 

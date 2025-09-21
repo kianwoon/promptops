@@ -77,7 +77,7 @@ async def check_rate_limit(api_key_id: str, rate_limits: Dict[str, int], db: Ses
 
         return True
     except Exception as e:
-        logger.error("Rate limit check failed", error=str(e))
+        logger.error(f"Rate limit check failed: {str(e)}")
         # Fail open - allow request but log error
         return True
 
@@ -290,4 +290,4 @@ async def log_usage(
         db_session.close()
 
     except Exception as e:
-        logger.error("Failed to log usage", error=str(e))
+        logger.error(f"Failed to log usage: {str(e)}")

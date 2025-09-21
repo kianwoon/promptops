@@ -14,6 +14,7 @@ export interface ApprovalFlow {
   description: string
   version: string
   status: string
+  flow_type: 'predefined' | 'custom'
   category: string
   trigger_condition: Record<string, any>
   steps: ApprovalFlowStep[]
@@ -271,7 +272,7 @@ export interface ApprovalFlowCreate {
 export interface ApprovalFlowUpdate {
   name?: string
   description?: string
-  status?: 'active' | 'inactive' | 'draft'
+  status?: 'active' | 'inactive' | 'draft' | 'archived'
   steps?: ApprovalFlowStep[]
   conditions?: FlowCondition[]
   metadata?: Partial<FlowMetadata>
@@ -356,7 +357,7 @@ export interface ExecutionAction {
 export interface ApprovalFlowFilter {
   search?: string
   flow_type?: 'predefined' | 'custom'
-  status?: 'active' | 'inactive' | 'draft'
+  status?: 'active' | 'inactive' | 'draft' | 'archived'
   created_by?: string
   category?: string
   tags?: string[]

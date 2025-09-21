@@ -81,7 +81,7 @@ async def get_current_user(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error getting current user", error=str(e))
+        logger.error(f"Error getting current user: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"
@@ -110,7 +110,7 @@ async def google_oauth_callback(
         return RedirectResponse(url=f"{frontend_url}{redirect_params}")
         
     except Exception as e:
-        logger.error("Google OAuth callback failed", error=str(e))
+        logger.error(f"Google OAuth callback failed: {str(e)}")
         # Redirect to frontend with error
         error_url = f"http://localhost:3000/auth/error?error={str(e)}"
         return RedirectResponse(url=error_url)
@@ -137,7 +137,7 @@ async def github_oauth_callback(
         return RedirectResponse(url=f"{frontend_url}{redirect_params}")
 
     except Exception as e:
-        logger.error("GitHub OAuth callback failed", error=str(e))
+        logger.error(f"GitHub OAuth callback failed: {str(e)}")
         # Redirect to frontend with error
         error_url = f"http://localhost:3000/auth/error?error={str(e)}"
         return RedirectResponse(url=error_url)
@@ -155,7 +155,7 @@ async def refresh_access_token(
         return RefreshTokenResponse(access_token=access_token)
         
     except Exception as e:
-        logger.error("Token refresh failed", error=str(e))
+        logger.error(f"Token refresh failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e)

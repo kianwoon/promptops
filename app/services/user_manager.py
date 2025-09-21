@@ -42,7 +42,7 @@ class UserManager:
             return user
 
         except Exception as e:
-            logger.error("Failed to update user role", user_id=user_id, error=str(e))
+            logger.error(f"Failed to update user role: {str(e)}", user_id=user_id)
             self.db.rollback()
             return None
 
@@ -70,7 +70,7 @@ class UserManager:
             return user
 
         except Exception as e:
-            logger.error("Failed to update user role by email", email=email, error=str(e))
+            logger.error(f"Failed to update user role by email: {str(e)}", email=email)
             self.db.rollback()
             return None
 
@@ -120,7 +120,7 @@ class UserManager:
             }
 
         except Exception as e:
-            logger.error("Failed to fix user roles", error=str(e))
+            logger.error(f"Failed to fix user roles: {str(e)}")
             self.db.rollback()
             return {
                 'total_users': 0,
@@ -153,7 +153,7 @@ class UserManager:
                 }
             }
         except Exception as e:
-            logger.error("Failed to get user stats", error=str(e))
+            logger.error(f"Failed to get user stats: {str(e)}")
             return {
                 'total_users': 0,
                 'admin_count': 0,

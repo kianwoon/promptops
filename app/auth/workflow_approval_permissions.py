@@ -144,15 +144,48 @@ async def get_workflow_approval_context(
                 ).first()
 
                 if workflow_def:
+                    # Enhanced step information for progression
+                    steps_json = workflow_def.steps_json or []
+                    total_steps = len(steps_json)
+                    current_step = request.workflow_step or 0
+
                     current_step_config = {}
-                    if request.workflow_step is not None and request.workflow_step < len(workflow_def.steps_json):
-                        current_step_config = workflow_def.steps_json[request.workflow_step]
+                    next_step_config = {}
+                    previous_step_config = {}
+
+                    # Get current step configuration
+                    if current_step is not None and current_step < total_steps:
+                        current_step_config = steps_json[current_step]
+
+                    # Get next step configuration for progression preview
+                    if current_step is not None and current_step + 1 < total_steps:
+                        next_step_config = steps_json[current_step + 1]
+
+                    # Get previous step configuration for context
+                    if current_step is not None and current_step - 1 >= 0:
+                        previous_step_config = steps_json[current_step - 1]
+
+                    # Calculate step progression information
+                    step_progression = {
+                        "is_first_step": current_step == 0,
+                        "is_last_step": current_step >= total_steps - 1,
+                        "has_next_step": current_step + 1 < total_steps,
+                        "has_previous_step": current_step > 0,
+                        "steps_completed": current_step,  # Number of completed steps
+                        "steps_remaining": total_steps - current_step - 1,  # Steps remaining after current
+                        "progress_percentage": round(((current_step) / total_steps) * 100, 1) if total_steps > 0 else 0
+                    }
 
                     workflow_context.update({
                         "workflow_name": workflow_def.name,
                         "workflow_description": workflow_def.description,
-                        "total_steps": len(workflow_def.steps_json),
+                        "total_steps": total_steps,
+                        "current_step_number": current_step,
+                        "current_step_display": f"{current_step + 1}/{total_steps}" if total_steps > 0 else "Single Step",
                         "current_step_config": current_step_config,
+                        "next_step_config": next_step_config,
+                        "previous_step_config": previous_step_config,
+                        "step_progression": step_progression,
                         "workflow_status": workflow_instance.status.value,
                         "initiated_by": workflow_instance.initiated_by,
                         "created_at": workflow_instance.created_at,
@@ -182,7 +215,7 @@ async def get_workflow_approval_context(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error getting workflow approval context", error=str(e))
+        logger.error(f"Error getting workflow approval context: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error retrieving workflow context"
