@@ -104,10 +104,10 @@ export function AnomalyDetectionPanel() {
 
       const [rulesData, resultsData] = await Promise.all([
         makeAuthenticatedRequest<AnomalyDetectionRule[]>(
-          `/v1/governance/security/anomaly-rules?tenant_id=${encodeURIComponent(tenantId)}`
+          `/api/v1/governance/security/anomaly-rules?tenant_id=${encodeURIComponent(tenantId)}`
         ),
         makeAuthenticatedRequest<AnomalyDetectionResult[]>(
-          `/v1/governance/security/anomaly-results?tenant_id=${encodeURIComponent(tenantId)}&limit=50`
+          `/api/v1/governance/security/anomaly-results?tenant_id=${encodeURIComponent(tenantId)}&limit=50`
         )
       ])
 

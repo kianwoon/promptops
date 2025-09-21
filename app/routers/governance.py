@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Body, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Body, Request, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from typing import List, Optional, Dict, Any
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 
 from app.database import get_db
@@ -2019,7 +2019,11 @@ async def list_audit_logs(
     current_user: dict = Depends(get_current_user)
 ):
     """List audit logs with comprehensive filtering"""
-    query = db.query(AuditLog).filter(AuditLog.tenant_id == current_user["tenant"])
+    # Admin users can see all audit logs, others are restricted to their tenant
+    if current_user.get("role") == "ADMIN":
+        query = db.query(AuditLog)
+    else:
+        query = db.query(AuditLog).filter(AuditLog.tenant_id == current_user["tenant"])
 
     if actor:
         query = query.filter(AuditLog.actor == actor)
@@ -2064,7 +2068,11 @@ async def get_audit_log_stats(
     current_user: dict = Depends(get_current_user)
 ):
     """Get audit log statistics and analytics"""
-    query = db.query(AuditLog).filter(AuditLog.tenant_id == current_user["tenant"])
+    # Admin users can see all audit logs, others are restricted to their tenant
+    if current_user.get("role") == "ADMIN":
+        query = db.query(AuditLog)
+    else:
+        query = db.query(AuditLog).filter(AuditLog.tenant_id == current_user["tenant"])
 
     if start_date:
         query = query.filter(AuditLog.ts >= start_date)
@@ -2158,10 +2166,14 @@ async def get_audit_log(
     current_user: dict = Depends(get_current_user)
 ):
     """Get a specific audit log entry"""
-    log = db.query(AuditLog).filter(
-        AuditLog.id == log_id,
-        AuditLog.tenant_id == current_user["tenant"]
-    ).first()
+    # Admin users can see all audit logs, others are restricted to their tenant
+    if current_user.get("role") == "ADMIN":
+        log = db.query(AuditLog).filter(AuditLog.id == log_id).first()
+    else:
+        log = db.query(AuditLog).filter(
+            AuditLog.id == log_id,
+            AuditLog.tenant_id == current_user["tenant"]
+        ).first()
 
     if not log:
         raise HTTPException(status_code=404, detail="Audit log not found")
@@ -2180,16 +2192,22 @@ async def export_audit_logs(
     export_id = str(uuid.uuid4())
 
     # Start background export task
+    # For admin users, pass empty tenant_id to export all logs
+    tenant_id_for_export = None if current_user.get("role") == "ADMIN" else current_user["tenant"]
     background_tasks.add_task(
         export_audit_logs_background,
         export_id,
         export_request,
-        current_user["tenant"],
+        tenant_id_for_export,
         db
     )
 
     # Get total record count
-    query = db.query(AuditLog).filter(AuditLog.tenant_id == current_user["tenant"])
+    # Admin users can see all audit logs, others are restricted to their tenant
+    if current_user.get("role") == "ADMIN":
+        query = db.query(AuditLog)
+    else:
+        query = db.query(AuditLog).filter(AuditLog.tenant_id == current_user["tenant"])
 
     # Apply filters
     filters = export_request.filters
@@ -2230,7 +2248,7 @@ async def export_audit_logs(
         export_id=export_id,
         status="processing",
         total_records=total_records,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc)
     )
 
 @router.get("/audit-logs/export/{export_id}", response_model=AuditLogExportResponse)
@@ -2256,7 +2274,7 @@ async def get_export_status(
                 status=export_info.get("status", "completed"),
                 total_records=export_info.get("total_records", 0),
                 estimated_size=export_info.get("estimated_size", 0),
-                created_at=export_info.get("created_at", datetime.utcnow())
+                created_at=export_info.get("created_at", datetime.now(timezone.utc))
             )
         else:
             raise HTTPException(status_code=404, detail="Export job not found")
@@ -2268,7 +2286,7 @@ async def get_export_status(
             status="processing",
             total_records=0,
             estimated_size=0,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
 
 # ============ ENHANCED WORKFLOW ENDPOINTS ============
@@ -2812,9 +2830,14 @@ async def export_audit_logs_background(
         import io
 
         # Query actual audit logs with filters
-        query = db.query(AuditLog).filter(AuditLog.tenant_id == tenant_id)
+        # For admin users (empty tenant_id), no tenant filter is applied
+        if tenant_id:
+            query = db.query(AuditLog).filter(AuditLog.tenant_id == tenant_id)
+        else:
+            query = db.query(AuditLog)
 
         # Apply filters if they exist
+        filters = export_request.filters
         if filters:
             if filters.start_date:
                 query = query.filter(AuditLog.ts >= filters.start_date)
@@ -2889,7 +2912,7 @@ async def export_audit_logs_background(
                 "tenant_id": tenant_id,
                 "total_records": len(audit_logs),
                 "format": filters.format,
-                "created_at": datetime.utcnow().isoformat()
+                "created_at": datetime.now(timezone.utc).isoformat()
             }
         )
 
@@ -2909,6 +2932,7 @@ async def export_audit_logs_background(
 @router.get("/security/dashboard/metrics", response_model=SecurityDashboardMetrics)
 async def get_security_dashboard_metrics(
     tenant_id: str,
+    time_range: Optional[str] = Query(None, description="Time range: 1h, 24h, 7d, 30d"),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     db: Session = Depends(get_db),
@@ -2918,26 +2942,55 @@ async def get_security_dashboard_metrics(
     try:
         # Calculate date range
         if not end_date:
-            end_date = datetime.utcnow()
+            end_date = datetime.now(timezone.utc)
+
+        # Handle time_range parameter
+        if time_range and not start_date:
+            if time_range == "1h":
+                start_date = end_date - timedelta(hours=1)
+            elif time_range == "24h":
+                start_date = end_date - timedelta(hours=24)
+            elif time_range == "7d":
+                start_date = end_date - timedelta(days=7)
+            elif time_range == "30d":
+                start_date = end_date - timedelta(days=30)
+
+        # Default to 24 hours if no time_range or start_date specified
         if not start_date:
-            start_date = end_date - timedelta(days=30)
+            start_date = end_date - timedelta(days=1)
+
+        # Admin users can see all security data, others are restricted to their tenant
+        if current_user.get("role") == "ADMIN":
+            event_filter = True
+            alert_filter = True
+            incident_filter = True
+            threat_filter = True
+            user_filter = True
+            metrics_filter = True
+        else:
+            event_filter = SecurityEvent.tenant_id == current_user["tenant"]
+            alert_filter = SecurityAlert.tenant_id == current_user["tenant"]
+            incident_filter = SecurityIncident.tenant_id == current_user["tenant"]
+            threat_filter = ThreatIndicator.tenant_id == current_user["tenant"]
+            user_filter = User.organization == current_user["tenant"]
+            metrics_filter = SecurityMetrics.tenant_id == current_user["tenant"]
 
         # Get security events counts
         total_events = db.query(SecurityEvent).filter(
-            SecurityEvent.tenant_id == tenant_id,
+            event_filter,
             SecurityEvent.created_at >= start_date,
             SecurityEvent.created_at <= end_date
         ).count()
 
         critical_events = db.query(SecurityEvent).filter(
-            SecurityEvent.tenant_id == tenant_id,
+            event_filter,
             SecurityEvent.created_at >= start_date,
             SecurityEvent.created_at <= end_date,
             SecurityEvent.severity == SecuritySeverity.CRITICAL
         ).count()
 
         high_severity_events = db.query(SecurityEvent).filter(
-            SecurityEvent.tenant_id == tenant_id,
+            event_filter,
             SecurityEvent.created_at >= start_date,
             SecurityEvent.created_at <= end_date,
             SecurityEvent.severity == SecuritySeverity.HIGH
@@ -2945,52 +2998,52 @@ async def get_security_dashboard_metrics(
 
         # Get security alerts counts
         active_alerts = db.query(SecurityAlert).filter(
-            SecurityAlert.tenant_id == tenant_id,
+            alert_filter,
             SecurityAlert.status.in_([SecurityAlertStatus.OPEN, SecurityAlertStatus.INVESTIGATING])
         ).count()
 
         critical_alerts = db.query(SecurityAlert).filter(
-            SecurityAlert.tenant_id == tenant_id,
+            alert_filter,
             SecurityAlert.status.in_([SecurityAlertStatus.OPEN, SecurityAlertStatus.INVESTIGATING]),
             SecurityAlert.severity == SecuritySeverity.CRITICAL
         ).count()
 
         # Get security incidents counts
         active_incidents = db.query(SecurityIncident).filter(
-            SecurityIncident.tenant_id == tenant_id,
+            incident_filter,
             SecurityIncident.status.in_([SecurityIncidentStatus.DETECTED, SecurityIncidentStatus.INVESTIGATING])
         ).count()
 
         critical_incidents = db.query(SecurityIncident).filter(
-            SecurityIncident.tenant_id == tenant_id,
+            incident_filter,
             SecurityIncident.status.in_([SecurityIncidentStatus.DETECTED, SecurityIncidentStatus.INVESTIGATING]),
             SecurityIncident.severity == SecurityIncidentSeverity.CRITICAL
         ).count()
 
         # Get threat intelligence metrics
         threat_indicators = db.query(ThreatIndicator).filter(
-            ThreatIndicator.tenant_id == tenant_id,
+            threat_filter,
             ThreatIndicator.is_active == True
         ).count()
 
         blocked_threats = db.query(ThreatIndicator).filter(
-            ThreatIndicator.tenant_id == tenant_id,
+            threat_filter,
             ThreatIndicator.auto_blocked == True
         ).count()
 
         # Get user activity metrics
         unique_active_users = db.query(User.id).filter(
-            User.organization == tenant_id
+            user_filter
         ).count()
 
         # Get anomaly score (latest)
         latest_metrics = db.query(SecurityMetrics).filter(
-            SecurityMetrics.tenant_id == tenant_id
+            metrics_filter
         ).order_by(SecurityMetrics.metric_date.desc()).first()
 
         # Calculate mean time to resolve
         resolved_incidents = db.query(SecurityIncident).filter(
-            SecurityIncident.tenant_id == tenant_id,
+            incident_filter,
             SecurityIncident.status == SecurityIncidentStatus.RESOLVED,
             SecurityIncident.resolved_at.isnot(None)
         ).all()
@@ -3042,7 +3095,11 @@ async def get_security_events(
 ):
     """Get security events with filtering"""
     try:
-        query = db.query(SecurityEvent).filter(SecurityEvent.tenant_id == tenant_id)
+        # Admin users can see all security events, others are restricted to their tenant
+        if current_user.get("role") == "ADMIN":
+            query = db.query(SecurityEvent)
+        else:
+            query = db.query(SecurityEvent).filter(SecurityEvent.tenant_id == current_user["tenant"])
 
         # Apply filters
         if start_date:
@@ -3131,7 +3188,11 @@ async def get_security_alerts(
 ):
     """Get security alerts with filtering"""
     try:
-        query = db.query(SecurityAlert).filter(SecurityAlert.tenant_id == tenant_id)
+        # Admin users can see all security alerts, others are restricted to their tenant
+        if current_user.get("role") == "ADMIN":
+            query = db.query(SecurityAlert)
+        else:
+            query = db.query(SecurityAlert).filter(SecurityAlert.tenant_id == current_user["tenant"])
 
         # Apply filters
         if start_date:
@@ -3182,7 +3243,7 @@ async def update_security_alert(
 
         # Set resolved timestamp if status is being set to resolved
         if alert_update.status == "resolved":
-            alert.resolved_at = datetime.utcnow()
+            alert.resolved_at = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(alert)
@@ -3252,7 +3313,11 @@ async def get_security_incidents(
 ):
     """Get security incidents with filtering"""
     try:
-        query = db.query(SecurityIncident).filter(SecurityIncident.tenant_id == tenant_id)
+        # Admin users can see all security incidents, others are restricted to their tenant
+        if current_user.get("role") == "ADMIN":
+            query = db.query(SecurityIncident)
+        else:
+            query = db.query(SecurityIncident).filter(SecurityIncident.tenant_id == current_user["tenant"])
 
         # Apply filters
         if start_date:
@@ -3388,7 +3453,7 @@ async def detect_anomaly(
             rule.true_positives += 1
         else:
             rule.false_positives += 1
-        rule.last_detection_at = datetime.utcnow()
+        rule.last_detection_at = datetime.now(timezone.utc)
 
         db.commit()
 
@@ -3415,9 +3480,13 @@ async def get_anomaly_detection_rules(
 ):
     """Get anomaly detection rules for tenant"""
     try:
-        rules = db.query(AnomalyDetectionRule).filter(
-            AnomalyDetectionRule.tenant_id == tenant_id
-        ).all()
+        # Admin users can see all anomaly detection rules, others are restricted to their tenant
+        if current_user.get("role") == "ADMIN":
+            rules = db.query(AnomalyDetectionRule).all()
+        else:
+            rules = db.query(AnomalyDetectionRule).filter(
+                AnomalyDetectionRule.tenant_id == current_user["tenant"]
+            ).all()
 
         return [AnomalyDetectionRuleResponse.model_validate(rule) for rule in rules]
 
@@ -3433,9 +3502,15 @@ async def get_anomaly_detection_results(
 ):
     """Get recent anomaly detection results for tenant"""
     try:
-        results = db.query(AnomalyDetectionResult).filter(
-            AnomalyDetectionResult.tenant_id == tenant_id
-        ).order_by(AnomalyDetectionResult.created_at.desc()).limit(limit).all()
+        # Admin users can see all anomaly detection results, others are restricted to their tenant
+        if current_user.get("role") == "ADMIN":
+            results = db.query(AnomalyDetectionResult).order_by(
+                AnomalyDetectionResult.created_at.desc()
+            ).limit(limit).all()
+        else:
+            results = db.query(AnomalyDetectionResult).filter(
+                AnomalyDetectionResult.tenant_id == current_user["tenant"]
+            ).order_by(AnomalyDetectionResult.created_at.desc()).limit(limit).all()
 
         return [AnomalyDetectionResponse.model_validate(result) for result in results]
 
@@ -3461,7 +3536,7 @@ async def check_threat_intelligence(
             query = query.filter(ThreatIndicator.is_active == True)
 
         # Check expiration
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         query = query.filter(
             or_(
                 ThreatIndicator.expires_at.is_(None),
@@ -3540,9 +3615,13 @@ async def get_threat_intelligence_feeds(
 ):
     """Get threat intelligence feeds for tenant"""
     try:
-        feeds = db.query(ThreatIntelligenceFeed).filter(
-            ThreatIntelligenceFeed.tenant_id == tenant_id
-        ).all()
+        # Admin users can see all threat intelligence feeds, others are restricted to their tenant
+        if current_user.get("role") == "ADMIN":
+            feeds = db.query(ThreatIntelligenceFeed).all()
+        else:
+            feeds = db.query(ThreatIntelligenceFeed).filter(
+                ThreatIntelligenceFeed.tenant_id == current_user["tenant"]
+            ).all()
 
         return [ThreatIntelligenceFeedResponse.model_validate(feed) for feed in feeds]
 
@@ -3633,3 +3712,4 @@ async def create_security_metrics(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create security metrics: {str(e)}")
+

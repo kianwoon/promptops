@@ -136,9 +136,12 @@ export function PromptApprovalWorkflow() {
 
     const { data: modules = [] } = useModules()
   const { data: prompts = [] } = usePrompts()
-  const { user: authUser } = useAuth()
+  const { user: authUser, hasPermission } = useAuth()
 
-  
+  // Check if user has permission to design approval flows
+  const canDesignApprovalFlows = hasPermission('approval-flows:design')
+
+
   // State for search and filters
   const [flowsSearchQuery, setFlowsSearchQuery] = useState('')
   const [requestsSearchQuery, setRequestsSearchQuery] = useState('')
@@ -524,9 +527,11 @@ export function PromptApprovalWorkflow() {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'requests' | 'designer')}>
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className={`grid w-full ${canDesignApprovalFlows ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <TabsTrigger value="requests">Approval Requests</TabsTrigger>
-          <TabsTrigger value="designer">Approval Flow Designer</TabsTrigger>
+          {canDesignApprovalFlows && (
+            <TabsTrigger value="designer">Approval Flow Designer</TabsTrigger>
+          )}
         </TabsList>
 
   
@@ -722,7 +727,9 @@ export function PromptApprovalWorkflow() {
 
         {/* Approval Flow Designer Tab */}
         <TabsContent value="designer" className="space-y-6">
-          {showFlowDesigner ? (
+          {canDesignApprovalFlows ? (
+            <>
+              {showFlowDesigner ? (
             <FlowDesigner
               initialFlow={editingFlow || undefined}
               initialTemplate={selectedTemplate || undefined}
@@ -959,7 +966,23 @@ export function PromptApprovalWorkflow() {
               </Card>
             </div>
           )
-          }
+              }
+            </>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Access Denied</CardTitle>
+                <CardDescription>
+                  You don't have permission to access the Approval Flow Designer.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  This feature requires admin privileges. Please contact your system administrator if you need access to design approval flows.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 

@@ -65,8 +65,9 @@
 - API responses must be checked for errors
 - Graceful degradation required
 
-## 🔄 COMMUNICATION PROTOCOL
+## 🔄 MANDATORY COMMUNICATION PROTOCOL
 - Use say() for all major announcements
+- Use say() for all tasks that YOU working on
 - Report progress clearly with metrics
 - Explain what was done and why
 - Confirm system status after changes
@@ -87,6 +88,7 @@
 # 🔴 MUST YOU DO
 ## Before each task
 - Use say command to share your findings and respond
+- Use say command to inform the agent about the task they've been assigned
 - Read the ./claude.md file before start anything
 - Validate task requirements and scope
 

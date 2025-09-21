@@ -120,7 +120,7 @@ async def get_current_user_dev():
 app.include_router(analytics.router, prefix="/v1/analytics", tags=["analytics"])
 
 # Include Governance endpoints
-app.include_router(governance.router, prefix="/v1/governance", tags=["governance"])
+app.include_router(governance.router, prefix="/api/v1/governance", tags=["governance"])
 
 # Include Model Testing endpoints
 app.include_router(model_testing.router, prefix="/v1/model-testing", tags=["model-testing"])

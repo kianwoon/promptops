@@ -66,7 +66,10 @@
       "Bash(PYTHONPATH=/Users/kianwoonwong/Downloads/promptops/promptops-client python promptops-client/promptops/cli.py env:*)",
       "Bash(dropdb:*)",
       "Bash(DEFAULT_GLM_MODEL=GLM-4-TEST python -c \"from app.config import settings; print(''GLM model from env:'', settings.default_glm_model)\")",
-      "Bash(osascript:*)"
+      "Bash(osascript:*)",
+      "Bash(open:*)",
+      "WebFetch(domain:localhost)",
+      "Read(//Users/kianwoonwong/**)"
     ],
     "deny": [],
     "ask": []
@@ -77,7 +80,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "say 'Claude needs your input'; osascript -e 'display notification \"Claude waiting for response\" with title \"Claude Code\"';"
+            "command": "echo 'Project Memory: ./CLAUDE.md is present.' && if [ -f ./CLAUDE.md ]; then echo 'IMPORTANT: Read the CLAUDE.md file for project context.'; fi"
           }
         ]
       }
@@ -87,15 +90,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "say 'Task completed'; osascript -e 'display notification \"Task completed\" with title \"Claude Code\" sound name \"Submarine\"';"
-          },
-          {
-            "type": "command",
-            "command": "/usr/bin/python3 /Users/kianwoonwong/claude_cleanup.py;"
-          },
-          {
-            "type": "command",
-            "command": "echo 'Reminder: Project memory ./CLAUDE.md  if present' && if [ -f ./CLAUDE.md  ]; then echo 'CLAUDE.md found in current directory'; fi"
+            "command": "say 'Task complete.'; echo 'Project Memory: ./CLAUDE.md is present for review.'"
           }
         ]
       }
@@ -105,34 +100,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "say 'Subtask complete';"
+            "command": "say 'Subtask complete.'"
           }
         ]
       }
     ],
-    "PreToolUse": [
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "say 'Agent starting task';"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "say 'Agent task complete';"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
+      "SessionStart": [
       {
         "hooks": [
           {
@@ -141,7 +114,7 @@
           },
           {
             "type": "command",
-            "command": "echo 'Reminder: Project memory ./CLAUDE.md  if present' && if [ -f ./CLAUDE.md  ]; then echo 'CLAUDE.md found in current directory'; fi"
+            "command": "if [ -f ./CLAUDE.md ]; then echo 'Project memory file CLAUDE.md found. It will be referenced throughout this session.'; fi"
           }
         ]
       }
@@ -151,11 +124,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -f ./CLAUDE.md ]; then echo 'IMPORTANT: Before you begin, MUST read the entire CLAUDE.md file below to understand the project context, requirements, and coding style. before proceed with my request.'; fi"
-          },
-          {
-            "type": "command",
-            "command": "say 'ok';"
+            "command": "say 'Ok. Reading project context.'; if [ -f ./CLAUDE.md ]; then cat ./CLAUDE.md; fi"
           }
         ]
       }

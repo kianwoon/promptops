@@ -111,6 +111,7 @@ class Permission(Enum):
     MANAGE_COMPLIANCE = "manage_compliance"
     SECURITY_ADMIN = "security_admin"
     GOVERNANCE_ADMIN = "governance_admin"
+    DESIGN_APPROVAL_FLOWS = "design_approval_flows"
 
     # Access review permissions
     INITIATE_ACCESS_REVIEW = "initiate_access_review"
@@ -674,6 +675,7 @@ class RBACService:
             Permission.APPROVE_PROMPT: "Approve prompts for publication",
             Permission.REJECT_PROMPT: "Reject prompts with feedback",
             Permission.VIEW_AUDIT_LOGS: "Access system audit logs and activity history",
+            Permission.DESIGN_APPROVAL_FLOWS: "Design and manage approval workflows",
         }
         return descriptions.get(permission, "Unknown permission")
 

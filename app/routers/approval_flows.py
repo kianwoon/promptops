@@ -21,6 +21,29 @@ from fastapi import Request, HTTPException, status
 # Configure logging for authentication debugging
 logger = logging.getLogger(__name__)
 
+async def check_design_approval_flows_permission(
+    current_user: dict = Depends(get_current_user)
+):
+    """Check if user has permission to design approval flows"""
+    try:
+        user_roles = current_user.get("roles", [])
+        if not rbac_service.can_perform_action(
+            user_roles=user_roles,
+            action=Permission.DESIGN_APPROVAL_FLOWS.value,
+            resource_type="workflow"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin privileges required to design approval flows"
+            )
+        return current_user
+    except Exception as e:
+        logger.error(f"Permission check failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission check failed"
+        )
+
 
 router = APIRouter()
 
@@ -250,7 +273,8 @@ async def list_approval_flows(
 async def create_approval_flow(
     flow_data: ApprovalFlowCreate,
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(check_design_approval_flows_permission)
 ):
     """Create a new approval flow"""
     try:
@@ -337,7 +361,7 @@ async def create_approval_flow(
 async def update_approval_flow(
     flow_id: str,
     flow_data: ApprovalFlowUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(check_design_approval_flows_permission),
     db: Session = Depends(get_db)
 ):
     """Update an existing approval flow"""
@@ -477,7 +501,7 @@ async def get_approval_flow(
 @router.delete("/flows/{flow_id}")
 async def delete_approval_flow(
     flow_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(check_design_approval_flows_permission),
     db: Session = Depends(get_db)
 ):
     """Delete an approval flow"""

@@ -93,7 +93,7 @@ export function IncidentManagementPanel() {
     try {
       const tenantId = user?.organization || 'default-tenant'
       const incidentsData = await makeAuthenticatedRequest<SecurityIncident[]>(
-        `/v1/governance/security/incidents?tenant_id=${encodeURIComponent(tenantId)}&limit=100`
+        `/api/v1/governance/security/incidents?tenant_id=${encodeURIComponent(tenantId)}&limit=100`
       )
       setIncidents(incidentsData)
     } catch (error) {

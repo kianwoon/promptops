@@ -51,32 +51,35 @@ class UserResponse(BaseModel):
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
-) -> UserResponse:
+) -> dict:
     """Get current authenticated user"""
     try:
         auth_service = AuthService()
         user = await auth_service.get_current_user(credentials.credentials, db)
-        
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authentication credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
-        return UserResponse(
-            id=user.id,
-            email=user.email,
-            name=user.name,
-            role=user.role.value,
-            organization=user.organization,
-            avatar=user.avatar,
-            provider=user.provider.value if user.provider else None,
-            provider_id=user.provider_id,
-            is_verified=user.is_verified,
-            created_at=user.created_at.isoformat(),
-            last_login=user.last_login.isoformat() if user.last_login else None,
-        )
+
+        # Return dictionary format expected by governance and other services
+        return {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role.value,
+            "organization": user.organization,
+            "tenant": user.tenant_id or user.organization or "default-tenant",
+            "avatar": user.avatar,
+            "provider": user.provider.value if user.provider else None,
+            "provider_id": user.provider_id,
+            "is_verified": user.is_verified,
+            "created_at": user.created_at.isoformat(),
+            "last_login": user.last_login.isoformat() if user.last_login else None,
+            "user_id": user.id  # Add user_id field for consistency
+        }
         
     except HTTPException:
         raise
@@ -161,8 +164,8 @@ async def refresh_access_token(
             detail=str(e)
         )
 
-@router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: UserResponse = Depends(get_current_user)):
+@router.get("/me")
+async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     """Get current user information"""
     return current_user
 

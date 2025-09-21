@@ -83,13 +83,13 @@ export function SecurityMonitoringDashboard() {
 
       const [metricsData, eventsData, alertsData] = await Promise.all([
         makeAuthenticatedRequest<SecurityMetrics>(
-          `/v1/governance/security/dashboard/metrics?tenant_id=${encodeURIComponent(tenantId)}&time_range=${selectedTimeRange}`
+          `/api/v1/governance/security/dashboard/metrics?tenant_id=${encodeURIComponent(tenantId)}&time_range=${selectedTimeRange}`
         ),
         makeAuthenticatedRequest<SecurityEvent[]>(
-          `/v1/governance/security/events?tenant_id=${encodeURIComponent(tenantId)}&limit=50`
+          `/api/v1/governance/security/events?tenant_id=${encodeURIComponent(tenantId)}&limit=50`
         ),
         makeAuthenticatedRequest<SecurityAlert[]>(
-          `/v1/governance/security/alerts?tenant_id=${encodeURIComponent(tenantId)}&limit=20`
+          `/api/v1/governance/security/alerts?tenant_id=${encodeURIComponent(tenantId)}&limit=20`
         )
       ])
 

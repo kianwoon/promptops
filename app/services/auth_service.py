@@ -330,7 +330,7 @@ class AuthService:
                     "sub": user.id,
                     "email": user.email,
                     "role": user.role.value,
-                    "tenant_id": user.organization or "default-tenant"
+                    "tenant_id": user.tenant_id or user.organization or "default-tenant"
                 }
             )
             refresh_token = self.create_refresh_token(
@@ -346,6 +346,7 @@ class AuthService:
                     "name": user.name,
                     "role": user.role.value,
                     "organization": user.organization or "",
+                    "tenant_id": user.tenant_id or user.organization or "default-tenant",
                     "avatar": user.avatar,
                     "provider_id": user.provider_id,
                     "created_at": user.created_at.isoformat(),
@@ -378,7 +379,7 @@ class AuthService:
                     "sub": user.id,
                     "email": user.email,
                     "role": user.role.value,
-                    "tenant_id": user.organization or "default-tenant"
+                    "tenant_id": user.tenant_id or user.organization or "default-tenant"
                 }
             )
             refresh_token = self.create_refresh_token(
@@ -394,6 +395,7 @@ class AuthService:
                     "name": user.name,
                     "role": user.role.value,
                     "organization": user.organization or "",
+                    "tenant_id": user.tenant_id or user.organization or "default-tenant",
                     "avatar": user.avatar,
                     "provider_id": user.provider_id,
                     "created_at": user.created_at.isoformat(),
@@ -439,6 +441,7 @@ class AuthService:
                 is_verified=True,
                 avatar=user_info.get("picture"),
                 role=determine_user_role(user_info["email"], user_info["name"]),
+                tenant_id="default-tenant",
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow(),
             )
@@ -499,6 +502,7 @@ class AuthService:
                 is_verified=True,
                 avatar=github_avatar,
                 role=determine_user_role(github_email or f"{github_username}@github.local", github_name),
+                tenant_id="default-tenant",
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow(),
             )
@@ -535,7 +539,7 @@ class AuthService:
                     "sub": user.id,
                     "email": user.email,
                     "role": user.role.value,
-                    "tenant_id": user.organization or "default-tenant"
+                    "tenant_id": user.tenant_id or user.organization or "default-tenant"
                 }
             )
             

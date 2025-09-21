@@ -89,10 +89,10 @@ export function ThreatIntelligencePanel() {
 
       const [feedsData, indicatorsData] = await Promise.all([
         makeAuthenticatedRequest<ThreatIntelligenceFeed[]>(
-          `/v1/governance/security/threat-intelligence/feeds?tenant_id=${encodeURIComponent(tenantId)}`
+          `/api/v1/governance/security/threat-intelligence/feeds?tenant_id=${encodeURIComponent(tenantId)}`
         ),
         makeAuthenticatedRequest<ThreatIndicator[]>(
-          `/v1/governance/security/threat-intelligence/indicators?tenant_id=${encodeURIComponent(tenantId)}`
+          `/api/v1/governance/security/threat-intelligence/indicators?tenant_id=${encodeURIComponent(tenantId)}`
         )
       ])
 

@@ -103,6 +103,7 @@ const rolePermissions = {
     'analytics:read',
     'audits:read',
     'compatibility:read',
+    'approval-flows:design',
   ],
   user: [
     'templates:create',

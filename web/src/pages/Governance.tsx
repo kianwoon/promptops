@@ -36,26 +36,26 @@ export function Governance() {
 
       {/* Main Governance Tabs */}
       <Tabs defaultValue="audit" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="audit" className="flex items-center gap-2">
-            <History className="h-4 w-4" />
-            Audit Trail
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-1">
+          <TabsTrigger value="audit" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm">
+            <History className="h-4 w-4 flex-shrink-0" />
+            <span className="text-center">Audit</span>
           </TabsTrigger>
-          <TabsTrigger value="security" className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            Security
+          <TabsTrigger value="security" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <span className="text-center">Security</span>
           </TabsTrigger>
-          <TabsTrigger value="threat-intel" className="flex items-center gap-2">
-            <Fingerprint className="h-4 w-4" />
-            Threat Intel
+          <TabsTrigger value="threat-intel" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm">
+            <Fingerprint className="h-4 w-4 flex-shrink-0" />
+            <span className="text-center">Threat Intel</span>
           </TabsTrigger>
-          <TabsTrigger value="incidents" className="flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4" />
-            Incidents
+          <TabsTrigger value="incidents" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm">
+            <ShieldAlert className="h-4 w-4 flex-shrink-0" />
+            <span className="text-center">Incidents</span>
           </TabsTrigger>
-          <TabsTrigger value="anomaly" className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
-            Anomaly
+          <TabsTrigger value="anomaly" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 text-xs sm:text-sm">
+            <TrendingUp className="h-4 w-4 flex-shrink-0" />
+            <span className="text-center">Anomaly</span>
           </TabsTrigger>
         </TabsList>
 
@@ -82,19 +82,19 @@ export function Governance() {
                       params.append(key, value.toString())
                     }
                   })
-                  return makeAuthenticatedRequest<AuditLog[]>(`/v1/governance/audit-logs?${params}`)
+                  return makeAuthenticatedRequest<AuditLog[]>(`/api/v1/governance/audit-logs?${params}`)
                 }}
                 onFetchStats={async (startDate?: string, endDate?: string) => {
                   // Real API call to governance service
                   const params = new URLSearchParams()
                   if (startDate) params.append('start_date', startDate)
                   if (endDate) params.append('end_date', endDate)
-                  return makeAuthenticatedRequest<AuditLogStats>(`/v1/governance/audit-logs/stats?${params}`)
+                  return makeAuthenticatedRequest<AuditLogStats>(`/api/v1/governance/audit-logs/stats?${params}`)
                 }}
                 onExportLogs={async (request: AuditLogExportRequest) => {
                   // Real API call to governance service
                   return makeAuthenticatedRequest<AuditLogExportResponse>(
-                    '/v1/governance/audit-logs/export',
+                    '/api/v1/governance/audit-logs/export',
                     {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
@@ -104,7 +104,7 @@ export function Governance() {
                 }}
                 onGetLogDetails={async (logId: string) => {
                   // Real API call to governance service
-                  return makeAuthenticatedRequest<AuditLog>(`/v1/governance/audit-logs/${logId}`)
+                  return makeAuthenticatedRequest<AuditLog>(`/api/v1/governance/audit-logs/${logId}`)
                 }}
               />
             </CardContent>
