@@ -17,6 +17,57 @@ from app.models import User, AuthProvider, UserRole
 logger = structlog.get_logger()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+def determine_user_role(email: str, name: str = None) -> UserRole:
+    """
+    Determine appropriate user role based on email and other attributes.
+    This provides more intelligent role assignment than defaulting to VIEWER.
+    """
+    email = email.lower().strip() if email else ""
+
+    # Admin role assignment logic
+    admin_domains = settings.admin_domains if hasattr(settings, 'admin_domains') else []
+    admin_emails = settings.admin_emails if hasattr(settings, 'admin_emails') else []
+
+    # Check if email is in admin emails list
+    if email in admin_emails:
+        logger.info("Assigning ADMIN role based on email whitelist", email=email)
+        return UserRole.ADMIN
+
+    # Check if email domain is in admin domains
+    if admin_domains:
+        email_domain = email.split('@')[-1] if '@' in email else ''
+        if email_domain in admin_domains:
+            logger.info("Assigning ADMIN role based on domain whitelist", email=email, domain=email_domain)
+            return UserRole.ADMIN
+
+    # User role assignment logic
+    user_domains = settings.user_domains if hasattr(settings, 'user_domains') else []
+    user_emails = settings.user_emails if hasattr(settings, 'user_emails') else []
+
+    # Check if email is in user emails list
+    if email in user_emails:
+        logger.info("Assigning USER role based on email whitelist", email=email)
+        return UserRole.USER
+
+    # Check if email domain is in user domains
+    if user_domains:
+        email_domain = email.split('@')[-1] if '@' in email else ''
+        if email_domain in user_domains:
+            logger.info("Assigning USER role based on domain whitelist", email=email, domain=email_domain)
+            return UserRole.USER
+
+    # Special patterns for role assignment
+    if any(pattern in email for pattern in ['admin', 'root', 'super']):
+        logger.info("Assigning ADMIN role based on email pattern", email=email)
+        return UserRole.ADMIN
+
+    # Default to USER role instead of VIEWER for better experience
+    # This can be changed in settings if VIEWER should be the default
+    default_role_str = getattr(settings, 'default_user_role', 'user')
+    default_role = UserRole(default_role_str)
+    logger.info("Assigning default role", email=email, role=default_role)
+    return default_role
+
 class GoogleOAuthService:
     def __init__(self):
         self.client_id = settings.google_client_id
@@ -351,7 +402,7 @@ class AuthService:
                 provider_id=id_token_payload["sub"],
                 is_verified=True,
                 avatar=user_info.get("picture"),
-                role=UserRole.VIEWER,  # Default role for new users
+                role=determine_user_role(user_info["email"], user_info["name"]),
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow(),
             )
@@ -411,7 +462,7 @@ class AuthService:
                 provider_id=github_id,
                 is_verified=True,
                 avatar=github_avatar,
-                role=UserRole.VIEWER,  # Default role for new users
+                role=determine_user_role(github_email or f"{github_username}@github.local", github_name),
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow(),
             )

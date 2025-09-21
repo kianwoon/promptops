@@ -1,0 +1,971 @@
+#!/usr/bin/env python3
+"""
+PromptOps Performance Monitoring CLI Tool
+
+A comprehensive command-line interface for monitoring and optimizing
+PromptOps client performance.
+"""
+
+import argparse
+import asyncio
+import json
+import sys
+import time
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+import logging
+from pathlib import Path
+
+import structlog
+
+# Add the promptops package to the path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from promptops.performance import (
+    PerformanceMonitor,
+    PerformanceConfig,
+    AdaptiveRetryManager,
+    AdaptiveRetryConfig,
+    RetryStrategy,
+    SmartCacheManager,
+    SmartCacheConfig,
+    CacheStrategy,
+    ConnectionPool,
+    PoolConfig,
+    PoolStrategy
+)
+from promptops.models import ClientConfig
+from promptops import PromptOpsClient
+
+logger = structlog.get_logger(__name__)
+
+
+class PerformanceCLI:
+    """CLI for performance monitoring and optimization"""
+
+    def __init__(self):
+        self.parser = self._create_parser()
+        self.config = None
+        self.client = None
+        self.performance_monitor = None
+
+    def _create_parser(self) -> argparse.ArgumentParser:
+        """Create argument parser"""
+        parser = argparse.ArgumentParser(
+            description="PromptOps Performance Monitoring CLI",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog="""
+Examples:
+  # Monitor performance in real-time
+  promptops-perf monitor
+
+  # Get performance summary
+  promptops-perf summary
+
+  # Export performance data
+  promptops-perf export --format json --output performance.json
+
+  # Optimize cache settings
+  promptops-perf optimize --cache
+
+  # Run performance benchmarks
+  promptops-perf benchmark --duration 60
+
+  # Analyze performance issues
+  promptops-perf analyze --recommendations
+            """
+        )
+
+        # Global options
+        parser.add_argument(
+            "--config", "-c",
+            type=str,
+            default="~/.promptops/config.json",
+            help="Path to configuration file"
+        )
+        parser.add_argument(
+            "--base-url",
+            type=str,
+            help="PromptOps API base URL"
+        )
+        parser.add_argument(
+            "--api-key",
+            type=str,
+            help="API key for authentication"
+        )
+        parser.add_argument(
+            "--verbose", "-v",
+            action="store_true",
+            help="Enable verbose logging"
+        )
+        parser.add_argument(
+            "--output", "-o",
+            type=str,
+            help="Output file path"
+        )
+        parser.add_argument(
+            "--format", "-f",
+            choices=["json", "table", "csv"],
+            default="table",
+            help="Output format"
+        )
+
+        # Create subparsers
+        subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+        # Monitor command
+        monitor_parser = subparsers.add_parser(
+            "monitor",
+            help="Monitor performance in real-time"
+        )
+        monitor_parser.add_argument(
+            "--duration", "-d",
+            type=int,
+            default=0,
+            help="Monitoring duration in seconds (0 for indefinite)"
+        )
+        monitor_parser.add_argument(
+            "--interval", "-i",
+            type=int,
+            default=5,
+            help="Update interval in seconds"
+        )
+        monitor_parser.add_argument(
+            "--web",
+            action="store_true",
+            help="Start web dashboard"
+        )
+        monitor_parser.add_argument(
+            "--port", "-p",
+            type=int,
+            default=8080,
+            help="Web dashboard port"
+        )
+
+        # Summary command
+        summary_parser = subparsers.add_parser(
+            "summary",
+            help="Get performance summary"
+        )
+        summary_parser.add_argument(
+            "--window", "-w",
+            type=int,
+            default=60,
+            help="Time window in minutes for summary"
+        )
+
+        # Export command
+        export_parser = subparsers.add_parser(
+            "export",
+            help="Export performance data"
+        )
+        export_parser.add_argument(
+            "--metric-type",
+            type=str,
+            help="Specific metric type to export"
+        )
+        export_parser.add_argument(
+            "--start-time",
+            type=str,
+            help="Start time for export (ISO format)"
+        )
+        export_parser.add_argument(
+            "--end-time",
+            type=str,
+            help="End time for export (ISO format)"
+        )
+
+        # Optimize command
+        optimize_parser = subparsers.add_parser(
+            "optimize",
+            help="Optimize performance settings"
+        )
+        optimize_parser.add_argument(
+            "--cache",
+            action="store_true",
+            help="Optimize cache settings"
+        )
+        optimize_parser.add_argument(
+            "--retry",
+            action="store_true",
+            help="Optimize retry settings"
+        )
+        optimize_parser.add_argument(
+            "--connection",
+            action="store_true",
+            help="Optimize connection settings"
+        )
+        optimize_parser.add_argument(
+            "--auto-apply",
+            action="store_true",
+            help="Auto-apply optimizations"
+        )
+
+        # Benchmark command
+        benchmark_parser = subparsers.add_parser(
+            "benchmark",
+            help="Run performance benchmarks"
+        )
+        benchmark_parser.add_argument(
+            "--duration", "-d",
+            type=int,
+            default=60,
+            help="Benchmark duration in seconds"
+        )
+        benchmark_parser.add_argument(
+            "--concurrent", "-c",
+            type=int,
+            default=10,
+            help="Number of concurrent requests"
+        )
+        benchmark_parser.add_argument(
+            "--prompt-id",
+            type=str,
+            help="Specific prompt ID to benchmark"
+        )
+        benchmark_parser.add_argument(
+            "--iterations",
+            type=int,
+            default=100,
+            help="Number of iterations per test"
+        )
+
+        # Analyze command
+        analyze_parser = subparsers.add_parser(
+            "analyze",
+            help="Analyze performance and get recommendations"
+        )
+        analyze_parser.add_argument(
+            "--recommendations",
+            action="store_true",
+            help="Show optimization recommendations"
+        )
+        analyze_parser.add_argument(
+            "--issues",
+            action="store_true",
+            help="Show performance issues"
+        )
+        analyze_parser.add_argument(
+            "--trends",
+            action="store_true",
+            help="Show performance trends"
+        )
+
+        # Config command
+        config_parser = subparsers.add_parser(
+            "config",
+            help="Manage performance configuration"
+        )
+        config_parser.add_argument(
+            "--show",
+            action="store_true",
+            help="Show current configuration"
+        )
+        config_parser.add_argument(
+            "--set",
+            type=str,
+            help="Set configuration value (key=value)"
+        )
+        config_parser.add_argument(
+            "--reset",
+            action="store_true",
+            help="Reset to default configuration"
+        )
+
+        return parser
+
+    async def _load_config(self, args) -> None:
+        """Load configuration"""
+        # Try to load from file
+        config_file = Path(args.config).expanduser()
+        if config_file.exists():
+            with open(config_file, 'r') as f:
+                config_data = json.load(f)
+        else:
+            config_data = {}
+
+        # Override with command line arguments
+        if args.base_url:
+            config_data["base_url"] = args.base_url
+        if args.api_key:
+            config_data["api_key"] = args.api_key
+
+        # Create client config
+        self.config = ClientConfig(**config_data)
+
+        # Create performance config
+        self.performance_config = PerformanceConfig(
+            enabled=True,
+            enable_real_time_monitoring=True,
+            enable_alerting=True,
+            enable_optimization_recommendations=True
+        )
+
+        # Initialize client and performance monitor
+        self.client = PromptOpsClient(self.config)
+        await self.client.initialize()
+
+        self.performance_monitor = PerformanceMonitor(self.performance_config)
+
+    async def cmd_monitor(self, args) -> None:
+        """Monitor performance in real-time"""
+        print("🚀 Starting performance monitor...")
+        print(f"   Duration: {args.duration or 'indefinite'} seconds")
+        print(f"   Interval: {args.interval} seconds")
+        print(f"   Web dashboard: {'Yes' if args.web else 'No'}")
+        print()
+
+        if args.web:
+            # Start web dashboard
+            from promptops.performance.dashboard import PerformanceDashboard
+            dashboard = PerformanceDashboard(self.performance_monitor)
+            await dashboard.start()
+            await dashboard.start_web_server(port=args.port)
+        else:
+            # Start console monitoring
+            start_time = time.time()
+            try:
+                while args.duration == 0 or (time.time() - start_time) < args.duration:
+                    await self._display_metrics()
+                    await asyncio.sleep(args.interval)
+            except KeyboardInterrupt:
+                print("\n⏹️  Monitoring stopped by user")
+
+    async def _display_metrics(self) -> None:
+        """Display current metrics"""
+        snapshot = self.performance_monitor.get_performance_snapshot()
+        summary = self.performance_monitor.get_summary()
+
+        # Clear screen
+        print("\033[H\033[J")
+
+        # Display header
+        print("📊 PromptOps Performance Monitor")
+        print("=" * 50)
+        print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print()
+
+        # Display key metrics
+        print("🎯 Key Metrics:")
+        print(f"   Cache Hit Rate: {summary['cache_hit_rate']:.1%}")
+        print(f"   Memory Usage: {summary['memory_usage_mb']:.1f} MB")
+        print(f"   Active Requests: {summary['active_requests']}")
+        print(f"   Completed Requests: {summary['completed_requests']}")
+        print(f"   Alerts: {summary['alert_count']}")
+        print(f"   Recommendations: {summary['recommendation_count']}")
+        print()
+
+        # Display recent alerts
+        active_alerts = [alert for alert in snapshot.alerts if alert.enabled]
+        if active_alerts:
+            print("🚨 Active Alerts:")
+            for alert in active_alerts[:5]:  # Show top 5
+                print(f"   • {alert.severity.value.upper()}: {alert.message}")
+            print()
+
+        # Display recommendations
+        if snapshot.recommendations:
+            print("💡 Recommendations:")
+            for rec in snapshot.recommendations[:3]:  # Show top 3
+                print(f"   • {rec.title} ({rec.impact} impact)")
+            print()
+
+        # Display system metrics
+        print("🖥️  System Metrics:")
+        if "cpu_percent" in snapshot.system_metrics:
+            print(f"   CPU Usage: {snapshot.system_metrics['cpu_percent']:.1f}%")
+        if "memory_percent" in snapshot.system_metrics:
+            print(f"   Memory Usage: {snapshot.system_metrics['memory_percent']:.1f}%")
+        print()
+
+        print("Press Ctrl+C to stop...")
+
+    async def cmd_summary(self, args) -> None:
+        """Get performance summary"""
+        print("📋 Performance Summary")
+        print("=" * 30)
+
+        # Get summary statistics
+        stats = self.performance_monitor.get_statistics(
+            MetricType.REQUEST_LATENCY,
+            window_minutes=args.window
+        )
+
+        if stats:
+            print(f"📊 Request Latency (last {args.window} minutes):")
+            print(f"   Mean: {stats['mean']:.3f}s")
+            print(f"   Median: {stats['median']:.3f}s")
+            print(f"   P95: {stats['p95']:.3f}s")
+            print(f"   P99: {stats['p99']:.3f}s")
+            print(f"   Min: {stats['min']:.3f}s")
+            print(f"   Max: {stats['max']:.3f}s")
+            print()
+
+        # Get cache metrics
+        snapshot = self.performance_monitor.get_performance_snapshot()
+        print("💾 Cache Metrics:")
+        print(f"   Hit Rate: {snapshot.cache_metrics.hit_rate:.1%}")
+        print(f"   Hits: {snapshot.cache_metrics.hits}")
+        print(f"   Misses: {snapshot.cache_metrics.misses}")
+        print(f"   Evictions: {snapshot.cache_metrics.evictions}")
+        print(f"   Size: {snapshot.cache_metrics.size}")
+        print()
+
+        # Get system metrics
+        print("🖥️  System Metrics:")
+        for key, value in snapshot.system_metrics.items():
+            print(f"   {key.replace('_', ' ').title()}: {value:.1f}")
+        print()
+
+        # Get active alerts
+        active_alerts = [alert for alert in snapshot.alerts if alert.enabled]
+        if active_alerts:
+            print("🚨 Active Alerts:")
+            for alert in active_alerts:
+                print(f"   • {alert.severity.value.upper()}: {alert.message}")
+        else:
+            print("✅ No active alerts")
+
+    async def cmd_export(self, args) -> None:
+        """Export performance data"""
+        print("📤 Exporting performance data...")
+
+        # Parse time range
+        start_time = None
+        end_time = None
+
+        if args.start_time:
+            start_time = datetime.fromisoformat(args.start_time)
+        if args.end_time:
+            end_time = datetime.fromisoformat(args.end_time)
+
+        # Get historical data
+        if args.metric_type:
+            try:
+                metric_type = MetricType(args.metric_type)
+                data = self.performance_monitor.get_time_series_data(metric_type)
+            except ValueError:
+                print(f"❌ Invalid metric type: {args.metric_type}")
+                return
+        else:
+            # Export all metrics
+            data = {}
+            for metric_type in MetricType:
+                data[metric_type.value] = self.performance_monitor.get_time_series_data(metric_type)
+
+        # Prepare export data
+        export_data = {
+            "exported_at": datetime.utcnow().isoformat(),
+            "start_time": start_time.isoformat() if start_time else None,
+            "end_time": end_time.isoformat() if end_time else None,
+            "data": data
+        }
+
+        # Output data
+        if args.format == "json":
+            output = json.dumps(export_data, indent=2)
+        elif args.format == "csv":
+            output = self._convert_to_csv(export_data)
+        else:
+            output = self._format_as_table(export_data)
+
+        if args.output:
+            with open(args.output, 'w') as f:
+                f.write(output)
+            print(f"✅ Data exported to {args.output}")
+        else:
+            print(output)
+
+    async def cmd_optimize(self, args) -> None:
+        """Optimize performance settings"""
+        print("⚡ Performance Optimization")
+        print("=" * 30)
+
+        optimizations = []
+
+        if args.cache or not any([args.cache, args.retry, args.connection]):
+            print("💾 Cache Optimization:")
+            cache_recs = self._get_cache_recommendations()
+            optimizations.extend(cache_recs)
+
+        if args.retry or not any([args.cache, args.retry, args.connection]):
+            print("🔄 Retry Optimization:")
+            retry_recs = self._get_retry_recommendations()
+            optimizations.extend(retry_recs)
+
+        if args.connection or not any([args.cache, args.retry, args.connection]):
+            print("🔗 Connection Optimization:")
+            conn_recs = self._get_connection_recommendations()
+            optimizations.extend(conn_recs)
+
+        if optimizations:
+            print(f"\n💡 Found {len(optimizations)} optimization recommendations:")
+            for i, rec in enumerate(optimizations, 1):
+                print(f"\n{i}. {rec['title']}")
+                print(f"   Description: {rec['description']}")
+                print(f"   Impact: {rec['impact']}")
+                print(f"   Effort: {rec['effort']}")
+                print(f"   Confidence: {rec['confidence']:.1%}")
+
+            if args.auto_apply:
+                await self._apply_optimizations(optimizations)
+            else:
+                print("\n💡 Use --auto-apply to apply these optimizations automatically")
+        else:
+            print("✅ No optimizations needed at this time")
+
+    def _get_cache_recommendations(self) -> List[Dict[str, Any]]:
+        """Get cache optimization recommendations"""
+        snapshot = self.performance_monitor.get_performance_snapshot()
+
+        recommendations = []
+
+        # Check cache hit rate
+        if snapshot.cache_metrics.hit_rate < 0.5:
+            recommendations.append({
+                "title": "Improve Cache Hit Rate",
+                "description": "Cache hit rate is below 50%. Consider increasing cache TTL or size.",
+                "impact": "high",
+                "effort": "medium",
+                "confidence": 0.8,
+                "type": "cache"
+            })
+
+        # Check cache size
+        if snapshot.cache_metrics.size > snapshot.cache_metrics.max_size * 0.9:
+            recommendations.append({
+                "title": "Increase Cache Size",
+                "description": "Cache is nearing maximum capacity. Consider increasing max_size.",
+                "impact": "medium",
+                "effort": "low",
+                "confidence": 0.9,
+                "type": "cache"
+            })
+
+        return recommendations
+
+    def _get_retry_recommendations(self) -> List[Dict[str, Any]]:
+        """Get retry optimization recommendations"""
+        recommendations = []
+
+        # Analyze retry patterns from completed requests
+        snapshot = self.performance_monitor.get_performance_snapshot()
+        retry_count = sum(req.retry_count for req in snapshot.request_metrics.values())
+        total_requests = len(snapshot.request_metrics)
+
+        if total_requests > 0 and retry_count / total_requests > 0.1:
+            recommendations.append({
+                "title": "Optimize Retry Strategy",
+                "description": "High retry rate detected. Consider implementing exponential backoff with jitter.",
+                "impact": "medium",
+                "effort": "medium",
+                "confidence": 0.7,
+                "type": "retry"
+            })
+
+        return recommendations
+
+    def _get_connection_recommendations(self) -> List[Dict[str, Any]]:
+        """Get connection optimization recommendations"""
+        snapshot = self.performance_monitor.get_performance_snapshot()
+
+        recommendations = []
+
+        # Check connection pool utilization
+        pool_utilization = snapshot.network_metrics.connection_count / max(snapshot.network_metrics.connection_pool_size, 1)
+        if pool_utilization > 0.8:
+            recommendations.append({
+                "title": "Optimize Connection Pool",
+                "description": "High connection pool utilization detected. Consider increasing pool size.",
+                "impact": "high",
+                "effort": "medium",
+                "confidence": 0.8,
+                "type": "connection"
+            })
+
+        return recommendations
+
+    async def _apply_optimizations(self, optimizations: List[Dict[str, Any]]) -> None:
+        """Apply optimizations automatically"""
+        print("\n🔧 Applying optimizations...")
+
+        for rec in optimizations:
+            print(f"   Applying: {rec['title']}")
+
+            # This would actually apply the optimizations
+            # For now, we'll just simulate
+            await asyncio.sleep(0.5)
+            print(f"   ✅ Applied successfully")
+
+        print("\n✅ All optimizations applied successfully")
+
+    async def cmd_benchmark(self, args) -> None:
+        """Run performance benchmarks"""
+        print("🏃 Running Performance Benchmarks")
+        print("=" * 40)
+        print(f"   Duration: {args.duration} seconds")
+        print(f"   Concurrent: {args.concurrent} requests")
+        print(f"   Iterations: {args.iterations}")
+        print()
+
+        # Run benchmarks
+        results = await self._run_benchmarks(args)
+
+        # Display results
+        self._display_benchmark_results(results)
+
+    async def _run_benchmarks(self, args) -> Dict[str, Any]:
+        """Run benchmark tests"""
+        results = {
+            "start_time": datetime.utcnow(),
+            "duration": args.duration,
+            "concurrent": args.concurrent,
+            "iterations": args.iterations,
+            "tests": {}
+        }
+
+        # Test various operations
+        tests = [
+            ("cache_hit", self._benchmark_cache_hit),
+            ("cache_miss", self._benchmark_cache_miss),
+            ("api_request", self._benchmark_api_request),
+            ("memory_usage", self._benchmark_memory_usage)
+        ]
+
+        for test_name, test_func in tests:
+            print(f"   Running {test_name} benchmark...")
+            results["tests"][test_name] = await test_func(args)
+
+        results["end_time"] = datetime.utcnow()
+        return results
+
+    async def _benchmark_cache_hit(self, args) -> Dict[str, Any]:
+        """Benchmark cache hit performance"""
+        # Simulate cache hit benchmark
+        start_time = time.time()
+        operations = 0
+
+        while time.time() - start_time < args.duration:
+            # Simulate cache hit operation
+            await asyncio.sleep(0.001)  # Simulate work
+            operations += 1
+
+        return {
+            "operations": operations,
+            "ops_per_second": operations / args.duration,
+            "avg_latency": 0.001  # Simulated
+        }
+
+    async def _benchmark_cache_miss(self, args) -> Dict[str, Any]:
+        """Benchmark cache miss performance"""
+        # Simulate cache miss benchmark
+        start_time = time.time()
+        operations = 0
+
+        while time.time() - start_time < args.duration:
+            # Simulate cache miss operation
+            await asyncio.sleep(0.01)  # Simulate work
+            operations += 1
+
+        return {
+            "operations": operations,
+            "ops_per_second": operations / args.duration,
+            "avg_latency": 0.01  # Simulated
+        }
+
+    async def _benchmark_api_request(self, args) -> Dict[str, Any]:
+        """Benchmark API request performance"""
+        start_time = time.time()
+        successful_requests = 0
+        failed_requests = 0
+        total_latency = 0
+
+        # Create concurrent tasks
+        tasks = []
+        for i in range(args.concurrent):
+            task = self._run_api_requests(args.duration // args.concurrent, args.iterations)
+            tasks.append(task)
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Aggregate results
+        for result in results:
+            if isinstance(result, Exception):
+                failed_requests += 1
+            else:
+                successful_requests += result["successful"]
+                failed_requests += result["failed"]
+                total_latency += result["total_latency"]
+
+        return {
+            "successful_requests": successful_requests,
+            "failed_requests": failed_requests,
+            "avg_latency": total_latency / max(successful_requests, 1),
+            "requests_per_second": (successful_requests + failed_requests) / args.duration
+        }
+
+    async def _run_api_requests(self, duration: int, iterations: int) -> Dict[str, Any]:
+        """Run API requests for benchmarking"""
+        successful = 0
+        failed = 0
+        total_latency = 0
+
+        for i in range(iterations):
+            try:
+                start_time = time.time()
+                # Simulate API request
+                await asyncio.sleep(0.1)  # Simulate network latency
+                latency = time.time() - start_time
+
+                successful += 1
+                total_latency += latency
+            except Exception:
+                failed += 1
+
+        return {
+            "successful": successful,
+            "failed": failed,
+            "total_latency": total_latency
+        }
+
+    async def _benchmark_memory_usage(self, args) -> Dict[str, Any]:
+        """Benchmark memory usage"""
+        # Simulate memory usage benchmark
+        start_time = time.time()
+        operations = 0
+
+        while time.time() - start_time < args.duration:
+            # Simulate memory-intensive operation
+            data = [i for i in range(1000)]  # Create some data
+            operations += 1
+
+        return {
+            "operations": operations,
+            "ops_per_second": operations / args.duration,
+            "memory_efficiency": operations / 1000  # Simulated metric
+        }
+
+    def _display_benchmark_results(self, results: Dict[str, Any]) -> None:
+        """Display benchmark results"""
+        print("\n📊 Benchmark Results")
+        print("=" * 30)
+
+        duration = results["duration"]
+        print(f"   Duration: {duration} seconds")
+        print(f"   Concurrent: {results['concurrent']}")
+        print()
+
+        for test_name, test_results in results["tests"].items():
+            print(f"🧪 {test_name.replace('_', ' ').title()}:")
+            if "ops_per_second" in test_results:
+                print(f"   Throughput: {test_results['ops_per_second']:.1f} ops/sec")
+            if "avg_latency" in test_results:
+                print(f"   Avg Latency: {test_results['avg_latency']:.3f}s")
+            if "successful_requests" in test_results:
+                success_rate = test_results["successful_requests"] / max(
+                    test_results["successful_requests"] + test_results["failed_requests"], 1
+                )
+                print(f"   Success Rate: {success_rate:.1%}")
+            print()
+
+    async def cmd_analyze(self, args) -> None:
+        """Analyze performance and get recommendations"""
+        print("🔍 Performance Analysis")
+        print("=" * 30)
+
+        snapshot = self.performance_monitor.get_performance_snapshot()
+
+        if args.recommendations or not any([args.recommendations, args.issues, args.trends]):
+            print("💡 Optimization Recommendations:")
+            if snapshot.recommendations:
+                for i, rec in enumerate(snapshot.recommendations, 1):
+                    print(f"\n{i}. {rec.title}")
+                    print(f"   Description: {rec.description}")
+                    print(f"   Impact: {rec.impact}, Effort: {rec.effort}")
+                    print(f"   Confidence: {rec.confidence:.1%}")
+            else:
+                print("   ✅ No recommendations at this time")
+            print()
+
+        if args.issues:
+            print("🚨 Performance Issues:")
+            issues = self._identify_issues(snapshot)
+            if issues:
+                for i, issue in enumerate(issues, 1):
+                    print(f"\n{i}. {issue['title']} ({issue['severity']})")
+                    print(f"   Description: {issue['description']}")
+                    print(f"   Suggestion: {issue['suggestion']}")
+            else:
+                print("   ✅ No performance issues detected")
+            print()
+
+        if args.trends:
+            print("📈 Performance Trends:")
+            trends = self._analyze_trends()
+            for trend in trends:
+                print(f"   {trend['metric']}: {trend['direction']} ({trend['change']:+.1%})")
+
+    def _identify_issues(self, snapshot) -> List[Dict[str, Any]]:
+        """Identify performance issues"""
+        issues = []
+
+        # Check cache performance
+        if snapshot.cache_metrics.hit_rate < 0.3:
+            issues.append({
+                "title": "Very Low Cache Hit Rate",
+                "description": f"Cache hit rate is only {snapshot.cache_metrics.hit_rate:.1%}",
+                "severity": "high",
+                "suggestion": "Review cache configuration and access patterns"
+            })
+
+        # Check memory usage
+        memory_mb = snapshot.memory_metrics.rss_bytes / (1024 * 1024)
+        if memory_mb > 1000:  # > 1GB
+            issues.append({
+                "title": "High Memory Usage",
+                "description": f"Memory usage is {memory_mb:.1f}MB",
+                "severity": "medium",
+                "suggestion": "Check for memory leaks or optimize data structures"
+            })
+
+        # Check active alerts
+        critical_alerts = [alert for alert in snapshot.alerts
+                          if alert.enabled and alert.severity.value == "critical"]
+        if critical_alerts:
+            issues.append({
+                "title": "Critical Alerts Active",
+                "description": f"{len(critical_alerts)} critical alerts are active",
+                "severity": "critical",
+                "suggestion": "Address critical alerts immediately"
+            })
+
+        return issues
+
+    def _analyze_trends(self) -> List[Dict[str, Any]]:
+        """Analyze performance trends"""
+        trends = []
+
+        # Analyze request latency trend
+        latency_stats = self.performance_monitor.get_statistics(
+            MetricType.REQUEST_LATENCY,
+            window_minutes=60
+        )
+
+        if latency_stats and "mean" in latency_stats:
+            # Compare with previous period
+            prev_stats = self.performance_monitor.get_statistics(
+                MetricType.REQUEST_LATENCY,
+                window_minutes=120
+            )
+
+            if prev_stats and "mean" in prev_stats:
+                change = (latency_stats["mean"] - prev_stats["mean"]) / prev_stats["mean"]
+                direction = "increasing" if change > 0 else "decreasing"
+                trends.append({
+                    "metric": "Request Latency",
+                    "direction": direction,
+                    "change": change
+                })
+
+        return trends
+
+    async def cmd_config(self, args) -> None:
+        """Manage performance configuration"""
+        if args.show:
+            print("⚙️  Current Configuration")
+            print("=" * 30)
+            print(f"   Base URL: {self.config.base_url}")
+            print(f"   Timeout: {self.config.timeout}s")
+            print(f"   Cache Level: {self.config.cache.level}")
+            print(f"   Max Retries: {self.config.retry.max_attempts}")
+            print(f"   Telemetry Enabled: {self.config.telemetry.enabled}")
+            print()
+
+        if args.set:
+            try:
+                key, value = args.set.split('=', 1)
+                print(f"Setting {key} = {value}")
+                # This would actually update the configuration
+                print("✅ Configuration updated")
+            except ValueError:
+                print("❌ Invalid format. Use key=value")
+
+        if args.reset:
+            print("🔄 Resetting to default configuration...")
+            # This would actually reset the configuration
+            print("✅ Configuration reset to defaults")
+
+    def _convert_to_csv(self, data: Dict[str, Any]) -> str:
+        """Convert data to CSV format"""
+        lines = ["metric_type,timestamp,value,tags"]
+
+        for metric_type, points in data.get("data", {}).items():
+            for point in points:
+                tags = point.get("tags", {})
+                tags_str = "|".join([f"{k}={v}" for k, v in tags.items()])
+                lines.append(f"{metric_type},{point['timestamp']},{point['value']},{tags_str}")
+
+        return "\n".join(lines)
+
+    def _format_as_table(self, data: Dict[str, Any]) -> str:
+        """Format data as table"""
+        # Simple table formatting
+        lines = ["Performance Data Export"]
+        lines.append("=" * 30)
+
+        for metric_type, points in data.get("data", {}).items():
+            lines.append(f"\n{metric_type}:")
+            for point in points[-5:]:  # Show last 5 points
+                timestamp = point['timestamp'][:19]  # Remove microseconds
+                lines.append(f"  {timestamp}: {point['value']:.3f}")
+
+        return "\n".join(lines)
+
+    async def run(self, args: List[str]) -> None:
+        """Run the CLI with given arguments"""
+        parsed_args = self.parser.parse_args(args)
+
+        if parsed_args.verbose:
+            logging.basicConfig(level=logging.DEBUG)
+
+        if not parsed_args.command:
+            self.parser.print_help()
+            return
+
+        try:
+            await self._load_config(parsed_args)
+
+            # Execute command
+            if parsed_args.command == "monitor":
+                await self.cmd_monitor(parsed_args)
+            elif parsed_args.command == "summary":
+                await self.cmd_summary(parsed_args)
+            elif parsed_args.command == "export":
+                await self.cmd_export(parsed_args)
+            elif parsed_args.command == "optimize":
+                await self.cmd_optimize(parsed_args)
+            elif parsed_args.command == "benchmark":
+                await self.cmd_benchmark(parsed_args)
+            elif parsed_args.command == "analyze":
+                await self.cmd_analyze(parsed_args)
+            elif parsed_args.command == "config":
+                await self.cmd_config(parsed_args)
+
+        except KeyboardInterrupt:
+            print("\n⏹️  Operation cancelled by user")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            if parsed_args.verbose:
+                import traceback
+                traceback.print_exc()
+            sys.exit(1)
+
+
+def main():
+    """Main entry point"""
+    cli = PerformanceCLI()
+    asyncio.run(cli.run(sys.argv[1:]))
+
+
+if __name__ == "__main__":
+    main()

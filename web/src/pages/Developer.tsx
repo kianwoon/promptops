@@ -20,7 +20,11 @@ import {
   Database,
   Cpu,
   Play,
-  Loader2
+  Loader2,
+  Settings,
+  Code2,
+  GitPullRequest,
+  Rocket
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -99,83 +103,96 @@ export function DeveloperPage() {
     }
   }
 
-  const pipInstallationCode = `# Install via pip
-pip install promptops
+  const pipInstallationCode = `# Install the Python client
+pip install promptops-client
 
-# Or install with specific dependencies
-pip install promptops[openai,anthropic,google]`
+# Or with optional dependencies
+pip install promptops-client[redis]      # Redis caching
+pip install promptops-client[otel]       # OpenTelemetry
+pip install promptops-client[all]        # All optional features
 
-  const npmInstallationCode = `# Install via npm
-npm install promptops
+# CLI tool is automatically installed
+promptops --help`
 
-# Or install with specific dependencies
-npm install promptops
+  const npmInstallationCode = `# Install the JavaScript/TypeScript client
+npm install promptops-client
 
-# For TypeScript support
-npm install --save-dev @types/promptops`
+# CLI tool installation
+npm install -g promptops-client    # Global CLI access
+npx promptops --help              # Run CLI without global install
 
-  const pythonAuthCode = `import promptops
+# TypeScript types are included`
 
-# Initialize with your API key and secret key
-client = promptops.Client(
-    api_key="your_api_key_here",
-    secret_key="your_secret_key_here"
+  const pythonAuthCode = `from promptops import PromptOpsClient
+
+# Initialize with your API key
+client = PromptOpsClient(
+    base_url="https://api.promptops.ai",
+    api_key="your_api_key_here"
 )
 
 # List prompts for a specific project and module
-prompts = client.list_prompts(
-    project_id="your_project_id",
-    module_id="your_module_id"
+prompts = await client.list_prompts(
+    module_id="your_module_id",
+    project_id="your_project_id"
 )
 print(f"Found {len(prompts)} prompts")
 
-# Get a specific prompt
-prompt = client.get_prompt(
+# Get a specific prompt with version
+prompt = await client.get_prompt(
     prompt_id="prompt_id_here",
-    project_id="your_project_id",
-    module_id="your_module_id"
+    version="1.0.0"
 )
 print(f"Prompt: {prompt.name}")
 print(f"Content: {prompt.content}")
 
-# Get prompts filtered by LLM model
-gpt_prompts = client.list_prompts(
-    project_id="your_project_id",
-    module_id="your_module_id",
-    llm_model="gpt-4"
+# Render a prompt with variables
+variables = PromptVariables(variables={
+    "user_name": "John",
+    "task": "Write a summary"
+})
+rendered = await client.render_prompt(
+    prompt_id="prompt_id_here",
+    variables=variables
 )
-print(f"Found {len(gpt_prompts)} GPT-4 prompts")`
+print(f"Rendered: {rendered.rendered_content}")`
 
-  const javascriptAuthCode = `import { PromptOps } from 'promptops';
+  const javascriptAuthCode = `import { PromptOpsClient } from 'promptops-client';
 
-// Initialize with your API key and secret key
-const client = new PromptOps({
-    apiKey: 'your_api_key_here',
-    secretKey: 'your_secret_key_here'
+// Initialize with your API key
+const client = new PromptOpsClient({
+  baseUrl: 'https://api.promptops.ai',
+  apiKey: 'your_api_key_here'
 });
+
+// Initialize the client
+await client.initialize();
 
 // List prompts for a specific project and module
-const prompts = await client.listPrompts({
-    projectId: 'your_project_id',
-    moduleId: 'your_module_id'
-});
+const prompts = await client.listPrompts(
+  'your_module_id',
+  'your_project_id'
+);
 console.log(\`Found \${prompts.length} prompts\`);
 
-// Get a specific prompt
-const prompt = await client.getPrompt('prompt_id_here', {
-    projectId: 'your_project_id',
-    moduleId: 'your_module_id'
+// Get a specific prompt with variables
+const content = await client.getPromptContent({
+  promptId: 'your_prompt_id',
+  version: '1.0.0',
+  variables: {
+    userName: 'John',
+    task: 'Write a summary'
+  }
 });
-console.log(\`Prompt: \${prompt.name}\`);
-console.log(\`Content: \${prompt.content}\`);
+console.log('Rendered content:', content);
 
-// Get prompts filtered by LLM model
-const gptPrompts = await client.listPrompts({
-    projectId: 'your_project_id',
-    moduleId: 'your_module_id',
-    llmModel: 'gpt-4'
-});
-console.log(\`Found \${gptPrompts.length} GPT-4 prompts\`);`
+// Check model compatibility
+const isCompatible = await client.getModelCompatibility(
+  'your_prompt_id',
+  'openai',
+  'gpt-4'
+);
+console.log('GPT-4 compatible:', isCompatible);`
 
   const pythonUsageCode = `import promptops
 
@@ -214,39 +231,81 @@ claude_response = client.use_prompt(
 print(claude_response.content)
 print(claude_response.usage)`
 
-  const javascriptUsageCode = `import { PromptOps } from 'promptops';
+  const javascriptUsageCode = `import { PromptOpsClient } from 'promptops-client';
 
-const client = new PromptOps({
-    apiKey: 'your_api_key_here',
-    secretKey: 'your_secret_key_here'
+const client = new PromptOpsClient({
+  baseUrl: 'https://api.promptops.ai',
+  apiKey: 'your_api_key_here'
 });
 
-// Use a prompt with project and module context
-const result = await client.usePrompt('prompt_id_here', {
-    projectId: 'your_project_id',
-    moduleId: 'your_module_id',
-    variables: {
-        userInput: 'Hello, how are you?',
-        language: 'English'
-    }
+await client.initialize();
+
+// Use a prompt with variables
+const result = await client.renderPrompt({
+  promptId: 'your_prompt_id',
+  variables: {
+    userInput: 'Hello, how are you?',
+    language: 'English'
+  },
+  modelProvider: 'openai',
+  modelName: 'gpt-4'
 });
 
-console.log(result.content);
-console.log(result.usage);
+console.log(result.renderedContent);
 
-// Use with specific LLM model
-const claudeResult = await client.usePrompt('prompt_id_here', {
-    projectId: 'your_project_id',
-    moduleId: 'your_module_id',
-    llmModel: 'claude-3-sonnet',
-    variables: {
-        userInput: 'Hello, how are you?',
-        language: 'English'
-    }
-});
+// Interactive mode
+const health = await client.healthCheck();
+console.log('Client health:', health.status);
 
-console.log(claudeResult.content);
-console.log(claudeResult.usage);`
+// Performance optimization
+const stats = client.getCacheStats();
+console.log('Cache hit rate:', (stats.hitRate * 100).toFixed(2) + '%');`
+
+  const cliExamplesCode = `# Python CLI Examples
+
+# List available prompts
+promptops list --api-key your_key --module-id your_module
+
+# Get a specific prompt
+promptops get hello-world --api-key your_key --version 1.0.0
+
+# Render a prompt with variables
+promptops render greeting --api-key your_key \\
+  --variables '{"name": "Developer", "company": "TechCorp"}'
+
+# Test connection
+promptops test --api-key your_key --base-url https://api.promptops.ai
+
+# Show statistics
+promptops stats --api-key your_key
+
+# Interactive mode
+promptops interactive --api-key your_key
+
+# Validate prompt
+promptops validate hello-world --api-key your_key
+
+# JavaScript CLI Examples
+
+# List available prompts
+npx promptops list --api-key your_key --module-id your_module
+
+# Get a specific prompt
+npx promptops get hello-world --api-key your_key
+
+# Render with JSON variables
+npx promptops render greeting --api-key your_key \\
+  --variables '{"name": "Developer", "framework": "TypeScript"}'
+
+# Health check
+npx promptops health --api-key your_key
+
+# Cache management
+npx promptops cache-stats --api-key your_key
+npx promptops clear-cache --api-key your_key --prompt-id greeting
+
+# Interactive mode
+npx promptops interactive --api-key your_key`
 
   const copyToClipboard = async (text: string) => {
     try {
@@ -560,6 +619,475 @@ console.log(claudeResult.usage);`
               </Card>
             </TabsContent>
           </Tabs>
+        </div>
+      </section>
+
+      {/* CLI Tools Section */}
+      <section className="py-16 bg-white">
+        <div className="px-6 max-w-7xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Command Line Interface
+            </h2>
+            <p className="text-xl text-gray-600">
+              Powerful CLI tools for prompt management and development workflows
+            </p>
+          </div>
+
+          <Tabs defaultValue="examples" className="max-w-4xl mx-auto">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="examples" className="flex items-center space-x-2">
+                <Terminal className="w-4 h-4" />
+                <span>Examples</span>
+              </TabsTrigger>
+              <TabsTrigger value="features" className="flex items-center space-x-2">
+                <Zap className="w-4 h-4" />
+                <span>Features</span>
+              </TabsTrigger>
+              <TabsTrigger value="setup" className="flex items-center space-x-2">
+                <Play className="w-4 h-4" />
+                <span>Quick Setup</span>
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="examples" className="mt-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Terminal className="w-5 h-5" />
+                    <span>CLI Usage Examples</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Common CLI commands for both Python and JavaScript
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="relative">
+                    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
+                      <code>{cliExamplesCode}</code>
+                    </pre>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="absolute top-2 right-2"
+                      onClick={() => copyToClipboard(cliExamplesCode)}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="features" className="mt-8">
+              <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Cpu className="w-5 h-5" />
+                      <span>Core Features</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium">Interactive Mode</h4>
+                        <p className="text-sm text-gray-600">Real-time prompt testing and debugging</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium">Variable Substitution</h4>
+                        <p className="text-sm text-gray-600">Dynamic variable injection from CLI</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium">Health Monitoring</h4>
+                        <p className="text-sm text-gray-600">Connection and service health checks</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium">Cache Management</h4>
+                        <p className="text-sm text-gray-600">View and clear cache statistics</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Database className="w-5 h-5" />
+                      <span>Advanced Capabilities</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium">Model Compatibility</h4>
+                        <p className="text-sm text-gray-600">Check prompt compatibility across models</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium">Batch Operations</h4>
+                        <p className="text-sm text-gray-600">Process multiple prompts efficiently</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium">Multiple Formats</h4>
+                        <p className="text-sm text-gray-600">JSON and text output formats</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium">Configuration Files</h4>
+                        <p className="text-sm text-gray-600">Save settings in config files</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="setup" className="mt-8">
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Play className="w-5 h-5" />
+                      <span>Developer Environment Setup</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Quick setup for development with automated scripts
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="relative">
+                      <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto">
+                        <code>{`# Clone and setup development environment
+git clone https://github.com/promptops/promptops.git
+cd promptops
+
+# Run the automated setup script
+./setup-dev.sh
+
+# This script will:
+# ✓ Set up Python virtual environment
+# ✓ Install JavaScript dependencies
+# ✓ Configure development tools
+# ✓ Set up pre-commit hooks
+# ✓ Create environment templates
+# ✓ Run validation tests
+
+# Quick start with CLI
+promptops --help
+npx promptops --help`}</code>
+                      </pre>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="absolute top-2 right-2"
+                        onClick={() => copyToClipboard(`# Clone and setup development environment
+git clone https://github.com/promptops/promptops.git
+cd promptops
+
+# Run the automated setup script
+./setup-dev.sh
+
+# This script will:
+# ✓ Set up Python virtual environment
+# ✓ Install JavaScript dependencies
+# ✓ Configure development tools
+# ✓ Set up pre-commit hooks
+# ✓ Create environment templates
+# ✓ Run validation tests
+
+# Quick start with CLI
+promptops --help
+npx promptops --help`)}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Python Development</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-2 text-sm">
+                        <li className="flex items-center space-x-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span>Virtual environment setup</span>
+                        </li>
+                        <li className="flex items-center space-x-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span>Pre-commit hooks configured</span>
+                        </li>
+                        <li className="flex items-center space-x-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span>Testing framework ready</span>
+                        </li>
+                        <li className="flex items-center space-x-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span>Type checking enabled</span>
+                        </li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">JavaScript Development</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-2 text-sm">
+                        <li className="flex items-center space-x-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span>npm dependencies installed</span>
+                        </li>
+                        <li className="flex items-center space-x-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span>TypeScript support enabled</span>
+                        </li>
+                        <li className="flex items-center space-x-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span>Build system configured</span>
+                        </li>
+                        <li className="flex items-center space-x-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span>Linting and formatting ready</span>
+                        </li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </section>
+
+      {/* Advanced CLI Section */}
+      <section className="py-16 bg-gray-50">
+        <div className="px-6 max-w-7xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Advanced CLI Features
+            </h2>
+            <p className="text-xl text-gray-600">
+              Professional-grade tools for prompt management and development workflows
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            <Card className="border-0 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Settings className="w-5 h-5 text-blue-600" />
+                  <span>Configuration Management</span>
+                </CardTitle>
+                <CardDescription>
+                  Save and manage CLI settings across projects
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium">Project Configs</h4>
+                      <p className="text-sm text-gray-600">Environment-specific settings</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium">Template Generation</h4>
+                      <p className="text-sm text-gray-600">Auto-generate config files</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium">Secrets Management</h4>
+                      <p className="text-sm text-gray-600">Secure credential storage</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Code2 className="w-5 h-5 text-purple-600" />
+                  <span>Development Tools</span>
+                </CardTitle>
+                <CardDescription>
+                  Streamline your prompt development workflow
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium">Local Testing</h4>
+                      <p className="text-sm text-gray-600">Test prompts without API calls</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium">Batch Processing</h4>
+                      <p className="text-sm text-gray-600">Process multiple prompts at once</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium">Debug Mode</h4>
+                      <p className="text-sm text-gray-600">Detailed logging and tracing</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <GitPullRequest className="w-5 h-5 text-green-600" />
+                  <span>CI/CD Integration</span>
+                </CardTitle>
+                <CardDescription>
+                  Automate prompt validation and deployment
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium">GitHub Actions</h4>
+                      <p className="text-sm text-gray-600">Pre-built workflow templates</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium">Pre-commit Hooks</h4>
+                      <p className="text-sm text-gray-600">Automated prompt validation</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium">Release Automation</h4>
+                      <p className="text-sm text-gray-600">Semantic versioning support</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="mt-12 max-w-4xl mx-auto">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Rocket className="w-5 h-5" />
+                  <span>Pro CLI Commands</span>
+                </CardTitle>
+                <CardDescription>
+                  Advanced commands for power users and automation
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="relative">
+                  <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
+                    <code>{`# Advanced Python CLI Usage
+
+# Initialize project configuration
+promptops init --project my-app --environment development
+
+# Run comprehensive tests
+promptops test --suite integration --coverage --report-html
+
+# Deploy prompts to staging
+promptops deploy --environment staging --prompts prompts/ --dry-run
+
+# Monitor performance metrics
+promptops monitor --metrics latency,success_rate --timeframe 24h
+
+# Advanced JavaScript CLI Usage
+
+# Create project scaffold
+npx promptops create my-typescript-app --template typescript
+
+# Run validation pipeline
+npx promptops validate --all --strict --fail-on-warning
+
+# Generate documentation
+npx promptops docs --output ./docs --format markdown
+
+# Setup CI/CD pipeline
+npx promptops ci-setup --platform github --branch main`}</code>
+                  </pre>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="absolute top-2 right-2"
+                    onClick={() => copyToClipboard(`# Advanced Python CLI Usage
+
+# Initialize project configuration
+promptops init --project my-app --environment development
+
+# Run comprehensive tests
+promptops test --suite integration --coverage --report-html
+
+# Deploy prompts to staging
+promptops deploy --environment staging --prompts prompts/ --dry-run
+
+# Monitor performance metrics
+promptops monitor --metrics latency,success_rate --timeframe 24h
+
+# Advanced JavaScript CLI Usage
+
+# Create project scaffold
+npx promptops create my-typescript-app --template typescript
+
+# Run validation pipeline
+npx promptops validate --all --strict --fail-on-warning
+
+# Generate documentation
+npx promptops docs --output ./docs --format markdown
+
+# Setup CI/CD pipeline
+npx promptops ci-setup --platform github --branch main`)}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </section>
 

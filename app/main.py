@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import engine
 from app.models import Base
-from app.routers import templates, render, aliases, evals, policies, auth, projects, modules, prompts, model_compatibilities, approval_requests, delivery, dashboard, users, client_api, analytics, governance, model_testing, roles, approval_flows
+from app.routers import templates, render, aliases, evals, policies, auth, projects, modules, prompts, model_compatibilities, approval_requests, delivery, dashboard, users, client_api, analytics, governance, model_testing, roles, approval_flows, ab_testing
 
 # Configure structured logging
 structlog.configure(
@@ -95,6 +95,9 @@ app.include_router(approval_flows.router, prefix="/v1/approval-flows", tags=["ap
 
 # Include Client API endpoints
 app.include_router(client_api.router, prefix="/v1/client", tags=["client-api"])
+
+# Include A/B Testing endpoints
+app.include_router(ab_testing.router, prefix="/v1", tags=["ab-testing"])
 
 # Include AI Assistant endpoints with proper database storage and authentication
 from app.routers.ai_assistant_final import router as ai_assistant_router

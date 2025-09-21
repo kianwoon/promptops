@@ -1,0 +1,189 @@
+version: '3.8'
+
+services:
+  # Python client development environment
+  python-client-dev:
+    build:
+      context: ./promptops-client
+      dockerfile: Dockerfile
+    container_name: promptops-python-client-dev
+    environment:
+      - PROMPTOPS_API_URL=http://localhost:8000
+      - PROMPTOPS_API_KEY=${PROMPTOPS_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - PYTHONPATH=/app
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./promptops-client:/app
+      - python-client-cache:/tmp/promptops-cache
+    depends_on:
+      - redis
+    networks:
+      - promptops-network
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+
+  # Python client production environment
+  python-client-prod:
+    build:
+      context: ./promptops-client
+      dockerfile: Dockerfile.prod
+    container_name: promptops-python-client-prod
+    environment:
+      - PROMPTOPS_API_URL=${PROMPTOPS_API_URL}
+      - PROMPTOPS_API_KEY=${PROMPTOPS_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+    volumes:
+      - python-client-cache:/tmp/promptops-cache
+    depends_on:
+      - redis
+    networks:
+      - promptops-network
+    profiles:
+      - production
+
+  # JavaScript/TypeScript client development environment
+  js-client-dev:
+    build:
+      context: ./promptops-client-npm
+      dockerfile: Dockerfile
+    container_name: promptops-js-client-dev
+    environment:
+      - PROMPTOPS_API_URL=http://localhost:8000
+      - PROMPTOPS_API_KEY=${PROMPTOPS_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=development
+    volumes:
+      - ./promptops-client-npm:/app
+      - js-client-cache:/tmp/promptops-cache
+    depends_on:
+      - redis
+    networks:
+      - promptops-network
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+
+  # JavaScript/TypeScript client production environment
+  js-client-prod:
+    build:
+      context: ./promptops-client-npm
+      dockerfile: Dockerfile.prod
+    container_name: promptops-js-client-prod
+    environment:
+      - PROMPTOPS_API_URL=${PROMPTOPS_API_URL}
+      - PROMPTOPS_API_KEY=${PROMPTOPS_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+    volumes:
+      - js-client-cache:/tmp/promptops-cache
+    depends_on:
+      - redis
+    networks:
+      - promptops-network
+    profiles:
+      - production
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: promptops-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - promptops-network
+
+  # PostgreSQL for development testing
+  postgres:
+    image: postgres:15-alpine
+    container_name: promptops-postgres
+    environment:
+      - POSTGRES_DB=promptops
+      - POSTGRES_USER=promptops
+      - POSTGRES_PASSWORD=promptops
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U promptops -d promptops"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - promptops-network
+    profiles:
+      - testing
+
+  # Testing environment
+  python-client-test:
+    build:
+      context: ./promptops-client
+      dockerfile: Dockerfile
+    container_name: promptops-python-client-test
+    environment:
+      - PROMPTOPS_API_URL=http://localhost:8000
+      - PROMPTOPS_API_KEY=${PROMPTOPS_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - PYTHONPATH=/app
+      - LOG_LEVEL=DEBUG
+      - TESTING=true
+    volumes:
+      - ./promptops-client:/app
+      - python-client-cache:/tmp/promptops-cache
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - promptops-network
+    command: pytest
+    profiles:
+      - testing
+
+  js-client-test:
+    build:
+      context: ./promptops-client-npm
+      dockerfile: Dockerfile
+    container_name: promptops-js-client-test
+    environment:
+      - PROMPTOPS_API_URL=http://localhost:8000
+      - PROMPTOPS_API_KEY=${PROMPTOPS_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=test
+      - TESTING=true
+    volumes:
+      - ./promptops-client-npm:/app
+      - js-client-cache:/tmp/promptops-cache
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - promptops-network
+    command: npm test
+    profiles:
+      - testing
+
+volumes:
+  redis-data:
+  postgres-data:
+  python-client-cache:
+  js-client-cache:
+
+networks:
+  promptops-network:
+    driver: bridge

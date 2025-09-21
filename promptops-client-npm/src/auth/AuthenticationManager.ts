@@ -15,7 +15,8 @@ export class AuthenticationManager {
     this.baseUrl = config.baseUrl;
     this.apiKey = config.apiKey;
 
-    if (!this.apiKey) {
+    // Allow development environment to work without API key for certain operations
+    if (!this.apiKey && config.environment !== 'development') {
       throw new ConfigurationError('API key is required for authentication');
     }
 
@@ -29,11 +30,17 @@ export class AuthenticationManager {
   }
 
   private getHeaders(): Record<string, string> {
-    return {
-      'Authorization': `Bearer ${this.apiKey}`,
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'User-Agent': 'promptops-client/1.0.0',
     };
+
+    // Only add Authorization header if we have an API key
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+
+    return headers;
   }
 
   private setupInterceptors(): void {

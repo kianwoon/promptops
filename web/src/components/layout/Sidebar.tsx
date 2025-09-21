@@ -1,5 +1,5 @@
 import React from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   FileText,
@@ -20,7 +20,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
-import { useAuth, usePermission } from '@/contexts/AuthContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface NavigationItem {
   name: string
@@ -51,7 +51,8 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
-  const { user, logout, hasPermission, dbUser } = useAuth()
+  const navigate = useNavigate()
+  const { user, hasPermission, dbUser } = useAuth()
   const [avatarError, setAvatarError] = React.useState(false)
 
   const resolvedAvatar = React.useMemo(() => {
@@ -69,10 +70,12 @@ export function Sidebar({ className }: SidebarProps) {
   }, [resolvedAvatar])
 
   React.useEffect(() => {
-    if (import.meta.env.DEV) {
+    if (process.env.NODE_ENV === 'development') {
       console.log('🔍 Sidebar Debug:', {
         user,
         dbUser,
+        userRole: user?.role,
+        dbUserRole: dbUser?.role,
         navigationItems: navigation.map(item => ({
           name: item.name,
           permission: item.permission,
@@ -107,7 +110,11 @@ export function Sidebar({ className }: SidebarProps) {
         {/* Logo and toggle */}
         <div className="flex h-16 items-center justify-between px-4 border-b border-border">
           {sidebarOpen ? (
-            <div className="flex items-center">
+            <div
+              className="flex items-center cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => navigate('/')}
+              title="Go to landing page"
+            >
               <img src="/src/assets/logo-nav.svg" alt="PromptOps Logo" className="h-10 w-10" onError={(e) => {
                 const target = e.target as HTMLImageElement;
                 target.style.display = 'none';
@@ -116,7 +123,11 @@ export function Sidebar({ className }: SidebarProps) {
               <span className="ml-2 text-xl font-semibold">PromptOps</span>
             </div>
           ) : (
-            <div className="flex items-center justify-center w-full">
+            <div
+              className="flex items-center justify-center w-full cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => navigate('/')}
+              title="Go to landing page"
+            >
               <img src="/src/assets/logo-nav.svg" alt="PromptOps Logo" className="h-10 w-10" onError={(e) => {
                 const target = e.target as HTMLImageElement;
                 target.style.display = 'none';
@@ -184,8 +195,8 @@ export function Sidebar({ className }: SidebarProps) {
             </Avatar>
             {sidebarOpen && (
               <div className="ml-3 flex-1">
-                <p className="text-sm font-medium truncate">{user?.name}</p>
-                <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+                <p className="text-sm font-medium truncate">{dbUser?.name || user?.name}</p>
+                <p className="text-xs text-muted-foreground capitalize">{dbUser?.role || user?.role}</p>
               </div>
             )}
           </div>

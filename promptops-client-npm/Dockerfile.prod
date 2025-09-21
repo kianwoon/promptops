@@ -1,0 +1,46 @@
+# JavaScript/TypeScript client production Dockerfile
+FROM node:18-slim as builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json tsconfig.json rollup.config.js ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build the package
+RUN npm run build
+
+# Production stage
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install only production dependencies
+COPY package*.json ./
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy built files from builder
+COPY --from=builder /app/dist ./dist/
+COPY --from=builder /app/bin ./bin/
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodeuser -u 1001
+USER nodeuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD node -e "console.log('Node.js client healthy')" || exit 1
+
+# Expose ports for any services
+EXPOSE 3000
+
+# Default command
+CMD ["node", "bin/promptops.js", "--help"]

@@ -9,26 +9,36 @@ import os
 import sys
 from typing import Dict, Any
 
-from . import PromptOpsClient, ClientConfig, PromptVariables, ModelProvider
+from . import PromptOpsClient, ClientConfig, PromptVariables, ModelProvider, Environment, create_client_for_environment
 
 
 def create_config_from_args(args) -> ClientConfig:
     """Create client configuration from command line arguments"""
-    return ClientConfig(
+    from .models import CacheConfig, TelemetryConfig
+
+    # Create configuration with environment detection
+    config = ClientConfig(
         base_url=args.base_url,
         api_key=args.api_key,
         timeout=args.timeout,
-        cache=type('', (), {
-            'level': args.cache_level,
-            'ttl': args.cache_ttl,
-            'max_size': args.cache_size,
-            'redis_url': args.redis_url
-        })(),
-        telemetry=type('', (), {
-            'enabled': not args.disable_telemetry,
-            'sample_rate': args.telemetry_sample_rate
-        })()
+        auto_detect_environment=not args.environment,  # Don't auto-detect if environment is specified
+        cache=CacheConfig(
+            level=args.cache_level,
+            ttl=args.cache_ttl,
+            max_size=args.cache_size,
+            redis_url=args.redis_url
+        ),
+        telemetry=TelemetryConfig(
+            enabled=not args.disable_telemetry,
+            sample_rate=args.telemetry_sample_rate
+        )
     )
+
+    # Set environment if specified
+    if args.environment:
+        config.environment.environment = args.environment
+
+    return config
 
 
 async def cmd_get_prompt(args):
@@ -190,10 +200,13 @@ def create_parser():
     )
 
     # Global arguments
-    parser.add_argument('--base-url', default=os.environ.get('PROMPTOPS_BASE_URL', 'https://api.promptops.ai'),
-                        help='PromptOps API base URL')
-    parser.add_argument('--api-key', required=True,
+    parser.add_argument('--base-url', default=os.environ.get('PROMPTOPS_BASE_URL'),
+                        help='PromptOps API base URL (auto-detected if not provided)')
+    parser.add_argument('--api-key',
                         help='API key (or set PROMPTOPS_API_KEY environment variable)')
+    parser.add_argument('--environment', choices=['development', 'staging', 'production'],
+                        default=os.environ.get('PROMPTOPS_ENVIRONMENT'),
+                        help='Target environment (auto-detected if not provided)')
     parser.add_argument('--timeout', type=float, default=30.0,
                         help='Request timeout in seconds')
     parser.add_argument('--output-format', choices=['json', 'text'], default='text',
@@ -253,6 +266,16 @@ def create_parser():
     create_parser = subparsers.add_parser('create', help='Create a new prompt')
     create_parser.add_argument('--file', '-f', help='Read prompt data from file')
 
+    # Environment detection command
+    env_parser = subparsers.add_parser('env', help='Show environment information')
+    env_parser.add_argument('--detect', action='store_true',
+                           help='Auto-detect environment and show recommendations')
+
+    # Health check command
+    health_parser = subparsers.add_parser('health', help='Perform comprehensive health check')
+    health_parser.add_argument('--format', choices=['json', 'text'], default='text',
+                              help='Output format')
+
     return parser
 
 
@@ -264,7 +287,8 @@ def main():
     # Get API key from environment if not provided
     if not args.api_key:
         args.api_key = os.environ.get('PROMPTOPS_API_KEY')
-        if not args.api_key:
+        # API key is optional for environment detection commands
+        if not args.api_key and args.command not in ['env', 'health']:
             print("Error: API key is required. Use --api-key or set PROMPTOPS_API_KEY environment variable.",
                   file=sys.stderr)
             sys.exit(1)
@@ -284,6 +308,8 @@ def main():
         'test': cmd_test_connection,
         'stats': cmd_stats,
         'create': cmd_create_prompt,
+        'env': cmd_env_info,
+        'health': cmd_health_check,
     }
 
     if not args.command:
@@ -297,6 +323,60 @@ def main():
         sys.exit(1)
     except Exception as e:
         print(f"Unexpected error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+async def cmd_env_info(args):
+    """Show environment information"""
+    try:
+        if args.detect:
+            # Use auto-detection
+            from .environment import create_environment_config
+            env_config = create_environment_config()
+            print(f"Auto-detected Environment: {env_config.environment}")
+            print(f"Base URL: {env_config.base_url}")
+            print(f"Recommendations: {json.dumps(env_config.get_recommendations(), indent=2)}")
+        else:
+            # Use provided configuration
+            config = create_config_from_args(args)
+            print(f"Environment: {config.environment.environment}")
+            print(f"Base URL: {config.base_url}")
+            print(f"Auto-detection: {config.auto_detect_environment}")
+            print(f"Connection Test: {config.environment.enable_connection_test}")
+            print(f"Recommendations: {json.dumps(config.environment.get_recommendations(), indent=2)}")
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+async def cmd_health_check(args):
+    """Perform comprehensive health check"""
+    try:
+        config = create_config_from_args(args)
+        async with PromptOpsClient(config) as client:
+            health_result = await client.health_check()
+
+            if args.format == 'json':
+                print(json.dumps(health_result, indent=2, default=str))
+            else:
+                print("Health Check Results:")
+                print(f"  Environment: {health_result['environment']}")
+                print(f"  Base URL: {health_result['baseUrl']}")
+                print(f"  Client Initialized: {health_result['clientInitialized']}")
+                print(f"  Connection: {'✓' if health_result['connection']['healthy'] else '✗'}")
+                print(f"  Authentication: {'✓' if health_result['authentication'] else '✗'}")
+                print(f"  Cache: {'✓' if not health_result['cache']['enabled'] or health_result['cache']['healthy'] else '✗'}")
+                print(f"  Overall: {'✓' if health_result['overall'] else '✗'}")
+
+                if health_result['connection'].get('error'):
+                    print(f"  Connection Error: {health_result['connection']['error']}")
+
+                if health_result['cache'].get('error'):
+                    print(f"  Cache Error: {health_result['cache']['error']}")
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
 

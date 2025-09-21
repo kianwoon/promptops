@@ -10,13 +10,14 @@ __author__ = "PromptOps Team"
 __email__ = "team@promptops.ai"
 
 # Core classes
-from .client import PromptOpsClient, create_client
+from .client import PromptOpsClient, create_client, create_client_for_environment
 from .models import (
     # Configuration
     ClientConfig,
     CacheConfig,
     RetryConfig,
     TelemetryConfig,
+    EnvironmentConfig,
 
     # Data models
     PromptResponse,
@@ -39,6 +40,14 @@ from .models import (
     # Statistics
     CacheStats,
     ClientStats,
+)
+
+# Environment management
+from .environment import (
+    Environment,
+    EnvironmentConfig as DynamicEnvironmentConfig,
+    create_environment_config,
+    ConnectionManager,
 )
 
 # Exceptions
@@ -68,12 +77,14 @@ __all__ = [
     # Core
     "PromptOpsClient",
     "create_client",
+    "create_client_for_environment",
 
     # Configuration
     "ClientConfig",
     "CacheConfig",
     "RetryConfig",
     "TelemetryConfig",
+    "EnvironmentConfig",
 
     # Data models
     "PromptResponse",
@@ -119,6 +130,12 @@ __all__ = [
 
     # Version
     "__version__",
+
+    # Environment management
+    "Environment",
+    "DynamicEnvironmentConfig",
+    "create_environment_config",
+    "ConnectionManager",
 ]
 
 # Default configuration
@@ -127,3 +144,6 @@ DEFAULT_TIMEOUT = 30.0
 DEFAULT_CACHE_LEVEL = CacheLevel.MEMORY
 DEFAULT_CACHE_TTL = 300
 DEFAULT_ENABLE_TELEMETRY = True
+
+# Legacy constants for backward compatibility
+DEFAULT_ENVIRONMENT = "production"

@@ -1,0 +1,62 @@
+name: Generate Changelog
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  generate-changelog:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18.x
+
+    - name: Install conventional-changelog-cli
+      run: npm install -g conventional-changelog-cli conventional-changelog-conventionalcommits
+
+    - name: Extract tag version
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Generate changelog
+      run: |
+        conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add CHANGELOG.md
+        git commit -m "docs: update changelog for release ${{ steps.version.outputs.VERSION }}"
+        git push origin HEAD:${{ github.ref_name }}
+
+    - name: Update release notes
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const version = '${{ steps.version.outputs.VERSION }}';
+
+          // Extract version section from changelog
+          const versionRegex = new RegExp(`## \\[${version}\\]([\\s\\S]*?)(?=## \\[|$)`);
+          const match = changelog.match(versionRegex);
+
+          if (match) {
+            const versionNotes = match[1].trim();
+
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: context.payload.release.id,
+              body: versionNotes
+            });
+          }

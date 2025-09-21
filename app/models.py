@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Integer, Boolean, JSON, ForeignKey, Enum, ForeignKeyConstraint, UniqueConstraint, text, select, func
+from sqlalchemy import Column, String, DateTime, Integer, Boolean, JSON, ForeignKey, Enum, ForeignKeyConstraint, UniqueConstraint, text, select, func, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -172,6 +172,7 @@ class Module(Base):
     # Foreign key
     __table_args__ = (
         ForeignKeyConstraint(['project_id'], ['projects.id']),
+        UniqueConstraint('id', name='uq_modules_id'),
     )
 
     # Relationships
@@ -310,6 +311,7 @@ class Prompt(Base):
     # Foreign key
     __table_args__ = (
         ForeignKeyConstraint(['module_id'], ['modules.id']),
+        UniqueConstraint('id', name='uq_prompts_id'),
     )
 
     # Relationships
@@ -1495,3 +1497,306 @@ class WorkflowMetrics(Base):
     # Relationships
     workflow_definition = relationship("WorkflowDefinition", back_populates="metrics")
     workflow_instance = relationship("WorkflowInstance", back_populates="metrics")
+
+# A/B Testing Framework Models
+
+class ExperimentStatus(enum.Enum):
+    DRAFT = "draft"
+    RUNNING = "running"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+class TrafficAllocationStrategy(enum.Enum):
+    UNIFORM = "uniform"
+    WEIGHTED = "weighted"
+    STICKY = "sticky"
+    GEOGRAPHIC = "geographic"
+    USER_ATTRIBUTE = "user_attribute"
+
+class EventType(enum.Enum):
+    PROMPT_REQUEST = "prompt_request"
+    PROMPT_RENDER = "prompt_render"
+    MODEL_RESPONSE = "model_response"
+    CONVERSION = "conversion"
+    ERROR = "error"
+    CUSTOM = "custom"
+
+class Experiment(Base):
+    """
+    A/B Testing Experiment Model
+    """
+    __tablename__ = "experiments"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+
+    # Experiment configuration
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    prompt_id = Column(String, ForeignKey("prompts.id", ondelete="CASCADE"), nullable=False)
+
+    # Status and lifecycle
+    status = Column(Enum(ExperimentStatus), default=ExperimentStatus.DRAFT, nullable=False, index=True)
+
+    # Timing configuration
+    start_time = Column(DateTime(timezone=True), nullable=True)
+    end_time = Column(DateTime(timezone=True), nullable=True)
+
+    # Traffic allocation
+    traffic_percentage = Column(Integer, default=50, nullable=False)  # 0-100
+    allocation_strategy = Column(Enum(TrafficAllocationStrategy), default=TrafficAllocationStrategy.UNIFORM, nullable=False)
+
+    # Targeting and segmentation
+    target_audience = Column(JSON, nullable=True)  # User segments, demographics, etc.
+    geographic_targeting = Column(JSON, nullable=True)  # Country, region, city targeting
+    user_attributes = Column(JSON, nullable=True)  # Custom user attributes for targeting
+
+    # Statistical configuration
+    min_sample_size = Column(Integer, default=1000, nullable=False)
+    statistical_significance = Column(Integer, default=95, nullable=False)  # 95%, 99%, etc.
+    primary_metric = Column(String, nullable=False)  # Main success metric
+    secondary_metrics = Column(JSON, nullable=True)  # Additional metrics to track
+
+    # Experiment variants (A/B test arms)
+    control_variant = Column(JSON, nullable=False)  # Control group configuration
+    treatment_variants = Column(JSON, nullable=False)  # Array of treatment configurations
+
+    # Results and analytics
+    results = Column(JSON, nullable=True)  # Aggregated experiment results
+    winner_determined = Column(Boolean, default=False, nullable=False)
+    winning_variant = Column(String, nullable=True)  # ID of winning variant
+
+    # Metadata
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_experiment_project_status', 'project_id', 'status'),
+        Index('idx_experiment_prompt_status', 'prompt_id', 'status'),
+        Index('idx_experiment_time_range', 'start_time', 'end_time'),
+    )
+
+    # Relationships
+    project = relationship("Project", backref="experiments")
+    prompt = relationship("Prompt", backref="experiments")
+    creator = relationship("User", foreign_keys=[created_by], backref="created_experiments")
+    assignments = relationship("ExperimentAssignment", back_populates="experiment", cascade="all, delete-orphan")
+    events = relationship("ExperimentEvent", back_populates="experiment", cascade="all, delete-orphan")
+
+class ExperimentAssignment(Base):
+    """
+    User/Session Assignment to Experiment Variants
+    """
+    __tablename__ = "experiment_assignments"
+
+    id = Column(String, primary_key=True)
+    experiment_id = Column(String, ForeignKey("experiments.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Assignment details
+    user_id = Column(String, nullable=True, index=True)  # User identifier if available
+    session_id = Column(String, nullable=False, index=True)  # Session identifier
+    device_id = Column(String, nullable=True, index=True)  # Device identifier
+
+    # Variant assignment
+    variant_id = Column(String, nullable=False)  # ID of assigned variant
+    variant_name = Column(String, nullable=False)  # Human-readable variant name
+    variant_config = Column(JSON, nullable=False)  # Complete variant configuration
+
+    # Assignment metadata
+    assigned_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    assignment_reason = Column(String, nullable=True)  # Why this assignment was made
+    is_consistent = Column(Boolean, default=True, nullable=False)  # Should remain consistent for this user/session
+
+    # Foreign key constraint
+    __table_args__ = (
+        Index('idx_assignment_experiment_user', 'experiment_id', 'user_id'),
+        Index('idx_assignment_session_time', 'session_id', 'assigned_at'),
+    )
+
+    # Relationships
+    experiment = relationship("Experiment", back_populates="assignments")
+
+class ExperimentEvent(Base):
+    """
+    Event Tracking for A/B Testing Analytics
+    """
+    __tablename__ = "experiment_events"
+
+    id = Column(String, primary_key=True)
+    experiment_id = Column(String, ForeignKey("experiments.id", ondelete="CASCADE"), nullable=False, index=True)
+    assignment_id = Column(String, ForeignKey("experiment_assignments.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Event details
+    event_type = Column(Enum(EventType), nullable=False, index=True)
+    event_name = Column(String, nullable=False)  # Specific event identifier
+    event_data = Column(JSON, nullable=True)  # Event-specific data
+
+    # Context information
+    user_id = Column(String, nullable=True, index=True)
+    session_id = Column(String, nullable=False, index=True)
+    device_id = Column(String, nullable=True)
+
+    # Performance metrics
+    response_time_ms = Column(Integer, nullable=True)
+    tokens_used = Column(Integer, nullable=True)
+    cost_usd = Column(String, nullable=True)  # Use String to avoid precision issues
+
+    # Success indicators
+    conversion_value = Column(String, nullable=True)  # Use String for decimal values
+    success_indicator = Column(Boolean, nullable=True)
+    error_message = Column(String, nullable=True)
+
+    # Timestamps
+    occurred_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Indexes for analytics performance
+    __table_args__ = (
+        Index('idx_event_experiment_type', 'experiment_id', 'event_type'),
+        Index('idx_event_user_session', 'user_id', 'session_id'),
+        Index('idx_event_time_range', 'occurred_at'),
+    )
+
+    # Relationships
+    experiment = relationship("Experiment", back_populates="events")
+    assignment = relationship("ExperimentAssignment", backref="events")
+
+class ExperimentResult(Base):
+    """
+    Pre-computed Aggregated Results for A/B Tests
+    """
+    __tablename__ = "experiment_results"
+
+    id = Column(String, primary_key=True)
+    experiment_id = Column(String, ForeignKey("experiments.id", ondelete="CASCADE"), nullable=False, index=True)
+    variant_id = Column(String, nullable=False)
+    variant_name = Column(String, nullable=False)
+
+    # Statistical results
+    sample_size = Column(Integer, nullable=False)
+    conversion_count = Column(Integer, default=0, nullable=False)
+    conversion_rate = Column(String, nullable=False)  # Use String for decimal precision
+
+    # Statistical significance
+    confidence_interval_lower = Column(String, nullable=False)
+    confidence_interval_upper = Column(String, nullable=False)
+    p_value = Column(String, nullable=False)
+    statistical_significance = Column(Boolean, nullable=False)
+
+    # Performance metrics
+    average_response_time = Column(Integer, nullable=True)
+    average_tokens_used = Column(Integer, nullable=True)
+    total_cost = Column(String, nullable=True)
+
+    # Time period
+    metric_period_start = Column(DateTime(timezone=True), nullable=False)
+    metric_period_end = Column(DateTime(timezone=True), nullable=False)
+
+    # Aggregation metadata
+    is_control = Column(Boolean, nullable=False)
+    calculation_method = Column(String, nullable=False)  # "frequentist", "bayesian", etc.
+
+    # Timestamps
+    calculated_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Indexes for performance
+    __table_args__ = (
+        Index('idx_result_experiment_variant', 'experiment_id', 'variant_id'),
+        Index('idx_result_period', 'metric_period_start', 'metric_period_end'),
+        UniqueConstraint('experiment_id', 'variant_id', 'metric_period_start', 'metric_period_end', name='uq_experiment_variant_period'),
+    )
+
+    # Relationships
+    experiment = relationship("Experiment", backref="experiment_results")
+
+class FeatureFlag(Base):
+    """
+    Feature Flag System for Gradual Rollouts
+    """
+    __tablename__ = "feature_flags"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(String, nullable=True)
+
+    # Feature configuration
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    prompt_id = Column(String, ForeignKey("prompts.id", ondelete="SET NULL"), nullable=True)
+
+    # Rollout configuration
+    enabled = Column(Boolean, default=False, nullable=False)
+    rollout_percentage = Column(Integer, default=0, nullable=False)  # 0-100
+    rollout_strategy = Column(Enum(TrafficAllocationStrategy), default=TrafficAllocationStrategy.UNIFORM, nullable=False)
+
+    # Targeting rules
+    targeting_rules = Column(JSON, nullable=True)  # Complex targeting conditions
+
+    # Staged rollout configuration
+    is_staged_rollout = Column(Boolean, default=False, nullable=False)
+    current_stage = Column(Integer, default=1, nullable=False)
+    total_stages = Column(Integer, default=5, nullable=False)
+    stage_rollout_percentage = Column(JSON, nullable=True)  # [10, 25, 50, 75, 100]
+
+    # Canary release configuration
+    is_canary_release = Column(Boolean, default=False, nullable=False)
+    canary_percentage = Column(Integer, default=5, nullable=False)
+    canary_duration_hours = Column(Integer, default=24, nullable=False)
+
+    # Scheduling
+    scheduled_enable_time = Column(DateTime(timezone=True), nullable=True)
+    scheduled_disable_time = Column(DateTime(timezone=True), nullable=True)
+
+    # Metadata
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_feature_project_enabled', 'project_id', 'enabled'),
+        Index('idx_feature_scheduled', 'scheduled_enable_time', 'scheduled_disable_time'),
+    )
+
+    # Relationships
+    project = relationship("Project", backref="feature_flags")
+    prompt = relationship("Prompt", backref="feature_flags")
+    creator = relationship("User", foreign_keys=[created_by], backref="created_feature_flags")
+
+class UserSegment(Base):
+    """
+    User Segmentation for Targeted Experiments
+    """
+    __tablename__ = "user_segments"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+
+    # Segment definition
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    segment_conditions = Column(JSON, nullable=False)  # Conditions defining this segment
+    segment_type = Column(String, nullable=False)  # "dynamic", "static", "behavioral"
+
+    # Segment statistics
+    estimated_user_count = Column(Integer, default=0, nullable=False)
+    actual_user_count = Column(Integer, default=0, nullable=False)
+
+    # Metadata
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_segment_project_active', 'project_id', 'is_active'),
+    )
+
+    # Relationships
+    project = relationship("Project", backref="user_segments")
+    creator = relationship("User", foreign_keys=[created_by], backref="created_user_segments")

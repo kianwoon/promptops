@@ -2,8 +2,17 @@
  * Core types for PromptOps Client
  */
 
+// Performance monitoring types
+export * from './performance';
+
+// A/B Testing types
+export * from './ab-testing';
+
+// Environment types
+export * from './environment';
+
 export interface PromptOpsConfig {
-  baseUrl: string;
+  baseUrl?: string;
   apiKey?: string;
   timeout?: number;
   retries?: number;
@@ -13,6 +22,13 @@ export interface PromptOpsConfig {
   redisUrl?: string;
   telemetryEndpoint?: string;
   userAgent?: string;
+  environment?: string;
+  autoDetectEnvironment?: boolean;
+  connectionTimeout?: number;
+  maxRetries?: number;
+  retryDelay?: number;
+  enableConnectionTest?: boolean;
+  healthCheckEndpoint?: string;
 }
 
 export interface PromptRequest {

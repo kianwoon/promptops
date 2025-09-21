@@ -2144,3 +2144,301 @@ class ModelTestResponse(BaseModel):
     successful_tests: int
     failed_tests: int
     test_execution_time_ms: int
+
+
+# A/B Testing Framework Schemas
+
+class ExperimentStatus(str, enum.Enum):
+    DRAFT = "draft"
+    RUNNING = "running"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+class TrafficAllocationStrategy(str, enum.Enum):
+    UNIFORM = "uniform"
+    WEIGHTED = "weighted"
+    STICKY = "sticky"
+    GEOGRAPHIC = "geographic"
+    USER_ATTRIBUTE = "user_attribute"
+
+class EventType(str, enum.Enum):
+    PROMPT_REQUEST = "prompt_request"
+    PROMPT_RENDER = "prompt_render"
+    MODEL_RESPONSE = "model_response"
+    CONVERSION = "conversion"
+    ERROR = "error"
+    CUSTOM = "custom"
+
+class ExperimentVariant(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    weight: int = Field(default=1, ge=1, le=100)
+    prompt_config: Dict[str, Any] = Field(default_factory=dict)
+    is_control: bool = False
+
+class ExperimentCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    project_id: str
+    prompt_id: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    traffic_percentage: int = Field(default=50, ge=1, le=100)
+    allocation_strategy: TrafficAllocationStrategy = TrafficAllocationStrategy.UNIFORM
+    target_audience: Optional[Dict[str, Any]] = None
+    geographic_targeting: Optional[Dict[str, Any]] = None
+    user_attributes: Optional[Dict[str, Any]] = None
+    min_sample_size: int = Field(default=1000, ge=100)
+    statistical_significance: int = Field(default=95, ge=80, le=99)
+    primary_metric: str = Field(..., min_length=1)
+    secondary_metrics: Optional[List[str]] = None
+    control_variant: ExperimentVariant
+    treatment_variants: List[ExperimentVariant] = Field(..., min_items=1)
+
+class ExperimentUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    status: Optional[ExperimentStatus] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    traffic_percentage: Optional[int] = Field(None, ge=1, le=100)
+    target_audience: Optional[Dict[str, Any]] = None
+    geographic_targeting: Optional[Dict[str, Any]] = None
+    user_attributes: Optional[Dict[str, Any]] = None
+    min_sample_size: Optional[int] = Field(None, ge=100)
+    statistical_significance: Optional[int] = Field(None, ge=80, le=99)
+    primary_metric: Optional[str] = Field(None, min_length=1)
+    secondary_metrics: Optional[List[str]] = None
+
+class ExperimentResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str]
+    project_id: str
+    prompt_id: str
+    status: ExperimentStatus
+    start_time: Optional[datetime]
+    end_time: Optional[datetime]
+    traffic_percentage: int
+    allocation_strategy: TrafficAllocationStrategy
+    target_audience: Optional[Dict[str, Any]]
+    geographic_targeting: Optional[Dict[str, Any]]
+    user_attributes: Optional[Dict[str, Any]]
+    min_sample_size: int
+    statistical_significance: int
+    primary_metric: str
+    secondary_metrics: Optional[List[str]]
+    control_variant: ExperimentVariant
+    treatment_variants: List[ExperimentVariant]
+    results: Optional[Dict[str, Any]]
+    winner_determined: bool
+    winning_variant: Optional[str]
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ExperimentAssignmentCreate(BaseModel):
+    experiment_id: str
+    user_id: Optional[str] = None
+    session_id: str
+    device_id: Optional[str] = None
+    variant_id: str
+    variant_name: str
+    variant_config: Dict[str, Any]
+    assignment_reason: Optional[str] = None
+    is_consistent: bool = True
+
+class ExperimentAssignmentResponse(BaseModel):
+    id: str
+    experiment_id: str
+    user_id: Optional[str]
+    session_id: str
+    device_id: Optional[str]
+    variant_id: str
+    variant_name: str
+    variant_config: Dict[str, Any]
+    assigned_at: datetime
+    assignment_reason: Optional[str]
+    is_consistent: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ExperimentEventCreate(BaseModel):
+    experiment_id: str
+    assignment_id: Optional[str] = None
+    event_type: EventType
+    event_name: str
+    event_data: Optional[Dict[str, Any]] = None
+    user_id: Optional[str] = None
+    session_id: str
+    device_id: Optional[str] = None
+    response_time_ms: Optional[int] = None
+    tokens_used: Optional[int] = None
+    cost_usd: Optional[str] = None
+    conversion_value: Optional[str] = None
+    success_indicator: Optional[bool] = None
+    error_message: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+
+class ExperimentEventResponse(BaseModel):
+    id: str
+    experiment_id: str
+    assignment_id: Optional[str]
+    event_type: EventType
+    event_name: str
+    event_data: Optional[Dict[str, Any]]
+    user_id: Optional[str]
+    session_id: str
+    device_id: Optional[str]
+    response_time_ms: Optional[int]
+    tokens_used: Optional[int]
+    cost_usd: Optional[str]
+    conversion_value: Optional[str]
+    success_indicator: Optional[bool]
+    error_message: Optional[str]
+    occurred_at: datetime
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ExperimentResultResponse(BaseModel):
+    id: str
+    experiment_id: str
+    variant_id: str
+    variant_name: str
+    sample_size: int
+    conversion_count: int
+    conversion_rate: str
+    confidence_interval_lower: str
+    confidence_interval_upper: str
+    p_value: str
+    statistical_significance: bool
+    average_response_time: Optional[int]
+    average_tokens_used: Optional[int]
+    total_cost: Optional[str]
+    metric_period_start: datetime
+    metric_period_end: datetime
+    is_control: bool
+    calculation_method: str
+    calculated_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class FeatureFlagCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    project_id: str
+    prompt_id: Optional[str] = None
+    enabled: bool = False
+    rollout_percentage: int = Field(default=0, ge=0, le=100)
+    rollout_strategy: TrafficAllocationStrategy = TrafficAllocationStrategy.UNIFORM
+    targeting_rules: Optional[Dict[str, Any]] = None
+    is_staged_rollout: bool = False
+    current_stage: int = Field(default=1, ge=1)
+    total_stages: int = Field(default=5, ge=1)
+    stage_rollout_percentage: Optional[List[int]] = None
+    is_canary_release: bool = False
+    canary_percentage: int = Field(default=5, ge=1, le=50)
+    canary_duration_hours: int = Field(default=24, ge=1)
+    scheduled_enable_time: Optional[datetime] = None
+    scheduled_disable_time: Optional[datetime] = None
+
+class FeatureFlagUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    enabled: Optional[bool] = None
+    rollout_percentage: Optional[int] = Field(None, ge=0, le=100)
+    rollout_strategy: Optional[TrafficAllocationStrategy] = None
+    targeting_rules: Optional[Dict[str, Any]] = None
+    is_staged_rollout: Optional[bool] = None
+    current_stage: Optional[int] = Field(None, ge=1)
+    total_stages: Optional[int] = Field(None, ge=1)
+    stage_rollout_percentage: Optional[List[int]] = None
+    is_canary_release: Optional[bool] = None
+    canary_percentage: Optional[int] = Field(None, ge=1, le=50)
+    canary_duration_hours: Optional[int] = Field(None, ge=1)
+    scheduled_enable_time: Optional[datetime] = None
+    scheduled_disable_time: Optional[datetime] = None
+
+class FeatureFlagResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str]
+    project_id: str
+    prompt_id: Optional[str]
+    enabled: bool
+    rollout_percentage: int
+    rollout_strategy: TrafficAllocationStrategy
+    targeting_rules: Optional[Dict[str, Any]]
+    is_staged_rollout: bool
+    current_stage: int
+    total_stages: int
+    stage_rollout_percentage: Optional[List[int]]
+    is_canary_release: bool
+    canary_percentage: int
+    canary_duration_hours: int
+    scheduled_enable_time: Optional[datetime]
+    scheduled_disable_time: Optional[datetime]
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class UserSegmentCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    project_id: str
+    segment_conditions: Dict[str, Any]
+    segment_type: str = Field(..., min_length=1)
+    estimated_user_count: int = Field(default=0, ge=0)
+
+class UserSegmentUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    segment_conditions: Optional[Dict[str, Any]] = None
+    segment_type: Optional[str] = Field(None, min_length=1)
+    estimated_user_count: Optional[int] = Field(None, ge=0)
+    is_active: Optional[bool] = None
+
+class UserSegmentResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str]
+    project_id: str
+    segment_conditions: Dict[str, Any]
+    segment_type: str
+    estimated_user_count: int
+    actual_user_count: int
+    is_active: bool
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ExperimentStats(BaseModel):
+    total_experiments: int
+    active_experiments: int
+    completed_experiments: int
+    total_events: int
+    total_assignments: int
+    experiments_by_project: Dict[str, int]
+    events_by_type: Dict[str, int]
+
+class VariantPerformance(BaseModel):
+    variant_id: str
+    variant_name: str
+    sample_size: int
+    conversion_rate: float
+    confidence_interval_lower: float
+    confidence_interval_upper: float
+    p_value: float
+    is_winner: bool
+    improvement_over_control: float

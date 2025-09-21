@@ -2,46 +2,49 @@
  * Main PromptOps Client Class
  */
 
-import { PromptOpsConfig, PromptRequest, PromptResponse, RenderResult } from './types';
+import {
+  PromptOpsConfig,
+  PromptRequest,
+  PromptResponse,
+  RenderResult,
+  ABTestingConfig,
+  EnvironmentConfig,
+  HealthCheckResult
+} from './types';
 import { AuthenticationManager } from './auth/AuthenticationManager';
 import { CacheManager } from './cache/CacheManager';
 import { TelemetryManager } from './telemetry/TelemetryManager';
 import { PromptManager } from './prompts/PromptManager';
+import { ABTestingManager } from './ab-testing/ABTestingManager';
 import { ConfigurationError, PromptOpsError } from './types/errors';
 import { RetryConfig } from './types';
+import {
+  EnvironmentManager,
+  ConnectionManager,
+  EnvironmentConfigClass,
+  createEnvironmentConfig
+} from './environment/EnvironmentManager';
 
 export interface PromptOpsClientOptions extends PromptOpsConfig {
   retryConfig?: Partial<RetryConfig>;
+  abTestingConfig?: Partial<ABTestingConfig>;
 }
 
 export class PromptOpsClient {
   private config: Required<PromptOpsConfig>;
+  private environmentConfig: EnvironmentConfig;
   private authManager: AuthenticationManager;
   private cacheManager: CacheManager;
   private telemetryManager: TelemetryManager;
   private promptManager: PromptManager;
+  private abTestingManager: ABTestingManager;
   private retryConfig: Required<RetryConfig>;
+  private connectionManager: ConnectionManager;
   private isInitialized: boolean = false;
 
   constructor(options: PromptOpsClientOptions) {
-    // Validate required configuration
-    if (!options.baseUrl) {
-      throw new ConfigurationError('baseUrl is required');
-    }
-
-    // Set default values
-    this.config = {
-      baseUrl: options.baseUrl,
-      apiKey: options.apiKey,
-      timeout: options.timeout || 30000,
-      retries: options.retries || 3,
-      enableCache: options.enableCache ?? true,
-      cacheTTL: options.cacheTTL || 300000, // 5 minutes
-      enableTelemetry: options.enableTelemetry ?? true,
-      redisUrl: options.redisUrl,
-      telemetryEndpoint: options.telemetryEndpoint,
-      userAgent: options.userAgent || 'promptops-client/1.0.0',
-    };
+    // Resolve configuration with environment detection
+    this.config = this.resolveConfig(options);
 
     // Set retry configuration
     this.retryConfig = {
@@ -50,6 +53,13 @@ export class PromptOpsClient {
       maxDelay: options.retryConfig?.maxDelay || 10000,
       jitter: options.retryConfig?.jitter ?? true,
     };
+
+    // Initialize environment and connection manager
+    this.connectionManager = new ConnectionManager(
+      this.environmentConfig,
+      this.config.maxRetries || 3,
+      this.config.retryDelay || 1
+    );
 
     // Initialize managers
     this.authManager = new AuthenticationManager(this.config);
@@ -68,6 +78,87 @@ export class PromptOpsClient {
       this.cacheManager,
       this.telemetryManager
     );
+    this.abTestingManager = new ABTestingManager(
+      this.authManager.getClient(),
+      this.cacheManager,
+      this.telemetryManager,
+      options.abTestingConfig
+    );
+  }
+
+  private resolveConfig(options: PromptOpsClientOptions): Required<PromptOpsConfig> {
+    const resolvedConfig: Partial<PromptOpsConfig> = { ...options };
+
+    // Get API key from environment if not provided
+    if (!resolvedConfig.apiKey) {
+      const envApiKey = process.env.PROMPTOPS_API_KEY;
+      if (envApiKey) {
+        resolvedConfig.apiKey = envApiKey;
+        console.log('Using API key from environment variable');
+      } else {
+        // For development, we can be more lenient
+        if (this.isDevelopmentEnvironment(resolvedConfig)) {
+          console.warn('No API key provided - some features may not work');
+          resolvedConfig.apiKey = 'dev-api-key';
+        } else {
+          throw new ConfigurationError('API key is required. Set PROMPTOPS_API_KEY environment variable or provide in config.');
+        }
+      }
+    }
+
+    // Auto-detect environment if requested
+    if (resolvedConfig.autoDetectEnvironment && !resolvedConfig.baseUrl) {
+      // Note: In a real implementation, this would be async
+      // For now, we'll use a simpler approach
+      const envConfig = createEnvironmentConfig(resolvedConfig.environment);
+      resolvedConfig.baseUrl = envConfig.baseUrl;
+      console.log(`Auto-detected environment: ${envConfig.environment}, base URL: ${envConfig.baseUrl}`);
+    }
+
+    // Set defaults
+    resolvedConfig.baseUrl = resolvedConfig.baseUrl || 'https://api.promptops.ai';
+    resolvedConfig.timeout = resolvedConfig.timeout || 30000;
+    resolvedConfig.retries = resolvedConfig.retries || 3;
+    resolvedConfig.enableCache = resolvedConfig.enableCache ?? true;
+    resolvedConfig.cacheTTL = resolvedConfig.cacheTTL || 300000;
+    resolvedConfig.enableTelemetry = resolvedConfig.enableTelemetry ?? true;
+    resolvedConfig.userAgent = resolvedConfig.userAgent || 'promptops-client/1.0.0';
+    resolvedConfig.autoDetectEnvironment = resolvedConfig.autoDetectEnvironment ?? true;
+    resolvedConfig.connectionTimeout = resolvedConfig.connectionTimeout || 5;
+    resolvedConfig.maxRetries = resolvedConfig.maxRetries || 3;
+    resolvedConfig.retryDelay = resolvedConfig.retryDelay || 1;
+    resolvedConfig.enableConnectionTest = resolvedConfig.enableConnectionTest ?? true;
+    resolvedConfig.healthCheckEndpoint = resolvedConfig.healthCheckEndpoint || '/health';
+
+    // Create environment config
+    this.environmentConfig = new EnvironmentConfigClass(
+      resolvedConfig.environment || 'production' as any,
+      resolvedConfig.baseUrl
+    );
+
+    console.log(`Configuration resolved - Environment: ${this.environmentConfig.environment}, Base URL: ${resolvedConfig.baseUrl}`);
+
+    return resolvedConfig as Required<PromptOpsConfig>;
+  }
+
+  private isDevelopmentEnvironment(config: Partial<PromptOpsConfig>): boolean {
+    // Check environment variable
+    const env = process.env.PROMPTOPS_ENVIRONMENT?.toLowerCase();
+    if (env === 'development') {
+      return true;
+    }
+
+    // Check if base URL suggests development
+    if (config.baseUrl && (config.baseUrl.includes('localhost') || config.baseUrl.includes('127.0.0.1'))) {
+      return true;
+    }
+
+    // Check common development indicators
+    if (process.env.DEBUG?.toLowerCase() === 'true') {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -75,6 +166,22 @@ export class PromptOpsClient {
    */
   async initialize(): Promise<void> {
     try {
+      // Validate configuration
+      this.validateConfig();
+
+      // Test connection if enabled
+      if (this.config.enableConnectionTest) {
+        console.log(`Testing connection to PromptOps API: ${this.config.baseUrl}`);
+        const connectionOk = await this.connectionManager.testConnectionWithRetry();
+        if (!connectionOk) {
+          if (this.environmentConfig.environment === 'development') {
+            console.warn('Connection test failed, but continuing in development mode');
+          } else {
+            throw new PromptOpsError(`Failed to connect to ${this.config.baseUrl}`);
+          }
+        }
+      }
+
       // Validate API key
       if (this.config.apiKey) {
         const isValid = await this.authManager.validateApiKey();
@@ -89,12 +196,34 @@ export class PromptOpsClient {
       this.isInitialized = true;
 
       await this.telemetryManager.trackUserAction('client_initialized');
+      console.log(`PromptOps client initialized successfully - Environment: ${this.environmentConfig.environment}, Base URL: ${this.config.baseUrl}`);
     } catch (error) {
       await this.telemetryManager.trackError(
         'initialization_failed',
         error instanceof Error ? error.message : String(error)
       );
       throw error;
+    }
+  }
+
+  private validateConfig(): void {
+    if (!this.config.baseUrl) {
+      throw new ConfigurationError('Base URL is required');
+    }
+
+    // Allow development environment to work without API key for certain operations
+    if (!this.config.apiKey && this.environmentConfig.environment !== 'development') {
+      throw new ConfigurationError('API key is required');
+    }
+
+    if (this.config.timeout <= 0) {
+      throw new ConfigurationError('Timeout must be positive');
+    }
+
+    // Validate environment configuration
+    const [isValid, errorMessage] = this.environmentConfig.validate();
+    if (!isValid) {
+      throw new ConfigurationError(`Environment configuration invalid: ${errorMessage}`);
     }
   }
 
@@ -241,6 +370,261 @@ export class PromptOpsClient {
    */
   getCacheStats() {
     return this.promptManager.getCacheStats();
+  }
+
+  // ========== A/B Testing Methods ==========
+
+  /**
+   * Get prompt with A/B testing variant support
+   */
+  async getPromptWithVariant(request: any) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => {
+        return this.abTestingManager.getPromptWithVariant(request, (req) => this.getPrompt(req));
+      },
+      'getPromptWithVariant',
+      { promptId: request.promptId }
+    );
+  }
+
+  /**
+   * Track an A/B testing event
+   */
+  async trackABTestEvent(event: any) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => {
+        const result = await this.abTestingManager.trackEvent(event);
+        await this.telemetryManager.trackUserAction('ab_test_event_tracked', {
+          experiment_id: event.experiment_id,
+          event_type: event.event_type
+        });
+        return result;
+      },
+      'trackABTestEvent',
+      { experiment_id: event.experiment_id }
+    );
+  }
+
+  /**
+   * Track a conversion event for A/B testing
+   */
+  async trackConversion(experimentId: string, assignmentId: string, conversionValue?: number, context?: any) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => {
+        const result = await this.abTestingManager.trackConversion(experimentId, assignmentId, conversionValue, context);
+        await this.telemetryManager.trackUserAction('conversion_tracked', {
+          experiment_id: experimentId,
+          conversion_value: conversionValue
+        });
+        return result;
+      },
+      'trackConversion',
+      { experiment_id: experimentId }
+    );
+  }
+
+  /**
+   * Create an A/B testing experiment
+   */
+  async createExperiment(experiment: any) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => {
+        const result = await this.abTestingManager.createExperiment(experiment);
+        await this.telemetryManager.trackUserAction('experiment_created', {
+          experiment_id: result.id,
+          prompt_id: experiment.prompt_id
+        });
+        return result;
+      },
+      'createExperiment'
+    );
+  }
+
+  /**
+   * Get A/B testing experiment details
+   */
+  async getExperiment(experimentId: string) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => this.abTestingManager.getExperiment(experimentId),
+      'getExperiment',
+      { experiment_id: experimentId }
+    );
+  }
+
+  /**
+   * Update an A/B testing experiment
+   */
+  async updateExperiment(experimentId: string, update: any) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => {
+        const result = await this.abTestingManager.updateExperiment(experimentId, update);
+        await this.telemetryManager.trackUserAction('experiment_updated', {
+          experiment_id: experimentId
+        });
+        return result;
+      },
+      'updateExperiment',
+      { experiment_id: experimentId }
+    );
+  }
+
+  /**
+   * Start an A/B testing experiment
+   */
+  async startExperiment(experimentId: string) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => {
+        const result = await this.abTestingManager.startExperiment(experimentId);
+        await this.telemetryManager.trackUserAction('experiment_started', {
+          experiment_id: experimentId
+        });
+        return result;
+      },
+      'startExperiment',
+      { experiment_id: experimentId }
+    );
+  }
+
+  /**
+   * Pause an A/B testing experiment
+   */
+  async pauseExperiment(experimentId: string) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => {
+        const result = await this.abTestingManager.pauseExperiment(experimentId);
+        await this.telemetryManager.trackUserAction('experiment_paused', {
+          experiment_id: experimentId
+        });
+        return result;
+      },
+      'pauseExperiment',
+      { experiment_id: experimentId }
+    );
+  }
+
+  /**
+   * Complete an A/B testing experiment
+   */
+  async completeExperiment(experimentId: string) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => {
+        const result = await this.abTestingManager.completeExperiment(experimentId);
+        await this.telemetryManager.trackUserAction('experiment_completed', {
+          experiment_id: experimentId
+        });
+        return result;
+      },
+      'completeExperiment',
+      { experiment_id: experimentId }
+    );
+  }
+
+  /**
+   * Get experiment results
+   */
+  async getExperimentResults(experimentId: string) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => this.abTestingManager.getExperimentResults(experimentId),
+      'getExperimentResults',
+      { experiment_id: experimentId }
+    );
+  }
+
+  /**
+   * Get variant performance metrics
+   */
+  async getVariantPerformance(experimentId: string) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => this.abTestingManager.getVariantPerformance(experimentId),
+      'getVariantPerformance',
+      { experiment_id: experimentId }
+    );
+  }
+
+  /**
+   * Get A/B testing statistics
+   */
+  async getABTestStats(projectId?: string) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => this.abTestingManager.getStats(projectId),
+      'getABTestStats',
+      { project_id: projectId }
+    );
+  }
+
+  /**
+   * Create a feature flag
+   */
+  async createFeatureFlag(featureFlag: any) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => {
+        const result = await this.abTestingManager.createFeatureFlag(featureFlag);
+        await this.telemetryManager.trackUserAction('feature_flag_created', {
+          feature_flag_id: result.id,
+          name: featureFlag.name
+        });
+        return result;
+      },
+      'createFeatureFlag'
+    );
+  }
+
+  /**
+   * Get feature flags
+   */
+  async getFeatureFlags(projectId?: string, enabled?: boolean) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => this.abTestingManager.getFeatureFlags(projectId, enabled),
+      'getFeatureFlags',
+      { project_id: projectId }
+    );
+  }
+
+  /**
+   * Check if a feature is enabled
+   */
+  async isFeatureEnabled(featureFlagName: string, context?: any) {
+    this.ensureInitialized();
+    return this.withRetry(
+      async () => this.abTestingManager.isFeatureEnabled(featureFlagName, context),
+      'isFeatureEnabled',
+      { feature_flag_name: featureFlagName }
+    );
+  }
+
+  /**
+   * Clear session assignments (useful for logout)
+   */
+  clearSessionAssignments(sessionId: string): void {
+    this.abTestingManager.clearSessionAssignments(sessionId);
+  }
+
+  /**
+   * Update A/B testing configuration
+   */
+  updateABTestingConfig(config: any): void {
+    this.abTestingManager.updateConfig(config);
+  }
+
+  /**
+   * Get A/B testing configuration
+   */
+  getABTestingConfig() {
+    return this.abTestingManager.getConfig();
   }
 
   /**
@@ -409,4 +793,150 @@ export class PromptOpsClient {
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+
+  /**
+   * Get information about the current environment
+   */
+  getEnvironmentInfo(): any {
+    return {
+      environment: this.environmentConfig.environment,
+      baseUrl: this.config.baseUrl,
+      autoDetected: this.config.autoDetectEnvironment,
+      connectionTestEnabled: this.config.enableConnectionTest,
+      connectionStatus: this.connectionManager.getConnectionStatus(),
+      recommendations: this.environmentConfig.getRecommendations()
+    };
+  }
+
+  /**
+   * Test connection with retry logic
+   */
+  async testConnectionWithRetry(): Promise<boolean> {
+    return await this.connectionManager.testConnectionWithRetry();
+  }
+
+  /**
+   * Get current connection status
+   */
+  getConnectionStatus(): any {
+    return this.connectionManager.getConnectionStatus();
+  }
+
+  /**
+   * Perform comprehensive health check
+   */
+  async healthCheck(): Promise<HealthCheckResult> {
+    const results: HealthCheckResult = {
+      timestamp: new Date().toISOString(),
+      environment: this.environmentConfig.environment,
+      baseUrl: this.config.baseUrl,
+      clientInitialized: this.isInitialized,
+      connection: {
+        healthy: false,
+      },
+      authentication: false,
+      cache: {
+        enabled: false,
+      },
+      overall: false,
+    };
+
+    // Test connection
+    try {
+      const connectionOk = await this.connectionManager.testConnectionWithRetry();
+      results.connection = {
+        healthy: connectionOk,
+        details: this.connectionManager.getConnectionStatus(),
+      };
+    } catch (error) {
+      results.connection = {
+        healthy: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+
+    // Test authentication
+    try {
+      const authOk = await this.authManager.validateApiKey();
+      results.authentication = authOk;
+    } catch (error) {
+      results.authentication = false;
+    }
+
+    // Test cache
+    try {
+      if (this.config.enableCache) {
+        const cacheHealth = await this.cacheManager.healthCheck();
+        results.cache = {
+          enabled: true,
+          healthy: cacheHealth,
+          stats: this.cacheManager.getStats(),
+        };
+      }
+    } catch (error) {
+      results.cache = {
+        enabled: true,
+        healthy: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+
+    // Overall health
+    results.overall = (
+      results.connection.healthy &&
+      results.authentication &&
+      (!results.cache.enabled || results.cache.healthy)
+    );
+
+    return results;
+  }
+}
+
+/**
+ * Create and initialize a PromptOps client with auto-detection
+ */
+export async function createClient(
+  options?: PromptOpsClientOptions
+): Promise<PromptOpsClient> {
+  const client = new PromptOpsClient(options || {});
+  await client.initialize();
+  return client;
+}
+
+/**
+ * Create a client configured for a specific environment
+ */
+export async function createClientForEnvironment(
+  environment: string = 'development',
+  apiKey?: string,
+  options?: Partial<PromptOpsClientOptions>
+): Promise<PromptOpsClient> {
+  const envOptions: Partial<PromptOpsClientOptions> = {
+    ...options,
+    autoDetectEnvironment: false,
+  };
+
+  // Set defaults based on environment
+  switch (environment) {
+    case 'development':
+      envOptions.baseUrl = envOptions.baseUrl || 'http://localhost:8000';
+      envOptions.timeout = envOptions.timeout || 30000;
+      envOptions.enableTelemetry = envOptions.enableTelemetry ?? false;
+      break;
+    case 'staging':
+      envOptions.baseUrl = envOptions.baseUrl || 'https://staging-api.promptops.ai';
+      envOptions.timeout = envOptions.timeout || 45000;
+      envOptions.enableTelemetry = envOptions.enableTelemetry ?? true;
+      break;
+    default: // production
+      envOptions.baseUrl = envOptions.baseUrl || 'https://api.promptops.ai';
+      envOptions.timeout = envOptions.timeout || 60000;
+      envOptions.enableTelemetry = envOptions.enableTelemetry ?? true;
+  }
+
+  if (apiKey) {
+    envOptions.apiKey = apiKey;
+  }
+
+  return await createClient(envOptions);
 }

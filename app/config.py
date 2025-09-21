@@ -49,6 +49,18 @@ class Settings(BaseSettings):
     # API Key Encryption
     promptops_encryption_key: str = ""
 
+    # Role Assignment Configuration
+    # Default role for new users (admin, user, viewer)
+    default_user_role: str = "user"
+
+    # Admin role assignment - emails and domains that get admin role
+    admin_emails: List[str] = []
+    admin_domains: List[str] = []
+
+    # User role assignment - emails and domains that get user role
+    user_emails: List[str] = []
+    user_domains: List[str] = []
+
     class Config:
         env_file = ".env"
 

@@ -60,7 +60,11 @@
       "Bash(echo:*)",
       "Bash(DATABASE_URL=\"postgresql://promptops:promptops@localhost:5432/promptops\" psql:*)",
       "Bash(pip show:*)",
-      "Read(//Users/kianwoonwong/Library/**)"
+      "Read(//Users/kianwoonwong/Library/**)",
+      "Bash(npx rollup:*)",
+      "Bash(npx tsx:*)",
+      "Bash(PYTHONPATH=/Users/kianwoonwong/Downloads/promptops/promptops-client python promptops-client/promptops/cli.py env:*)",
+      "Bash(dropdb:*)"
     ],
     "deny": [],
     "ask": []

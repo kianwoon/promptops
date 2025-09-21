@@ -1,0 +1,199 @@
+version: '3.8'
+
+services:
+  # Production Redis with security
+  redis:
+    image: redis:7-alpine
+    container_name: promptops-redis-prod
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - promptops-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Production PostgreSQL with security
+  postgres:
+    image: postgres:15-alpine
+    container_name: promptops-postgres-prod
+    environment:
+      - POSTGRES_DB=promptops
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--auth-host=md5
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d promptops"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - promptops-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # Python client production
+  python-client-prod:
+    build:
+      context: ./promptops-client
+      dockerfile: Dockerfile.prod
+    container_name: promptops-python-client-prod
+    environment:
+      - PROMPTOPS_API_URL=${PROMPTOPS_API_URL}
+      - PROMPTOPS_API_KEY=${PROMPTOPS_API_KEY}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+      - OPENTELEMETRY_ENABLED=true
+      - OPENTELEMETRY_ENDPOINT=${OPENTELEMETRY_ENDPOINT}
+    volumes:
+      - python-client-cache:/tmp/promptops-cache
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - promptops-network
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+  # JavaScript client production
+  js-client-prod:
+    build:
+      context: ./promptops-client-npm
+      dockerfile: Dockerfile.prod
+    container_name: promptops-js-client-prod
+    environment:
+      - PROMPTOPS_API_URL=${PROMPTOPS_API_URL}
+      - PROMPTOPS_API_KEY=${PROMPTOPS_API_KEY}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - NODE_ENV=production
+      - OPENTELEMETRY_ENABLED=true
+      - OPENTELEMETRY_ENDPOINT=${OPENTELEMETRY_ENDPOINT}
+    volumes:
+      - js-client-cache:/tmp/promptops-cache
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - promptops-network
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+  # Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: promptops-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - python-client-prod
+      - js-client-prod
+    networks:
+      - promptops-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # Monitoring and metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: promptops-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - promptops-network
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: promptops-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - promptops-network
+    profiles:
+      - monitoring
+
+volumes:
+  redis-data:
+  postgres-data:
+  python-client-cache:
+  js-client-cache:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  promptops-network:
+    driver: bridge

@@ -1,0 +1,183 @@
+version: '3.8'
+
+services:
+  # Test database
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: promptops-postgres-test
+    environment:
+      - POSTGRES_DB=promptops_test
+      - POSTGRES_USER=promptops_test
+      - POSTGRES_PASSWORD=promptops_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    networks:
+      - promptops-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U promptops_test -d promptops_test"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Test Redis
+  redis-test:
+    image: redis:7-alpine
+    container_name: promptops-redis-test
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-test-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - promptops-test-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Python client test environment
+  python-client-test:
+    build:
+      context: ./promptops-client
+      dockerfile: Dockerfile
+    container_name: promptops-python-client-test
+    environment:
+      - PROMPTOPS_API_URL=http://localhost:8000
+      - PROMPTOPS_API_KEY=test-api-key
+      - REDIS_URL=redis://redis-test:6379
+      - PYTHONPATH=/app
+      - LOG_LEVEL=DEBUG
+      - TESTING=true
+      - DATABASE_URL=postgresql://promptops_test:promptops_test@postgres-test:5432/promptops_test
+    volumes:
+      - ./promptops-client:/app
+      - python-test-cache:/tmp/promptops-cache
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - promptops-test-network
+    command: pytest -v --tb=short
+
+  # JavaScript client test environment
+  js-client-test:
+    build:
+      context: ./promptops-client-npm
+      dockerfile: Dockerfile
+    container_name: promptops-js-client-test
+    environment:
+      - PROMPTOPS_API_URL=http://localhost:8000
+      - PROMPTOPS_API_KEY=test-api-key
+      - REDIS_URL=redis://redis-test:6379
+      - NODE_ENV=test
+      - TESTING=true
+    volumes:
+      - ./promptops-client-npm:/app
+      - js-test-cache:/tmp/promptops-cache
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - promptops-test-network
+    command: npm test
+
+  # Integration test environment
+  integration-test:
+    build:
+      context: ./promptops-client
+      dockerfile: Dockerfile
+    container_name: promptops-integration-test
+    environment:
+      - PROMPTOPS_API_URL=http://localhost:8000
+      - PROMPTOPS_API_KEY=test-api-key
+      - REDIS_URL=redis://redis-test:6379
+      - PYTHONPATH=/app
+      - LOG_LEVEL=DEBUG
+      - TESTING=true
+      - INTEGRATION_TEST=true
+      - DATABASE_URL=postgresql://promptops_test:promptops_test@postgres-test:5432/promptops_test
+    volumes:
+      - ./promptops-client:/app
+      - integration-test-cache:/tmp/promptops-cache
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - promptops-test-network
+    command: pytest tests/integration/ -v --tb=short
+
+  # Performance test environment
+  performance-test:
+    build:
+      context: ./promptops-client
+      dockerfile: Dockerfile
+    container_name: promptops-performance-test
+    environment:
+      - PROMPTOPS_API_URL=http://localhost:8000
+      - PROMPTOPS_API_KEY=test-api-key
+      - REDIS_URL=redis://redis-test:6379
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+      - TESTING=true
+      - PERFORMANCE_TEST=true
+      - DATABASE_URL=postgresql://promptops_test:promptops_test@postgres-test:5432/promptops_test
+    volumes:
+      - ./promptops-client:/app
+      - performance-test-cache:/tmp/promptops-cache
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - promptops-test-network
+    command: pytest tests/performance/ -v --tb=short
+
+  # Load test environment
+  load-test:
+    build:
+      context: ./promptops-client
+      dockerfile: Dockerfile
+    container_name: promptops-load-test
+    environment:
+      - PROMPTOPS_API_URL=http://localhost:8000
+      - PROMPTOPS_API_KEY=test-api-key
+      - REDIS_URL=redis://redis-test:6379
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+      - TESTING=true
+      - LOAD_TEST=true
+      - DATABASE_URL=postgresql://promptops_test:promptops_test@postgres-test:5432/promptops_test
+    volumes:
+      - ./promptops-client:/app
+      - load-test-cache:/tmp/promptops-cache
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    networks:
+      - promptops-test-network
+    command: locust -f tests/load/locustfile.py --host=http://localhost:8000 --users=10 --spawn-rate=2 --headless
+
+volumes:
+  postgres-test-data:
+  redis-test-data:
+  python-test-cache:
+  js-test-cache:
+  integration-test-cache:
+  performance-test-cache:
+  load-test-cache:
+
+networks:
+  promptops-test-network:
+    driver: bridge

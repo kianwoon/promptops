@@ -5,13 +5,22 @@
  */
 
 // Main client class
-export { PromptOpsClient } from './PromptOpsClient';
+export { PromptOpsClient, createClient, createClientForEnvironment } from './PromptOpsClient';
+
+// Environment management
+export {
+  EnvironmentManager,
+  ConnectionManager,
+  EnvironmentConfigClass,
+  createEnvironmentConfig,
+} from './environment/EnvironmentManager';
 
 // Managers
 export { AuthenticationManager } from './auth/AuthenticationManager';
 export { CacheManager } from './cache/CacheManager';
 export { TelemetryManager } from './telemetry/TelemetryManager';
 export { PromptManager } from './prompts/PromptManager';
+export { ABTestingManager } from './ab-testing/ABTestingManager';
 
 // Types and interfaces
 export type {
@@ -30,6 +39,11 @@ export type {
   RenderResult,
   APIError,
   CacheStats,
+  EnvironmentConfig,
+  Environment,
+  ConnectionStatus,
+  HealthCheckResult,
+  EnvironmentRecommendations,
 } from './types';
 
 // Error classes
@@ -71,9 +85,7 @@ export const DEFAULT_CONFIG = {
   enableTelemetry: true,
 } as const;
 
-// Utility functions
-export const createClient = (config: PromptOpsClientOptions): PromptOpsClient => {
-  return new PromptOpsClient(config);
-};
+// Environment enums and constants
+export { Environment } from './types/environment';
 
 export default PromptOpsClient;

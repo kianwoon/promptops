@@ -167,28 +167,6 @@ class TelemetryConfig(BaseModel):
         extra = "forbid"
 
 
-class ClientConfig(BaseModel):
-    """Main client configuration"""
-    base_url: str = Field(..., description="PromptOps API base URL")
-    api_key: str = Field(..., description="API key for authentication")
-    timeout: float = Field(30.0, ge=1.0, le=300.0)
-    cache: CacheConfig = Field(default_factory=CacheConfig)
-    retry: RetryConfig = Field(default_factory=RetryConfig)
-    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
-    user_agent: str = "promptops-client/1.0.0"
-    verify_ssl: bool = True
-
-    @validator('base_url')
-    def validate_base_url(cls, v):
-        if not v.startswith(('http://', 'https://')):
-            raise ValidationError("Base URL must start with http:// or https://")
-        return v.rstrip('/')
-
-    @validator('api_key')
-    def validate_api_key(cls, v):
-        if not v or not v.strip():
-            raise ValidationError("API key cannot be empty")
-        return v.strip()
 
 
 class Project(BaseModel):
@@ -321,3 +299,81 @@ class ClientStats(BaseModel):
         if self.total_requests > 0:
             return self.successful_requests / self.total_requests
         return 0.0
+
+
+class ABTestingConfig(BaseModel):
+    """A/B testing configuration"""
+    enable_automatic_assignment: bool = Field(default=True)
+    enable_event_tracking: bool = Field(default=True)
+    enable_result_calculation: bool = Field(default=True)
+    cache_ttl: int = Field(default=300000, ge=1000)  # 5 minutes minimum
+    assignment_consistency: bool = Field(default=True)
+    default_session_timeout: int = Field(default=3600000, ge=60000)  # 1 hour minimum
+
+
+class EnvironmentConfig(BaseModel):
+    """Environment configuration"""
+    environment: str = Field(default="production", description="Environment name (development, staging, production)")
+    base_url: str = Field(default="https://api.promptops.ai", description="API base URL")
+    auto_detect: bool = Field(default=True, description="Auto-detect environment")
+    connection_timeout: float = Field(default=5.0, ge=1.0, le=30.0, description="Connection test timeout")
+    max_retries: int = Field(default=3, ge=1, le=10, description="Maximum connection retries")
+    retry_delay: float = Field(default=1.0, ge=0.1, le=10.0, description="Base retry delay")
+    enable_connection_test: bool = Field(default=True, description="Enable connection testing")
+    health_check_endpoint: str = Field(default="/health", description="Health check endpoint path")
+
+    @validator('environment')
+    def validate_environment(cls, v):
+        valid_environments = ['development', 'staging', 'production']
+        if v.lower() not in valid_environments:
+            raise ValidationError(f"Environment must be one of: {valid_environments}")
+        return v.lower()
+
+    @validator('base_url')
+    def validate_base_url(cls, v):
+        if not v.startswith(('http://', 'https://')):
+            raise ValidationError("Base URL must start with http:// or https://")
+        return v.rstrip('/')
+
+
+class ClientConfig(BaseModel):
+    """Main client configuration"""
+    base_url: Optional[str] = Field(None, description="PromptOps API base URL (auto-detected if not provided)")
+    api_key: Optional[str] = Field(None, description="API key for authentication (can be from environment)")
+    timeout: float = Field(30.0, ge=1.0, le=300.0)
+    cache: CacheConfig = Field(default_factory=CacheConfig)
+    retry: RetryConfig = Field(default_factory=RetryConfig)
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
+    ab_testing: ABTestingConfig = Field(default_factory=ABTestingConfig)
+    environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
+    user_agent: str = "promptops-client/1.0.0"
+    verify_ssl: bool = True
+    auto_detect_environment: bool = Field(default=True, description="Auto-detect environment if not specified")
+
+    @validator('base_url')
+    def validate_base_url(cls, v):
+        if v is not None:
+            if not v.startswith(('http://', 'https://')):
+                raise ValidationError("Base URL must start with http:// or https://")
+            return v.rstrip('/')
+        return v
+
+    @validator('api_key')
+    def validate_api_key(cls, v):
+        if v is not None:
+            if not v or not v.strip():
+                raise ValidationError("API key cannot be empty")
+            return v.strip()
+        return v
+
+
+class PromptRequest(BaseModel):
+    """Request to get a prompt"""
+    prompt_id: str = Field(..., description="Prompt ID")
+    version: Optional[str] = Field(None, description="Prompt version")
+    variables: Dict[str, Any] = Field(default_factory=dict, description="Variables for substitution")
+    model_provider: Optional[ModelProvider] = Field(None, description="Target model provider")
+    model_name: Optional[str] = Field(None, description="Target model name")
+    tenant_id: Optional[str] = Field(None, description="Tenant ID")
+    project_id: Optional[str] = Field(None, description="Project ID")
+    overrides: Optional[Dict[str, Any]] = Field(None, description="Override values")

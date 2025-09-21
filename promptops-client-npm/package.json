@@ -25,9 +25,13 @@
   },
   "files": [
     "dist",
+    "bin",
     "README.md",
     "LICENSE"
   ],
+  "bin": {
+    "promptops": "./bin/promptops.js"
+  },
   "scripts": {
     "build": "rollup -c",
     "build:watch": "rollup -c -w",
@@ -54,8 +58,9 @@
   "license": "MIT",
   "dependencies": {
     "axios": "^1.6.0",
-    "redis": "^4.6.0",
-    "lodash": "^4.17.21"
+    "commander": "^14.0.1",
+    "lodash": "^4.17.21",
+    "redis": "^4.6.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
