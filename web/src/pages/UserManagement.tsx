@@ -273,25 +273,31 @@ export function UserManagement() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center">
-                <Users className="h-8 w-8 text-blue-600" />
+                <div className="p-3 rounded-full bg-primary/10">
+                  <Users className="h-6 w-6 text-primary" />
+                </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Users</p>
-                  <p className="text-2xl font-bold text-gray-900">{apiUsers.length}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Total Users</p>
+                  <p className="text-2xl font-bold">{apiUsers.length}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center">
-                <CheckCircle className="h-8 w-8 text-green-600" />
+                <div className="p-3 rounded-full bg-primary/10">
+                  <CheckCircle className="h-6 w-6 text-primary" />
+                </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Active Users</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-sm font-medium text-muted-foreground">Active Users</p>
+                  <p className="text-2xl font-bold">
                     {apiUsers.filter(u => u.status === 'active').length}
                   </p>
                 </div>
@@ -299,13 +305,16 @@ export function UserManagement() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center">
-                <XCircle className="h-8 w-8 text-red-600" />
+                <div className="p-3 rounded-full bg-primary/10">
+                  <XCircle className="h-6 w-6 text-primary" />
+                </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Inactive Users</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-sm font-medium text-muted-foreground">Inactive Users</p>
+                  <p className="text-2xl font-bold">
                     {apiUsers.filter(u => u.status === 'inactive').length}
                   </p>
                 </div>
@@ -313,13 +322,16 @@ export function UserManagement() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center">
-                <Shield className="h-8 w-8 text-purple-600" />
+                <div className="p-3 rounded-full bg-primary/10">
+                  <Shield className="h-6 w-6 text-primary" />
+                </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Admin Users</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-sm font-medium text-muted-foreground">Admin Users</p>
+                  <p className="text-2xl font-bold">
                     {apiUsers.filter(u => u.role === 'admin').length}
                   </p>
                 </div>

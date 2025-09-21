@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { formatDistanceToNow } from 'date-fns'
 import { useSearch } from '@/hooks/useDebounce'
 import {
   Card,
@@ -488,36 +489,21 @@ const getPermissionLevelBadge = (permissionCount: number) => {
 }
 
 // Statistics Dashboard Components
-const MetricCard = ({ title, value, icon: Icon, description, trend, trendValue, color }: {
+const MetricCard = ({ title, value, icon: Icon, description, trend, trendValue }: {
   title: string
   value: string | number
   icon: any
   description?: string
   trend?: 'up' | 'down' | 'neutral'
   trendValue?: string
-  color?: string
 }) => {
-  const defaultColor = 'from-blue-500 to-purple-500'
-  const cardColor = color || defaultColor
-
   return (
-    <Card className={cn(
-      "group relative overflow-hidden",
-      "border-0 shadow-lg hover:shadow-2xl",
-      "bg-gradient-to-br from-white via-white to-gray-50",
-      "dark:from-gray-900 dark:via-gray-900 dark:to-gray-800",
-      "transition-all duration-300 transform hover:-translate-y-1",
-      "before:absolute before:top-0 before:left-0 before:right-0 before:h-1",
-      `before:bg-gradient-to-r ${cardColor}`,
-      "before:opacity-0 before:group-hover:opacity-100 before:transition-opacity"
-    )}>
+    <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <div className={cn(
-            "p-3 rounded-lg",
-            `bg-gradient-to-r ${cardColor} text-white`
-          )}>
-            <Icon className="h-6 w-6" />
+          <div className="p-3 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+            <Icon className="w-6 h-6 text-primary" />
           </div>
           {trend && (
             <div className={cn(
@@ -533,14 +519,14 @@ const MetricCard = ({ title, value, icon: Icon, description, trend, trendValue, 
           )}
         </div>
         <div className="space-y-2">
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          <h3 className="text-2xl font-semibold group-hover:text-primary transition-colors">
             {value}
           </h3>
-          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+          <p className="text-sm font-medium text-muted-foreground">
             {title}
           </p>
           {description && (
-            <p className="text-xs text-gray-500 dark:text-gray-500">
+            <p className="text-xs text-muted-foreground">
               {description}
             </p>
           )}
@@ -1326,7 +1312,6 @@ export function RoleManagement() {
             value={roleStatistics.total_roles}
             icon={Users}
             description="All roles in system"
-            color="from-blue-500 to-indigo-500"
           />
           <MetricCard
             title="Active Roles"
@@ -1335,28 +1320,24 @@ export function RoleManagement() {
             description="Currently enabled"
             trend="up"
             trendValue="+12%"
-            color="from-green-500 to-emerald-500"
           />
           <MetricCard
             title="System Roles"
             value={roleStatistics.system_roles}
             icon={Crown}
             description="Built-in roles"
-            color="from-amber-500 to-orange-500"
           />
           <MetricCard
             title="Custom Roles"
             value={roleStatistics.custom_roles}
             icon={UserCheck}
             description="User-created roles"
-            color="from-purple-500 to-pink-500"
           />
           <MetricCard
             title="Avg Permissions"
             value={roleStatistics.average_permissions}
             icon={KeyRound}
             description="Per role average"
-            color="from-cyan-500 to-teal-500"
           />
         </div>
 
@@ -2139,200 +2120,103 @@ export function RoleManagement() {
       </Card>
 
       {/* Roles Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredRoles.map((role) => (
           <Card
             key={role.name}
-            className={cn(
-              "group relative overflow-hidden",
-              "border-0 shadow-lg hover:shadow-2xl",
-              "bg-gradient-to-br from-white via-white to-gray-50",
-              "dark:from-gray-900 dark:via-gray-900 dark:to-gray-800",
-              "transition-all duration-300 transform hover:-translate-y-1",
-              "hover:border-blue-200 dark:hover:border-blue-800",
-              "before:absolute before:top-0 before:left-0 before:right-0 before:h-1",
-              "before:bg-gradient-to-r before:from-blue-500 before:to-purple-500",
-              "before:opacity-0 before:group-hover:opacity-100 before:transition-opacity",
-              role.is_system ? "ring-2 ring-amber-200 dark:ring-amber-800" : ""
-            )}
+            className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden"
           >
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardHeader className="pb-4 relative">
               <div className="flex justify-between items-start">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className={cn(
-                      "p-2 rounded-lg flex-shrink-0",
-                      role.is_system
-                        ? "bg-gradient-to-br from-amber-400 to-orange-400 text-white"
-                        : "bg-gradient-to-br from-blue-500 to-purple-500 text-white"
-                    )}>
-                      <Shield className="h-5 w-5" />
+                    <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                      <Shield className="w-5 h-5 text-primary" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <CardTitle className={cn(
-                        "text-lg font-bold truncate",
-                        role.is_system
-                          ? "text-amber-700 dark:text-amber-300"
-                          : "text-gray-900 dark:text-gray-100"
-                      )}>
+                      <CardTitle className="text-lg font-semibold truncate group-hover:text-primary">
                         {role.name}
                       </CardTitle>
                     </div>
                   </div>
-                  <CardDescription className={cn(
-                    "text-sm leading-relaxed",
-                    "text-gray-600 dark:text-gray-400",
-                    "line-clamp-2"
-                  )}>
+                  <CardDescription className="text-sm">
                     {role.description || 'No description provided'}
                   </CardDescription>
                 </div>
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <div className="flex space-x-1">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className={cn(
-                        "h-8 w-8 flex-shrink-0",
-                        "opacity-0 group-hover:opacity-100 transition-opacity",
-                        "hover:bg-gray-100 dark:hover:bg-gray-800",
-                        "focus:opacity-100"
-                      )}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    className={cn(
-                      "border-0 shadow-xl",
-                      "bg-white/95 backdrop-blur-md dark:bg-gray-900/95"
-                    )}
-                  >
-                    <DropdownMenuItem
+                      className="h-8 w-8"
                       onClick={() => handleEditRole(role)}
                       disabled={role.is_system}
-                      className={cn(
-                        "flex items-center gap-2",
-                        role.is_system ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
-                      )}
                     >
                       <Edit className="h-4 w-4" />
-                      Edit Role
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => {
-                      const templateId = prompt('Enter template ID to apply:')
-                      if (templateId) handleApplyTemplate(templateId, role.name)
-                    }}>
-                      <Copy className="h-4 w-4" />
-                      Apply Template
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive"
                       onClick={() => handleDeleteRole(role.name)}
                       disabled={role.is_system}
-                      className={cn(
-                        "flex items-center gap-2 text-red-600",
-                        role.is_system ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-                        "focus:bg-red-50 dark:focus:bg-red-900/20"
-                      )}
                     >
                       <Trash2 className="h-4 w-4" />
-                      Delete Role
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                    </Button>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 mt-4">
-                {getRoleStatusBadge(role.is_active, role.is_system)}
-                {getInheritanceBadge(role.inheritance_type || "none")}
-                {getPermissionLevelBadge(role.permissions.length)}
+              <div className="flex items-center gap-2 mt-3">
+                <Badge variant="outline" className="text-xs">
+                  {role.permissions.length} permissions
+                </Badge>
+                {role.is_system && (
+                  <Badge variant="secondary" className="text-xs">
+                    System
+                  </Badge>
+                )}
+                {!role.is_active && (
+                  <Badge variant="destructive" className="text-xs">
+                    Inactive
+                  </Badge>
+                )}
               </div>
             </CardHeader>
 
             <CardContent className="pt-0">
               <div className="space-y-4">
-                {/* Permissions Section */}
-                <div className={cn(
-                  "p-3 rounded-lg",
-                  "bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20",
-                  "border border-blue-200 dark:border-blue-800"
-                )}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
-                      <Key className="h-4 w-4" />
-                      Permissions
-                    </div>
-                    <Badge variant="outline" className="text-xs bg-white dark:bg-gray-800">
-                      {role.permissions.length}
-                    </Badge>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {role.permissions.length === 0 ? (
-                      <span className="text-xs text-gray-500 italic">No permissions assigned</span>
-                    ) : (
-                      role.permissions.slice(0, 4).map((permission, index) => (
-                        <Badge
-                          key={index}
-                          variant="secondary"
-                          className={cn(
-                            "text-xs border-0",
-                            "bg-white dark:bg-gray-800",
-                            "text-gray-700 dark:text-gray-300",
-                            "hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                          )}
-                        >
-                          {permission.length > 20 ? `${permission.substring(0, 20)}...` : permission}
-                        </Badge>
-                      ))
-                    )}
-                    {role.permissions.length > 4 && (
-                      <Badge variant="outline" className="text-xs bg-white dark:bg-gray-800">
-                        +{role.permissions.length - 4} more
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                {/* Inheritance Section */}
-                {role.inherited_roles && role.inherited_roles.length > 0 && (
-                  <div className={cn(
-                    "p-3 rounded-lg",
-                    "bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20",
-                    "border border-purple-200 dark:border-purple-800"
-                  )}>
-                    <div className="flex items-center gap-2 text-sm font-semibold text-purple-700 dark:text-purple-300 mb-2">
-                      <GitBranch className="h-4 w-4" />
-                      Inheritance Chain
-                    </div>
-                    <div className="text-xs text-purple-600 dark:text-purple-400 leading-relaxed">
-                      Inherits from: {role.inherited_roles.join(', ')}
-                    </div>
-                  </div>
+                {/* Description */}
+                {role.description && (
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {role.description}
+                  </p>
                 )}
 
+                
                 {/* Meta Info */}
-                <div className={cn(
-                  "flex items-center justify-between pt-3 border-t",
-                  "border-gray-200 dark:border-gray-700",
-                  "text-xs text-gray-500 dark:text-gray-400"
-                )}>
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
-                    <span>{formatRelativeTime(role.created_at)}</span>
+                    <span>{formatDistanceToNow(new Date(role.created_at), { addSuffix: true })}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {role.permission_templates && role.permission_templates.length > 0 ? (
-                      <>
-                        <Settings className="h-3 w-3" />
-                        <span>{role.permission_templates.length} template{role.permission_templates.length !== 1 ? 's' : ''}</span>
-                      </>
-                    ) : (
-                      <span className="italic">No templates</span>
-                    )}
+                  <div className="flex items-center gap-1">
+                    <Key className="h-3 w-3" />
+                    <span>{role.permissions.length} permissions</span>
                   </div>
                 </div>
+
+                {/* Action Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => handleEditRole(role)}
+                >
+                  View Details
+                </Button>
               </div>
             </CardContent>
           </Card>

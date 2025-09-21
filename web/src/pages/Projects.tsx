@@ -371,7 +371,7 @@ export function Projects() {
                     <div className="flex items-center space-x-2">
                       <div className="flex items-center text-muted-foreground">
                         <User className="w-4 h-4 mr-1" />
-                        <span className="text-xs">{project.owner}</span>
+                        <span className="text-xs">{project.owner_user?.name || project.owner}</span>
                       </div>
                       <div className="flex items-center text-muted-foreground">
                         <Activity className="w-4 h-4 mr-1" />

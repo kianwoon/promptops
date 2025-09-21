@@ -1,5 +1,8 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.schemas import UserResponse
 from datetime import datetime
 import enum
 
@@ -136,19 +139,6 @@ class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = None
     owner: str
-
-class ProjectResponse(BaseModel):
-    id: str
-    name: str
-    description: Optional[str] = None
-    owner: str
-    created_at: datetime
-    updated_at: datetime
-    modules_count: Optional[int] = None
-    prompts_count: Optional[int] = None
-
-    class Config:
-        from_attributes = True
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
@@ -449,6 +439,20 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     is_verified: Optional[bool] = None
     is_active: Optional[bool] = None
+
+class ProjectResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    owner: str
+    owner_user: Optional[UserResponse] = None
+    created_at: datetime
+    updated_at: datetime
+    modules_count: Optional[int] = None
+    prompts_count: Optional[int] = None
+
+    class Config:
+        from_attributes = True
 
 # Client API Schemas
 class ClientApiKeyCreate(BaseModel):

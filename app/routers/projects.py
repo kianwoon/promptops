@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Body, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 import uuid
 from datetime import datetime
@@ -7,7 +7,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import aliased
 
 from app.database import get_db
-from app.models import Project, AuditLog, Module, Prompt # Import Module and Prompt
+from app.models import Project, AuditLog, Module, Prompt, User # Import Module and Prompt
 from app.schemas import ProjectCreate, ProjectResponse, ProjectUpdate
 from app.auth import get_current_user
 from app.config import settings
@@ -29,7 +29,7 @@ async def list_projects(
         Project,
         Project.modules_count,
         Project.prompts_count
-    ).offset(skip).limit(limit)
+    ).options(joinedload(Project.owner_user)).offset(skip).limit(limit)
 
     # Execute the query and fetch results
     # The result will be a list of tuples, where each tuple contains (Project_object, modules_count, prompts_count)
@@ -59,7 +59,7 @@ async def get_project(
     current_user: dict = Depends(get_current_user)
 ):
     """Get a specific project"""
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = db.query(Project).options(joinedload(Project.owner_user)).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project

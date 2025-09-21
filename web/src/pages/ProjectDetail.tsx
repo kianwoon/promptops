@@ -388,7 +388,7 @@ export function ProjectDetail() {
               <Label className="text-sm font-medium text-muted-foreground">Owner</Label>
               <p className="flex items-center mt-1">
                 <User className="w-4 h-4 mr-2 text-muted-foreground" />
-                {project.owner}
+                {project.owner_user?.name || project.owner}
               </p>
             </div>
             <div>

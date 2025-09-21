@@ -183,6 +183,7 @@ export interface Project {
   name: string
   description?: string
   owner: string
+  owner_user?: User
   created_at: string
   updated_at: string
   modules_count?: number
