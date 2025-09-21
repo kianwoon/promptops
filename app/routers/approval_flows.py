@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
 import logging
-import jwt
+from jose import jwt
 
 from app.database import get_db
 from app.auth.rbac import rbac_service, get_rbac_service, Permission, UserRole

@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta, timezone
 import logging
-import jwt
+from jose import jwt
 
 from app.database import get_db
 from app.models import Prompt, Module, AuditLog, ApprovalRequest, WorkflowInstance, WorkflowDefinition, WorkflowInstanceStatus, WorkflowStatus

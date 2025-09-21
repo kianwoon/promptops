@@ -21,14 +21,22 @@ export function Header() {
   const { user, logout, dbUser } = useAuth()
 
   const resolvedAvatar = React.useMemo(() => {
+    // Always prioritize database avatar if available
     const databaseAvatar = typeof dbUser?.avatar === 'string' ? dbUser.avatar.trim() : ''
     if (databaseAvatar) {
       return databaseAvatar
     }
 
+    // Only fall back to auth user avatar if no database avatar
     const authAvatar = typeof user?.avatar === 'string' ? user.avatar.trim() : ''
+
+    // Don't use Google avatar if user is authenticated with GitHub
+    if (authAvatar && authAvatar.includes('googleusercontent.com') && dbUser?.provider === 'github') {
+      return undefined
+    }
+
     return authAvatar || undefined
-  }, [dbUser?.avatar, user?.avatar])
+  }, [dbUser?.avatar, user?.avatar, dbUser?.provider])
 
   // For debugging, let's try a direct img approach
   const shouldUseDirectImg = resolvedAvatar && resolvedAvatar.includes('googleusercontent.com')
@@ -39,7 +47,7 @@ export function Header() {
 
   // Debug logging for avatar investigation
   React.useEffect(() => {
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.log('🔍 Header Debug:', {
         user,
         dbUser,
@@ -50,7 +58,9 @@ export function Header() {
         userAvatar: user?.avatar,
         dbUserAvatar: dbUser?.avatar,
         shouldUseDirectImg,
-        isGoogleAvatar: resolvedAvatar?.includes('googleusercontent.com')
+        isGoogleAvatar: resolvedAvatar?.includes('googleusercontent.com'),
+        avatarSource: resolvedAvatar?.includes('githubusercontent.com') ? 'github' :
+                     resolvedAvatar?.includes('googleusercontent.com') ? 'google' : 'unknown'
       })
     }
   }, [user, dbUser, resolvedAvatar, avatarError, shouldUseDirectImg])

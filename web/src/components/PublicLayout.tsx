@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Chrome, User, LogOut, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,42 @@ interface PublicLayoutProps {
 
 export function PublicLayout({ children, onSignInClick, onRegisterClick }: PublicLayoutProps) {
   const location = useLocation()
-  const { user, isAuthenticated, logout } = useAuth()
+  const { user, isAuthenticated, logout, dbUser } = useAuth()
+
+  // Use the same avatar resolution logic as Header component
+  const resolvedAvatar = React.useMemo(() => {
+    // Always prioritize database avatar if available
+    const databaseAvatar = typeof dbUser?.avatar === 'string' ? dbUser.avatar.trim() : ''
+    if (databaseAvatar) {
+      return databaseAvatar
+    }
+
+    // Only fall back to auth user avatar if no database avatar
+    const authAvatar = typeof user?.avatar === 'string' ? user.avatar.trim() : ''
+
+    // Don't use Google avatar if user is authenticated with GitHub
+    if (authAvatar && authAvatar.includes('googleusercontent.com') && dbUser?.provider === 'github') {
+      return undefined
+    }
+
+    return authAvatar || undefined
+  }, [dbUser?.avatar, user?.avatar, dbUser?.provider])
+
+  // Debug logging for PublicLayout avatar
+  useEffect(() => {
+    if (import.meta.env?.DEV) {
+      console.log('🔍 PublicLayout Debug:', {
+        user,
+        dbUser,
+        isAuthenticated,
+        userAvatar: user?.avatar,
+        dbUserAvatar: dbUser?.avatar,
+        resolvedAvatar,
+        avatarSource: resolvedAvatar?.includes('githubusercontent.com') ? 'github' :
+                     resolvedAvatar?.includes('googleusercontent.com') ? 'google' : 'unknown'
+      })
+    }
+  }, [user, dbUser, isAuthenticated, resolvedAvatar])
 
   const navigation = [
     { name: 'Solutions', href: '/#features' },
@@ -62,11 +97,16 @@ export function PublicLayout({ children, onSignInClick, onRegisterClick }: Publi
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center space-x-2">
                     <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-                      {user.avatar ? (
-                        <img 
-                          src={user.avatar} 
+                      {resolvedAvatar ? (
+                        <img
+                          src={resolvedAvatar}
                           alt={user.name}
                           className="h-8 w-8 rounded-full object-cover"
+                          crossOrigin="anonymous"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            console.log('PublicLayout avatar error:', resolvedAvatar)
+                          }}
                         />
                       ) : (
                         <User className="h-4 w-4 text-blue-600" />

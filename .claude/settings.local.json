@@ -58,7 +58,9 @@
       "WebFetch(domain:github.com)",
       "Bash(npx eslint:*)",
       "Bash(echo:*)",
-      "Bash(DATABASE_URL=\"postgresql://promptops:promptops@localhost:5432/promptops\" psql:*)"
+      "Bash(DATABASE_URL=\"postgresql://promptops:promptops@localhost:5432/promptops\" psql:*)",
+      "Bash(pip show:*)",
+      "Read(//Users/kianwoonwong/Library/**)"
     ],
     "deny": [],
     "ask": []

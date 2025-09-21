@@ -188,15 +188,34 @@ class AuthService:
     def verify_token(self, token: str, token_type: str = "access") -> Dict[str, Any]:
         """Verify JWT token and return payload"""
         try:
+            # Pre-validate token structure
+            if not token or not isinstance(token, str):
+                logger.error("JWT verification failed: Empty or invalid token type", token_type=token_type)
+                raise Exception("Invalid token")
+
+            # Check for proper JWT format (header.payload.signature)
+            if token.count('.') != 2:
+                logger.error("JWT verification failed: Invalid token format - expected 3 segments", token_type=token_type)
+                raise Exception("Invalid token")
+
+            # Check for reasonable token length
+            if len(token) < 30 or len(token) > 5000:
+                logger.error("JWT verification failed: Invalid token length", token_type=token_type, token_length=len(token))
+                raise Exception("Invalid token")
+
             payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
-            
+
             if payload.get("type") != token_type:
+                logger.error("JWT verification failed: Invalid token type", expected=token_type, actual=payload.get("type"))
                 raise Exception(f"Invalid token type. Expected: {token_type}")
-                
+
             return payload
-            
+
         except JWTError as e:
-            logger.error("JWT verification error", error=str(e))
+            logger.error("JWT verification error", error=str(e), token_type=token_type)
+            raise Exception("Invalid token")
+        except Exception as e:
+            logger.error("Unexpected JWT verification error", error=str(e), token_type=token_type)
             raise Exception("Invalid token")
     
     async def authenticate_with_google(self, code: str, db: Session) -> Dict[str, Any]:

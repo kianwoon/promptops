@@ -207,6 +207,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           const mergedUser = {
             ...localStorageUser,
             ...dbUser,
+            // Always prioritize database avatar over localStorage avatar
+            avatar: dbUser.avatar || localStorageUser.avatar,
             // Preserve some fields that might not be in database response
             phone: dbUser.phone || localStorageUser.phone,
             companySize: dbUser.companySize || localStorageUser.companySize,
