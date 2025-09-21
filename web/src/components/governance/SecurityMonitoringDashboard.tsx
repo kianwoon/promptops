@@ -152,12 +152,16 @@ export function SecurityMonitoringDashboard() {
     <div className="space-y-6">
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Events</p>
+              <div className="p-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+                <Activity className="h-6 w-6" />
+              </div>
+              <div className="text-right">
                 <p className="text-2xl font-bold">{metrics?.total_events || 0}</p>
+                <p className="text-sm font-medium text-muted-foreground">Total Events</p>
                 <div className="flex items-center gap-1 mt-1">
                   <div className={`w-2 h-2 rounded-full ${getSeverityColor('critical')}`} />
                   <span className="text-xs text-muted-foreground">
@@ -165,17 +169,20 @@ export function SecurityMonitoringDashboard() {
                   </span>
                 </div>
               </div>
-              <Activity className="h-8 w-8 text-blue-500" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Active Alerts</p>
+              <div className="p-3 rounded-full bg-gradient-to-r from-red-500 to-rose-500 text-white">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div className="text-right">
                 <p className="text-2xl font-bold">{metrics?.active_alerts || 0}</p>
+                <p className="text-sm font-medium text-muted-foreground">Active Alerts</p>
                 <div className="flex items-center gap-1 mt-1">
                   <div className={`w-2 h-2 rounded-full ${getSeverityColor('critical')}`} />
                   <span className="text-xs text-muted-foreground">
@@ -183,17 +190,20 @@ export function SecurityMonitoringDashboard() {
                   </span>
                 </div>
               </div>
-              <AlertTriangle className="h-8 w-8 text-orange-500" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Active Incidents</p>
+              <div className="p-3 rounded-full bg-gradient-to-r from-violet-500 to-purple-500 text-white">
+                <Shield className="h-6 w-6" />
+              </div>
+              <div className="text-right">
                 <p className="text-2xl font-bold">{metrics?.active_incidents || 0}</p>
+                <p className="text-sm font-medium text-muted-foreground">Active Incidents</p>
                 <div className="flex items-center gap-1 mt-1">
                   <div className={`w-2 h-2 rounded-full ${getSeverityColor('critical')}`} />
                   <span className="text-xs text-muted-foreground">
@@ -201,17 +211,20 @@ export function SecurityMonitoringDashboard() {
                   </span>
                 </div>
               </div>
-              <Shield className="h-8 w-8 text-red-500" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Compliance Score</p>
+              <div className="p-3 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+                <TrendingUp className="h-6 w-6" />
+              </div>
+              <div className="text-right">
                 <p className="text-2xl font-bold">{metrics?.compliance_score || 'N/A'}</p>
+                <p className="text-sm font-medium text-muted-foreground">Compliance Score</p>
                 <div className="flex items-center gap-1 mt-1">
                   <Users className="h-3 w-3" />
                   <span className="text-xs text-muted-foreground">
@@ -219,7 +232,6 @@ export function SecurityMonitoringDashboard() {
                   </span>
                 </div>
               </div>
-              <TrendingUp className="h-8 w-8 text-green-500" />
             </div>
           </CardContent>
         </Card>
@@ -446,38 +458,47 @@ export function SecurityMonitoringDashboard() {
             <CardContent>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card>
+                  <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
-                        <div>
+                        <div className="p-3 rounded-full bg-gradient-to-r from-cyan-500 to-teal-500 text-white">
+                          <Fingerprint className="h-6 w-6" />
+                        </div>
+                        <div className="text-right">
                           <p className="text-2xl font-bold">{metrics?.threat_indicators || 0}</p>
-                          <p className="text-sm text-muted-foreground">Threat Indicators</p>
+                          <p className="text-sm font-medium text-muted-foreground">Threat Indicators</p>
                         </div>
-                        <Fingerprint className="h-8 w-8 text-blue-500" />
                       </div>
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
-                        <div>
+                        <div className="p-3 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+                          <Shield className="h-6 w-6" />
+                        </div>
+                        <div className="text-right">
                           <p className="text-2xl font-bold">{metrics?.blocked_threats || 0}</p>
-                          <p className="text-sm text-muted-foreground">Blocked Threats</p>
+                          <p className="text-sm font-medium text-muted-foreground">Blocked Threats</p>
                         </div>
-                        <Shield className="h-8 w-8 text-green-500" />
                       </div>
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-2xl font-bold">{metrics?.suspicious_activities || 0}</p>
-                          <p className="text-sm text-muted-foreground">Suspicious Activities</p>
+                        <div className="p-3 rounded-full bg-gradient-to-r from-red-500 to-rose-500 text-white">
+                          <AlertCircle className="h-6 w-6" />
                         </div>
-                        <AlertCircle className="h-8 w-8 text-orange-500" />
+                        <div className="text-right">
+                          <p className="text-2xl font-bold">{metrics?.suspicious_activities || 0}</p>
+                          <p className="text-sm font-medium text-muted-foreground">Suspicious Activities</p>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>

@@ -497,13 +497,23 @@ const MetricCard = ({ title, value, icon: Icon, description, trend, trendValue }
   trend?: 'up' | 'down' | 'neutral'
   trendValue?: string
 }) => {
+  // Determine gradient color based on title
+  const getGradient = () => {
+    if (title.includes("Total") || title.includes("Users")) return "from-blue-500 to-purple-500";
+    if (title.includes("Active") || title.includes("Approved")) return "from-green-500 to-emerald-500";
+    if (title.includes("System") || title.includes("Admin")) return "from-violet-500 to-purple-500";
+    if (title.includes("Custom") || title.includes("Inactive")) return "from-amber-500 to-orange-500";
+    if (title.includes("Avg") || title.includes("Permissions")) return "from-cyan-500 to-teal-500";
+    return "from-blue-500 to-purple-500"; // default
+  };
+
   return (
     <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <div className="p-3 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-            <Icon className="w-6 h-6 text-primary" />
+          <div className={`p-3 rounded-lg bg-gradient-to-r ${getGradient()} text-white transition-all hover:shadow-md`}>
+            <Icon className="w-6 h-6" />
           </div>
           {trend && (
             <div className={cn(
@@ -2131,8 +2141,8 @@ export function RoleManagement() {
               <div className="flex justify-between items-start">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                      <Shield className="w-5 h-5 text-primary" />
+                    <div className="p-2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-500 text-white transition-all hover:shadow-md">
+                      <Shield className="w-5 h-5" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <CardTitle className="text-lg font-semibold truncate group-hover:text-primary">

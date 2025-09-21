@@ -306,46 +306,58 @@ export function AuditTrailViewer({
       {/* Statistics Cards */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
-                <Activity className="h-8 w-8 text-blue-500" />
+                <div className="p-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+                  <Activity className="h-6 w-6" />
+                </div>
                 <div>
                   <p className="text-2xl font-bold">{stats.total_events.toLocaleString()}</p>
-                  <p className="text-sm text-muted-foreground">Total Events</p>
+                  <p className="text-sm font-medium text-muted-foreground">Total Events</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
-                <Users className="h-8 w-8 text-green-500" />
+                <div className="p-3 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+                  <Users className="h-6 w-6" />
+                </div>
                 <div>
                   <p className="text-2xl font-bold">{Object.keys(stats.events_by_actor).length}</p>
-                  <p className="text-sm text-muted-foreground">Active Users</p>
+                  <p className="text-sm font-medium text-muted-foreground">Active Users</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
-                <AlertTriangle className="h-8 w-8 text-red-500" />
+                <div className="p-3 rounded-full bg-gradient-to-r from-red-500 to-rose-500 text-white">
+                  <AlertTriangle className="h-6 w-6" />
+                </div>
                 <div>
                   <p className="text-2xl font-bold">{stats.recent_errors.length}</p>
-                  <p className="text-sm text-muted-foreground">Recent Errors</p>
+                  <p className="text-sm font-medium text-muted-foreground">Recent Errors</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
-                <Clock className="h-8 w-8 text-purple-500" />
+                <div className="p-3 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+                  <Clock className="h-6 w-6" />
+                </div>
                 <div>
                   <p className="text-2xl font-bold">{Object.keys(stats.events_by_date).length}</p>
-                  <p className="text-sm text-muted-foreground">Days Active</p>
+                  <p className="text-sm font-medium text-muted-foreground">Days Active</p>
                 </div>
               </div>
             </CardContent>

@@ -277,8 +277,8 @@ export function UserManagement() {
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center">
-                <div className="p-3 rounded-full bg-primary/10">
-                  <Users className="h-6 w-6 text-primary" />
+                <div className="p-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+                  <Users className="h-6 w-6" />
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-muted-foreground">Total Users</p>
@@ -292,8 +292,8 @@ export function UserManagement() {
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center">
-                <div className="p-3 rounded-full bg-primary/10">
-                  <CheckCircle className="h-6 w-6 text-primary" />
+                <div className="p-3 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+                  <CheckCircle className="h-6 w-6" />
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-muted-foreground">Active Users</p>
@@ -309,8 +309,8 @@ export function UserManagement() {
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center">
-                <div className="p-3 rounded-full bg-primary/10">
-                  <XCircle className="h-6 w-6 text-primary" />
+                <div className="p-3 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+                  <XCircle className="h-6 w-6" />
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-muted-foreground">Inactive Users</p>
@@ -326,8 +326,8 @@ export function UserManagement() {
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardContent className="p-6">
               <div className="flex items-center">
-                <div className="p-3 rounded-full bg-primary/10">
-                  <Shield className="h-6 w-6 text-primary" />
+                <div className="p-3 rounded-full bg-gradient-to-r from-violet-500 to-purple-500 text-white">
+                  <Shield className="h-6 w-6" />
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-muted-foreground">Admin Users</p>

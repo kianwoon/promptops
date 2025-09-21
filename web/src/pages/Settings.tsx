@@ -230,10 +230,13 @@ export function SettingsPage() {
         {/* Main Settings Form */}
         <div className="lg:col-span-2 space-y-6">
           {/* Personal Information */}
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <User className="h-5 w-5 mr-2" />
+                <div className="p-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white mr-3">
+                  <User className="h-5 w-5" />
+                </div>
                 Personal Information
               </CardTitle>
               <CardDescription>
@@ -276,10 +279,13 @@ export function SettingsPage() {
           </Card>
 
           {/* Organization Settings */}
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <Building className="h-5 w-5 mr-2" />
+                <div className="p-2 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white mr-3">
+                  <Building className="h-5 w-5" />
+                </div>
                 Organization Settings
               </CardTitle>
               <CardDescription>
@@ -318,10 +324,13 @@ export function SettingsPage() {
           </Card>
 
           {/* Role & Permissions */}
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <Shield className="h-5 w-5 mr-2" />
+                <div className="p-2 rounded-full bg-gradient-to-r from-violet-500 to-purple-500 text-white mr-3">
+                  <Shield className="h-5 w-5" />
+                </div>
                 Role & Permissions
               </CardTitle>
               <CardDescription>
@@ -354,10 +363,13 @@ export function SettingsPage() {
           </Card>
 
           {/* Notification Preferences */}
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <Bell className="h-5 w-5 mr-2" />
+                <div className="p-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white mr-3">
+                  <Bell className="h-5 w-5" />
+                </div>
                 Notification Preferences
               </CardTitle>
               <CardDescription>

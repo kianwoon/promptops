@@ -549,8 +549,8 @@ export function PromptApprovalWorkflow() {
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
               <CardContent className="p-6">
                 <div className="flex items-center space-x-2">
-                  <div className="p-3 rounded-full bg-primary/10">
-                    <FileSignature className="h-6 w-6 text-primary" />
+                  <div className="p-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+                    <FileSignature className="h-6 w-6" />
                   </div>
                   <div>
                     <p className="text-2xl font-bold">{requestCounts.all}</p>
@@ -563,8 +563,8 @@ export function PromptApprovalWorkflow() {
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
               <CardContent className="p-6">
                 <div className="flex items-center space-x-2">
-                  <div className="p-3 rounded-full bg-primary/10">
-                    <Clock className="h-6 w-6 text-primary" />
+                  <div className="p-3 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+                    <Clock className="h-6 w-6" />
                   </div>
                   <div>
                     <p className="text-2xl font-bold">{requestCounts.pending}</p>
@@ -577,8 +577,8 @@ export function PromptApprovalWorkflow() {
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
               <CardContent className="p-6">
                 <div className="flex items-center space-x-2">
-                  <div className="p-3 rounded-full bg-primary/10">
-                    <CheckCircle className="h-6 w-6 text-primary" />
+                  <div className="p-3 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+                    <CheckCircle className="h-6 w-6" />
                   </div>
                   <div>
                     <p className="text-2xl font-bold">{requestCounts.approved}</p>
@@ -591,8 +591,8 @@ export function PromptApprovalWorkflow() {
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
               <CardContent className="p-6">
                 <div className="flex items-center space-x-2">
-                  <div className="p-3 rounded-full bg-primary/10">
-                    <XCircle className="h-6 w-6 text-primary" />
+                  <div className="p-3 rounded-full bg-gradient-to-r from-red-500 to-rose-500 text-white">
+                    <XCircle className="h-6 w-6" />
                   </div>
                   <div>
                     <p className="text-2xl font-bold">{requestCounts.rejected}</p>

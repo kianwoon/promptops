@@ -494,31 +494,43 @@ export function ApiKeysPage() {
       {/* Usage Statistics Overview */}
       {usageLimits && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Current Usage</CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center">
+                <div className="p-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white mr-2">
+                  <BarChart3 className="h-4 w-4" />
+                </div>
+                Current Usage
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Minute:</span>
-                  <span>{usageLimits.current_usage_minute} / {usageLimits.limits_minute}</span>
+                  <span className="font-medium">{usageLimits.current_usage_minute} / {usageLimits.limits_minute}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Hour:</span>
-                  <span>{usageLimits.current_usage_hour} / {usageLimits.limits_hour}</span>
+                  <span className="font-medium">{usageLimits.current_usage_hour} / {usageLimits.limits_hour}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Day:</span>
-                  <span>{usageLimits.current_usage_day} / {usageLimits.limits_day}</span>
+                  <span className="font-medium">{usageLimits.current_usage_day} / {usageLimits.limits_day}</span>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Remaining Requests</CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center">
+                <div className="p-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white mr-2">
+                  <Clock className="h-4 w-4" />
+                </div>
+                Remaining Requests
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -540,9 +552,15 @@ export function ApiKeysPage() {
 
           {usageStats && (
             <>
-              <Card>
+              <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Request Statistics</CardTitle>
+                  <CardTitle className="text-sm font-medium flex items-center">
+                    <div className="p-2 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white mr-2">
+                      <CheckCircle className="h-4 w-4" />
+                    </div>
+                    Request Statistics
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
@@ -562,9 +580,15 @@ export function ApiKeysPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Token Usage</CardTitle>
+                  <CardTitle className="text-sm font-medium flex items-center">
+                    <div className="p-2 rounded-full bg-gradient-to-r from-violet-500 to-purple-500 text-white mr-2">
+                      <Key className="h-4 w-4" />
+                    </div>
+                    Token Usage
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
@@ -578,7 +602,7 @@ export function ApiKeysPage() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>Period:</span>
-                      <span className="text-xs">30 days</span>
+                      <span className="text-xs text-muted-foreground">30 days</span>
                     </div>
                   </div>
                 </CardContent>

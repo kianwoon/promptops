@@ -118,8 +118,27 @@ const EnhancedStatCard: React.FC<{
   const changeColor = data.changeType === 'increase' ? 'text-green-500' :
                      data.changeType === 'decrease' ? 'text-red-500' : 'text-gray-500';
 
+  const getGradientForTitle = (title: string) => {
+    switch (title.toLowerCase()) {
+      case 'projects':
+        return 'bg-gradient-to-r from-blue-500 to-purple-500 text-white';
+      case 'templates':
+      case 'total templates':
+        return 'bg-gradient-to-r from-green-500 to-emerald-500 text-white';
+      case 'deployments':
+      case 'active deployments':
+        return 'bg-gradient-to-r from-amber-500 to-orange-500 text-white';
+      case 'requests':
+      case 'total requests':
+        return 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white';
+      default:
+        return 'bg-gradient-to-r from-blue-500 to-purple-500 text-white';
+    }
+  };
+
   return (
-    <Card className="hover:shadow-lg transition-all duration-200 border-0 bg-gradient-to-br from-background to-muted/20 backdrop-blur-sm">
+    <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <div className="space-y-2">
           <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -138,7 +157,7 @@ const EnhancedStatCard: React.FC<{
             )}
           </div>
         </div>
-        <div className="p-2 bg-primary/10 rounded-lg">
+        <div className={`p-2 rounded-lg ${getGradientForTitle(data.title)}`}>
           {data.icon}
         </div>
       </CardHeader>
@@ -175,10 +194,13 @@ const SystemHealthCard: React.FC<{ data: SystemHealth }> = ({ data }) => {
   };
 
   return (
-    <Card className="border-0 bg-gradient-to-br from-green-50 to-blue-50">
+    <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Shield className="h-5 w-5" />
+          <div className="p-2 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white mr-2">
+            <Shield className="h-5 w-5" />
+          </div>
           System Health
         </CardTitle>
       </CardHeader>
@@ -234,10 +256,13 @@ const SystemHealthCard: React.FC<{ data: SystemHealth }> = ({ data }) => {
 // Cost analysis component
 const CostAnalysisCard: React.FC<{ data: CostAnalysis }> = ({ data }) => {
   return (
-    <Card className="border-0 bg-gradient-to-br from-purple-50 to-pink-50">
+    <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <DollarSign className="h-5 w-5" />
+          <div className="p-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white mr-2">
+            <DollarSign className="h-5 w-5" />
+          </div>
           Cost Analysis
         </CardTitle>
       </CardHeader>
@@ -279,10 +304,13 @@ const SLAMetricsCard: React.FC<{ data: SLAMetrics }> = ({ data }) => {
   ];
 
   return (
-    <Card className="border-0 bg-gradient-to-br from-blue-50 to-indigo-50">
+    <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Zap className="h-5 w-5" />
+          <div className="p-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white mr-2">
+            <Zap className="h-5 w-5" />
+          </div>
           Performance SLA
         </CardTitle>
       </CardHeader>
@@ -333,10 +361,13 @@ const AlertsSection: React.FC<{ alerts: Alert[] }> = ({ alerts }) => {
   };
 
   return (
-    <Card>
+    <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5" />
+          <div className="p-2 rounded-full bg-gradient-to-r from-red-500 to-rose-500 text-white mr-2">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
           System Alerts
         </CardTitle>
       </CardHeader>

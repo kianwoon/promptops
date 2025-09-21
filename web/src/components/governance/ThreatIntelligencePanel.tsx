@@ -193,66 +193,78 @@ export function ThreatIntelligencePanel() {
     <div className="space-y-6">
       {/* Threat Intelligence Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Feeds</p>
+              <div className="p-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+                <Fingerprint className="h-6 w-6" />
+              </div>
+              <div className="text-right">
                 <p className="text-2xl font-bold">{feedStats.totalFeeds}</p>
+                <p className="text-sm font-medium text-muted-foreground">Total Feeds</p>
                 <p className="text-xs text-muted-foreground">
                   {feedStats.activeFeeds} active
                 </p>
               </div>
-              <Fingerprint className="h-8 w-8 text-blue-500" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Indicators</p>
+              <div className="p-3 rounded-full bg-gradient-to-r from-violet-500 to-purple-500 text-white">
+                <Shield className="h-6 w-6" />
+              </div>
+              <div className="text-right">
                 <p className="text-2xl font-bold">{feedStats.totalIndicators}</p>
+                <p className="text-sm font-medium text-muted-foreground">Indicators</p>
                 <p className="text-xs text-muted-foreground">
                   {feedStats.newIndicators} new
                 </p>
               </div>
-              <Shield className="h-8 w-8 text-green-500" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Blocked</p>
+              <div className="p-3 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+                <CheckCircle className="h-6 w-6" />
+              </div>
+              <div className="text-right">
                 <p className="text-2xl font-bold">
                   {indicators.filter(i => i.auto_blocked).length}
                 </p>
+                <p className="text-sm font-medium text-muted-foreground">Blocked</p>
                 <p className="text-xs text-muted-foreground">
                   {((indicators.filter(i => i.auto_blocked).length / indicators.length) * 100).toFixed(1)}% of total
                 </p>
               </div>
-              <CheckCircle className="h-8 w-8 text-green-500" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="group hover:shadow-lg transition-all duration-300 hover:scale-[1.02] border-2 hover:border-primary/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary/60"></div>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">False Positives</p>
+              <div className="p-3 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+                <XCircle className="h-6 w-6" />
+              </div>
+              <div className="text-right">
                 <p className="text-2xl font-bold">
                   {indicators.filter(i => i.is_false_positive).length}
                 </p>
+                <p className="text-sm font-medium text-muted-foreground">False Positives</p>
                 <p className="text-xs text-muted-foreground">
                   {((indicators.filter(i => i.is_false_positive).length / indicators.length) * 100).toFixed(1)}% of total
                 </p>
               </div>
-              <XCircle className="h-8 w-8 text-orange-500" />
             </div>
           </CardContent>
         </Card>
