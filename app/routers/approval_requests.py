@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from app.database import get_db
-from app.models import ApprovalRequest, Prompt, AuditLog, WorkflowDefinition, WorkflowInstance
+from app.models import ApprovalRequest, Prompt, AuditLog, WorkflowDefinition, WorkflowInstance, WorkflowInstanceStatus
 from app.schemas import ApprovalRequestCreate, ApprovalRequestResponse, ApprovalRequestUpdate, PromptComparisonResponse, PromptResponse
 from app.auth import get_current_user
 from app.auth.approval_permissions import check_specific_approval_access
@@ -247,7 +247,7 @@ async def get_approval_request_permissions(
             workflow_instance = db.query(WorkflowInstance).filter(
                 WorkflowInstance.resource_id == request_id,
                 WorkflowInstance.resource_type == "approval_request",
-                WorkflowInstance.status.in_(["pending", "in_progress"])
+                WorkflowInstance.status.in_([WorkflowInstanceStatus.PENDING, WorkflowInstanceStatus.IN_PROGRESS])
             ).first()
 
             if workflow_instance:

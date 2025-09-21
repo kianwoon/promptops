@@ -60,22 +60,52 @@ def transform_backend_step_type_to_frontend(step_type: str) -> str:
 
 def transform_steps_for_database(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Transform steps for database storage with proper enum values"""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"🔍 [DEBUG] transform_steps_for_database input: {steps}")
+
     transformed_steps = []
     for step in steps:
         transformed_step = step.copy()
         if 'step_type' in transformed_step:
             transformed_step['step_type'] = transform_frontend_step_type_to_backend(transformed_step['step_type'])
+
+        # Ensure approval_roles is preserved
+        if 'approval_roles' in transformed_step:
+            logger.info(f"🔍 [DEBUG] Preserving approval_roles for step {transformed_step.get('name', 'unknown')}: {transformed_step['approval_roles']}")
+        elif 'assigned_roles' in transformed_step:
+            # Map assigned_roles to approval_roles for database
+            transformed_step['approval_roles'] = transformed_step['assigned_roles']
+            logger.info(f"🔍 [DEBUG] Mapped assigned_roles to approval_roles: {transformed_step['approval_roles']}")
+
         transformed_steps.append(transformed_step)
+
+    logger.info(f"🔍 [DEBUG] transform_steps_for_database output: {transformed_steps}")
     return transformed_steps
 
 def transform_steps_for_frontend(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Transform steps for frontend response with proper enum values"""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"🔍 [DEBUG] transform_steps_for_frontend input: {steps}")
+
     transformed_steps = []
     for step in steps:
         transformed_step = step.copy()
         if 'step_type' in transformed_step:
             transformed_step['step_type'] = transform_backend_step_type_to_frontend(transformed_step['step_type'])
+
+        # Ensure approval_roles is preserved for frontend
+        if 'approval_roles' in transformed_step:
+            logger.info(f"🔍 [DEBUG] Preserving approval_roles for frontend step {transformed_step.get('name', 'unknown')}: {transformed_step['approval_roles']}")
+        else:
+            logger.warning(f"🔍 [DEBUG] Missing approval_roles in step {transformed_step.get('name', 'unknown')}: {transformed_step}")
+
         transformed_steps.append(transformed_step)
+
+    logger.info(f"🔍 [DEBUG] transform_steps_for_frontend output: {transformed_steps}")
     return transformed_steps
 
 # Schema definitions for approval flows

@@ -84,7 +84,6 @@ export function transformBackendStepToStep(
     required: backendStep.required ?? true,
     timeout_hours: backendStep.timeout_hours ?? 24,
     assigned_roles: backendStep.approval_roles || [],
-    approval_roles: backendStep.approval_roles || [],
     min_approvals: backendStep.min_approvals ?? 1,
     is_parallel: backendStep.is_parallel ?? false,
     notification_settings: backendStep.notification_settings || DEFAULT_NOTIFICATION_SETTINGS,
