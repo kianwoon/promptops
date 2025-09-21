@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   Card,
   CardContent,
@@ -81,6 +82,8 @@ import {
   RESULT_TYPES
 } from '@/types/governance'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
+import { useUsers } from '@/hooks/api'
+import { User } from '@/types/api'
 
 interface AuditTrailViewerProps {
   initialLogs?: AuditLog[]
@@ -104,6 +107,23 @@ export function AuditTrailViewer({
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null)
   const [showFilters, setShowFilters] = useState(false)
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set())
+
+  // Users data for actor name resolution
+  const { data: users = [] } = useUsers()
+
+  // Create user ID to name mapping
+  const userMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    users.forEach((user: User) => {
+      map[user.id] = user.name
+    })
+    return map
+  }, [users])
+
+  // Helper function to get actor display name
+  const getActorDisplayName = (actorId: string) => {
+    return userMap[actorId] || actorId // Fallback to ID if name not found
+  }
 
   // Filter states
   const [filters, setFilters] = useState<AuditLogFilter>({
@@ -494,7 +514,7 @@ export function AuditTrailViewer({
                           <TableCell className="font-mono text-sm">
                             {formatDate(log.ts)}
                           </TableCell>
-                          <TableCell className="font-medium">{log.actor}</TableCell>
+                          <TableCell className="font-medium">{getActorDisplayName(log.actor)}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <span className="text-sm">{log.action.replace(/_/g, ' ')}</span>
