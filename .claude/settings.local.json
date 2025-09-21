@@ -69,7 +69,9 @@
       "Bash(osascript:*)",
       "Bash(open:*)",
       "WebFetch(domain:localhost)",
-      "Read(//Users/kianwoonwong/**)"
+      "Read(//Users/kianwoonwong/**)",
+      "Bash(npx vite build:*)",
+      "Bash(npm run lint)"
     ],
     "deny": [],
     "ask": []
@@ -105,7 +107,7 @@
         ]
       }
     ],
-      "SessionStart": [
+    "SessionStart": [
       {
         "hooks": [
           {
@@ -114,7 +116,7 @@
           },
           {
             "type": "command",
-            "command": "if [ -f ./CLAUDE.md ]; then echo 'Project memory file CLAUDE.md found. It will be referenced throughout this session.'; fi"
+            "command": "echo 'ok'; if [ -f ./claude.md ]; then cat ./claude.md; elif [ -f ./CLAUDE.md ]; then cat ./CLAUDE.md; else echo 'No claude.md found'; fi"
           }
         ]
       }
@@ -124,7 +126,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "say 'Ok. Reading project context.'; if [ -f ./CLAUDE.md ]; then cat ./CLAUDE.md; fi"
+            "command": "echo 'ok'; if [ -f ./claude.md ]; then cat ./claude.md; elif [ -f ./CLAUDE.md ]; then cat ./CLAUDE.md; else echo 'No claude.md found'; fi"
           }
         ]
       }
