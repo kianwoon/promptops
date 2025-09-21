@@ -1302,7 +1302,7 @@ export function RoleManagement() {
   }
 
   return (
-    <div className="space-y-6 min-h-screen p-4 sm:p-6 md:p-8 lg:p-10 xl:p-12">
+    <div className="space-y-6 -mt-8">
       {/* Accessibility: Skip to main content link */}
       <a
         href="#main-content"
@@ -1311,10 +1311,16 @@ export function RoleManagement() {
         Skip to main content
       </a>
 
-  
-      <main id="main-content">
+      {/* Page Header */}
+      <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Role Management</h1>
+          <p className="text-muted-foreground">
+            Manage user roles, permissions, and access controls
+          </p>
+        </div>
+
       {/* Statistics Dashboard */}
-      <div className="space-y-6 mb-8" role="region" aria-label="Role Management Statistics">
+      <div className="space-y-4" role="region" aria-label="Role Management Statistics">
         {/* Key Metrics Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <MetricCard
@@ -2608,7 +2614,6 @@ export function RoleManagement() {
           )}
         </DialogContent>
       </Dialog>
-      </main>
     </div>
   )
 }
