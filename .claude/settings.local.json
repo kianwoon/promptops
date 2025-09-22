@@ -97,6 +97,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash -lc 'echo \"ok\"; if [ -f ./claude.md ]; then cat ./claude.md; elif [ -f ./CLAUDE.md ]; then cat ./CLAUDE.md; else echo \"No claude.md found\"; fi'"
+          },         
+          {
+            "type": "command",
             "command": "/Users/kianwoonwong/Downloads/promptops/claude-say.sh"
           }
         ]
@@ -118,16 +122,6 @@
           {
             "type": "command",
             "command": "/Users/kianwoonwong/Downloads/promptops/claude-say.sh"
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "say \"Subtask complete.\""
           }
         ]
       }
