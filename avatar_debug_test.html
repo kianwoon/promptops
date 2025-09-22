@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avatar Debug Test</title>
+    <style>
+        .avatar-container {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            align-items: center;
+        }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .fallback {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #64748b;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Avatar Debug Test</h1>
+
+    <div class="avatar-container">
+        <div>
+            <h3>GitHub Avatar</h3>
+            <img
+                src="https://avatars.githubusercontent.com/u/3683610?v=4"
+                alt="GitHub Avatar"
+                class="avatar"
+                onload="console.log('GitHub avatar loaded successfully')"
+                onerror="console.error('GitHub avatar failed to load')"
+            />
+            <div id="github-status"></div>
+        </div>
+
+        <div>
+            <h3>Google Avatar</h3>
+            <img
+                src="https://lh3.googleusercontent.com/a/ACg8ocJBixoWqdPiPFJn_H7L6w71JR9FOS-S4StOZwIM5FmYwrG08Yg3=s96-c"
+                alt="Google Avatar"
+                class="avatar"
+                onload="console.log('Google avatar loaded successfully')"
+                onerror="console.error('Google avatar failed to load')"
+            />
+            <div id="google-status"></div>
+        </div>
+
+        <div>
+            <h3>Fallback</h3>
+            <div class="fallback">WW</div>
+        </div>
+    </div>
+
+    <script>
+        function testImageLoad(url, elementId) {
+            const img = new Image();
+            img.onload = function() {
+                console.log(`${elementId} loaded successfully:`, url);
+                document.getElementById(elementId).textContent = '✅ Loaded successfully';
+                document.getElementById(elementId).style.color = 'green';
+            };
+            img.onerror = function(error) {
+                console.error(`${elementId} failed to load:`, url, error);
+                document.getElementById(elementId).textContent = '❌ Failed to load';
+                document.getElementById(elementId).style.color = 'red';
+                document.getElementById(elementId).innerHTML += '<div class="error">Error: ' + error.message + '</div>';
+            };
+            img.src = url;
+        }
+
+        // Test both avatar URLs
+        testImageLoad('https://avatars.githubusercontent.com/u/3683610?v=4', 'github-status');
+        testImageLoad('https://lh3.googleusercontent.com/a/ACg8ocJBixoWqdPiPFJn_H7L6w71JR9FOS-S4StOZwIM5FmYwrG08Yg3=s96-c', 'google-status');
+
+        // Log browser console for debugging
+        console.log('Avatar debug test started');
+        console.log('User agent:', navigator.userAgent);
+        console.log('Current URL:', window.location.href);
+    </script>
+</body>
+</html>

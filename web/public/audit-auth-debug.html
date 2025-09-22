@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Logs Authentication Debug</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .token-display {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .warning {
+            color: #856404;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .user-info {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .api-test {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .network-request {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Audit Logs Authentication Debug</h1>
+
+        <div class="section">
+            <h3>📱 LocalStorage Authentication Tokens</h3>
+            <button onclick="checkLocalStorage()">Check LocalStorage</button>
+            <div id="localStorageContent"></div>
+        </div>
+
+        <div class="section">
+            <h3>👤 Current User Information</h3>
+            <button onclick="getCurrentUserInfo()">Get User Info</button>
+            <div id="userInfoContent"></div>
+        </div>
+
+        <div class="section">
+            <h3>🔐 Authentication Test</h3>
+            <button onclick="testAuthentication()">Test Auth Status</button>
+            <div id="authTestContent"></div>
+        </div>
+
+        <div class="section">
+            <h3>📊 Audit Logs API Test</h3>
+            <button onclick="testAuditLogsAPI()">Test Audit Logs API</button>
+            <div id="auditLogsTestContent"></div>
+        </div>
+
+        <div class="section">
+            <h3>🔑 JWT Token Analysis</h3>
+            <button onclick="analyzeJWTToken()">Analyze JWT Token</button>
+            <div id="jwtAnalysisContent"></div>
+        </div>
+
+        <div class="section">
+            <h3>📡 Network Request Monitor</h3>
+            <button onclick="startNetworkMonitoring()">Start Monitoring</button>
+            <button onclick="stopNetworkMonitoring()">Stop Monitoring</button>
+            <div id="networkMonitorContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let networkMonitor = null;
+
+        function checkLocalStorage() {
+            const content = document.getElementById('localStorageContent');
+            content.innerHTML = '<div class="loading"></div>';
+
+            setTimeout(() => {
+                let html = '';
+                const keys = Object.keys(localStorage);
+
+                if (keys.length === 0) {
+                    html += '<div class="warning">⚠️ No items found in localStorage</div>';
+                } else {
+                    html += `<div>Found ${keys.length} items in localStorage:</div>`;
+                    keys.forEach(key => {
+                        const value = localStorage.getItem(key);
+                        html += `<div class="token-display"><strong>${key}:</strong><br>${value}</div>`;
+                    });
+                }
+
+                content.innerHTML = html;
+            }, 500);
+        }
+
+        function getCurrentUserInfo() {
+            const content = document.getElementById('userInfoContent');
+            content.innerHTML = '<div class="loading"></div>';
+
+            // Try to get user info from various sources
+            const userInfo = {
+                localStorage: {},
+                authToken: null,
+                userRole: null,
+                tenant: null
+            };
+
+            // Check localStorage for user data
+            const authData = localStorage.getItem('auth_user');
+            if (authData) {
+                try {
+                    userInfo.localStorage.auth_user = JSON.parse(authData);
+                } catch (e) {
+                    userInfo.localStorage.auth_user = 'Invalid JSON';
+                }
+            }
+
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                userInfo.authToken = token.substring(0, 50) + '...';
+            }
+
+            const userRole = localStorage.getItem('user_role');
+            if (userRole) {
+                userInfo.userRole = userRole;
+            }
+
+            const tenant = localStorage.getItem('tenant');
+            if (tenant) {
+                userInfo.tenant = tenant;
+            }
+
+            let html = '<div class="user-info">';
+            html += '<h4>Current User Information:</h4>';
+            html += `<div><strong>Auth Token:</strong> ${userInfo.authToken || 'Not found'}</div>`;
+            html += `<div><strong>User Role:</strong> ${userInfo.userRole || 'Not found'}</div>`;
+            html += `<div><strong>Tenant:</strong> ${userInfo.tenant || 'Not found'}</div>`;
+            html += `<div><strong>Auth User Data:</strong></div>`;
+            html += `<div class="token-display">${JSON.stringify(userInfo.localStorage.auth_user, null, 2)}</div>`;
+            html += '</div>';
+
+            content.innerHTML = html;
+        }
+
+        function testAuthentication() {
+            const content = document.getElementById('authTestContent');
+            content.innerHTML = '<div class="loading"></div>';
+
+            const token = localStorage.getItem('auth_token');
+
+            if (!token) {
+                content.innerHTML = '<div class="error">❌ No authentication token found in localStorage</div>';
+                return;
+            }
+
+            // Test token validity by making a simple API call
+            fetch('/api/users/me', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            })
+            .then(data => {
+                let html = '<div class="success">✅ Authentication token is valid</div>';
+                html += '<div class="user-info">';
+                html += '<h4>User Data:</h4>';
+                html += `<div class="token-display">${JSON.stringify(data, null, 2)}</div>`;
+                html += '</div>';
+                content.innerHTML = html;
+            })
+            .catch(error => {
+                content.innerHTML = `<div class="error">❌ Authentication failed: ${error.message}</div>`;
+            });
+        }
+
+        function testAuditLogsAPI() {
+            const content = document.getElementById('auditLogsTestContent');
+            content.innerHTML = '<div class="loading"></div>';
+
+            const token = localStorage.getItem('auth_token');
+
+            if (!token) {
+                content.innerHTML = '<div class="error">❌ No authentication token found</div>';
+                return;
+            }
+
+            const testEndpoint = '/api/governance/audit-logs';
+
+            fetch(testEndpoint, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                const status = response.status;
+                const statusText = response.statusText;
+
+                return response.text().then(text => {
+                    return {
+                        status,
+                        statusText,
+                        text,
+                        headers: Object.fromEntries(response.headers.entries())
+                    };
+                });
+            })
+            .then(result => {
+                let html = `<div class="network-request">`;
+                html += `<h4>Request: GET ${testEndpoint}</h4>`;
+                html += `<div><strong>Status:</strong> ${result.status} ${result.statusText}</div>`;
+                html += `<div><strong>Headers:</strong></div>`;
+                html += `<div class="token-display">${JSON.stringify(result.headers, null, 2)}</div>`;
+                html += `<div><strong>Response:</strong></div>`;
+                html += `<div class="token-display">${result.text}</div>`;
+                html += `</div>`;
+
+                if (result.status === 200) {
+                    html = '<div class="success">✅ Audit logs API accessible</div>' + html;
+                } else if (result.status === 401) {
+                    html = '<div class="error">❌ Authentication failed (401)</div>' + html;
+                } else if (result.status === 403) {
+                    html = '<div class="error">❌ Forbidden - insufficient permissions (403)</div>' + html;
+                } else {
+                    html = `<div class="warning">⚠️ Unexpected status: ${result.status}</div>` + html;
+                }
+
+                content.innerHTML = html;
+            })
+            .catch(error => {
+                content.innerHTML = `<div class="error">❌ Network error: ${error.message}</div>`;
+            });
+        }
+
+        function analyzeJWTToken() {
+            const content = document.getElementById('jwtAnalysisContent');
+            content.innerHTML = '<div class="loading"></div>';
+
+            const token = localStorage.getItem('auth_token');
+
+            if (!token) {
+                content.innerHTML = '<div class="error">❌ No JWT token found in localStorage</div>';
+                return;
+            }
+
+            try {
+                // JWT tokens consist of three parts: header.payload.signature
+                const parts = token.split('.');
+                if (parts.length !== 3) {
+                    throw new Error('Invalid JWT token format');
+                }
+
+                // Decode header and payload (base64url encoded)
+                const header = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
+                const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+
+                let html = '<div class="success">✅ JWT token format is valid</div>';
+                html += '<div class="user-info">';
+                html += '<h4>JWT Header:</h4>';
+                html += `<div class="token-display">${JSON.stringify(header, null, 2)}</div>`;
+                html += '<h4>JWT Payload:</h4>';
+                html += `<div class="token-display">${JSON.stringify(payload, null, 2)}</div>`;
+
+                // Check for admin role
+                const roles = payload.roles || [];
+                const role = payload.role;
+                const isAdmin = roles.includes('admin') || roles.includes('ADMIN') || role === 'admin' || role === 'ADMIN';
+
+                html += `<div><strong>Admin Role:</strong> ${isAdmin ? '✅ Yes' : '❌ No'}</div>`;
+                html += `<div><strong>Roles:</strong> ${JSON.stringify(roles)}</div>`;
+                html += `<div><strong>Role:</strong> ${role || 'Not specified'}</div>`;
+                html += `<div><strong>Tenant:</strong> ${payload.tenant || payload.tenant_id || 'Not specified'}</div>`;
+                html += `<div><strong>Expiration:</strong> ${new Date(payload.exp * 1000).toLocaleString()}</div>`;
+                html += '</div>';
+
+                content.innerHTML = html;
+            } catch (error) {
+                content.innerHTML = `<div class="error">❌ JWT token analysis failed: ${error.message}</div>`;
+            }
+        }
+
+        function startNetworkMonitoring() {
+            const content = document.getElementById('networkMonitorContent');
+            content.innerHTML = '<div class="loading"></div> Starting network monitoring...';
+
+            // Store original fetch
+            const originalFetch = window.fetch;
+
+            networkMonitor = [];
+
+            window.fetch = function(...args) {
+                const request = args[0];
+                const options = args[1] || {};
+
+                const startTime = Date.now();
+
+                return originalFetch.apply(this, args)
+                    .then(response => {
+                        const endTime = Date.now();
+                        const duration = endTime - startTime;
+
+                        // Clone response to avoid body already read issues
+                        const clonedResponse = response.clone();
+
+                        // Store request info
+                        const requestInfo = {
+                            url: request,
+                            method: options.method || 'GET',
+                            headers: options.headers || {},
+                            status: response.status,
+                            statusText: response.statusText,
+                            duration: duration,
+                            timestamp: new Date().toISOString()
+                        };
+
+                        networkMonitor.push(requestInfo);
+
+                        // Try to get response body for audit logs
+                        if (request.includes('audit-logs')) {
+                            clonedResponse.text().then(body => {
+                                requestInfo.responseBody = body;
+                                updateNetworkDisplay();
+                            });
+                        } else {
+                            updateNetworkDisplay();
+                        }
+
+                        return response;
+                    })
+                    .catch(error => {
+                        const endTime = Date.now();
+                        const duration = endTime - startTime;
+
+                        const requestInfo = {
+                            url: request,
+                            method: options.method || 'GET',
+                            headers: options.headers || {},
+                            error: error.message,
+                            duration: duration,
+                            timestamp: new Date().toISOString()
+                        };
+
+                        networkMonitor.push(requestInfo);
+                        updateNetworkDisplay();
+
+                        throw error;
+                    });
+            };
+
+            content.innerHTML = '<div class="success">✅ Network monitoring started</div>';
+            updateNetworkDisplay();
+        }
+
+        function stopNetworkMonitoring() {
+            if (networkMonitor !== null) {
+                // Restore original fetch
+                window.fetch = originalFetch;
+                networkMonitor = null;
+
+                const content = document.getElementById('networkMonitorContent');
+                content.innerHTML = '<div class="success">✅ Network monitoring stopped</div>';
+            }
+        }
+
+        function updateNetworkDisplay() {
+            if (!networkMonitor) return;
+
+            const content = document.getElementById('networkMonitorContent');
+            let html = '<h4>Network Requests:</h4>';
+
+            if (networkMonitor.length === 0) {
+                html += '<div class="warning">No network requests captured yet</div>';
+            } else {
+                networkMonitor.forEach((req, index) => {
+                    html += `<div class="network-request">`;
+                    html += `<div><strong>${index + 1}. ${req.method} ${req.url}</strong></div>`;
+                    html += `<div><strong>Status:</strong> ${req.status || req.error || 'Unknown'}</div>`;
+                    html += `<div><strong>Duration:</strong> ${req.duration}ms</div>`;
+                    html += `<div><strong>Time:</strong> ${req.timestamp}</div>`;
+
+                    if (req.url.includes('audit-logs')) {
+                        html += `<div><strong>Headers:</strong></div>`;
+                        html += `<div class="token-display">${JSON.stringify(req.headers, null, 2)}</div>`;
+
+                        if (req.responseBody) {
+                            html += `<div><strong>Response:</strong></div>`;
+                            html += `<div class="token-display">${req.responseBody}</div>`;
+                        }
+                    }
+
+                    html += `</div>`;
+                });
+            }
+
+            content.innerHTML = html;
+        }
+
+        // Auto-run some checks on page load
+        window.onload = function() {
+            console.log('🔍 Audit Logs Authentication Debug Tool Loaded');
+            checkLocalStorage();
+            getCurrentUserInfo();
+        };
+    </script>
+</body>
+</html>

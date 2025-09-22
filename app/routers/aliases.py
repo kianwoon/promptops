@@ -7,7 +7,7 @@ import uuid
 from app.database import get_db
 from app.models import Alias, Template, AuditLog
 from app.schemas import AliasResponse, AliasUpdate, AliasesListResponse
-from app.auth import get_current_user_or_demo, get_current_user
+from app.auth import get_current_user
 
 router = APIRouter()
 
@@ -15,7 +15,7 @@ router = APIRouter()
 async def get_aliases(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get all aliases"""
     aliases = db.query(Alias).order_by(Alias.alias).all()
@@ -26,7 +26,7 @@ async def get_alias(
     alias: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get alias configuration"""
     alias_obj = db.query(Alias).filter(Alias.alias == alias).first()

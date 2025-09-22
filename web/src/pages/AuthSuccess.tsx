@@ -52,12 +52,13 @@ export function AuthSuccess() {
           name: decodedToken.name || decodedToken.email?.split('@')[0],
           role: decodedToken.role || 'user',
           organization: '',
-          provider: 'google',
+          provider: decodedToken.provider || (decodedToken.picture ? 'google' : 'github'),
           isVerified: true,
           createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString()
+          lastLogin: new Date().toISOString(),
+          avatar: decodedToken.picture || decodedToken.avatar_url || undefined
         }
-        
+
         // Store tokens and user data in localStorage
         localStorage.setItem('access_token', accessToken)
         localStorage.setItem('refresh_token', refreshToken)

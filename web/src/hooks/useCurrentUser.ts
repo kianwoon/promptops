@@ -99,6 +99,17 @@ export function useCurrentUser(): UseCurrentUserResult {
         isVerified: dbUser?.is_verified ?? authUser.is_verified,
       }
 
+      // Debug logging for avatar investigation
+      console.log('🔍 useCurrentUser Debug:', {
+        authUser,
+        dbUser,
+        avatarFromDb,
+        avatarFromAuth,
+        resolvedAvatar,
+        transformedUserAvatar: transformedUser.avatar,
+        hasAvatar: !!transformedUser.avatar
+      })
+
       setUser(transformedUser)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch user data'

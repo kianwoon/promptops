@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import logging
 
 from app.database import get_db
-from app.auth import get_current_user
+from app.auth import get_current_user, get_current_user_or_demo
 from app.config import settings
 from app.models import (
     SecurityEvent, WorkflowDefinition, WorkflowInstance, ComplianceReport,
@@ -22,6 +22,13 @@ from app.models import (
     AnomalyDetectionResult
 )
 from app.auth.rbac import rbac_service
+
+# Helper function for case-insensitive admin role checking
+def is_admin_user(current_user: dict) -> bool:
+    """Check if current user has admin role (case-insensitive)"""
+    user_role = current_user.get("role", "").lower()
+    user_roles = [str(r).lower() for r in current_user.get("roles", [])]
+    return user_role == "admin" or "admin" in user_roles
 from app.schemas import (
     SecurityEventCreate, SecurityEventUpdate, SecurityEventResponse,
     WorkflowDefinitionCreate, WorkflowDefinitionUpdate, WorkflowDefinitionResponse,
@@ -31,7 +38,7 @@ from app.schemas import (
     RolePermissionCreate, RolePermissionUpdate, RolePermissionResponse,
     WorkflowStepAction, BulkRolePermissionCreate, BulkRolePermissionResponse,
     PermissionCheckRequest, PermissionCheckResponse,
-    CustomRoleCreate, CustomRoleUpdate, CustomRoleResponse,
+    CustomRoleCreate, CustomRoleUpdate, CustomRoleResponse, RoleResponse, PermissionInfo,
     PermissionTemplatePermission, RoleInheritanceCreate, RoleInheritanceUpdate, RoleInheritanceResponse,
     ResourceSpecificPermissionCreate, ResourceSpecificPermissionUpdate, ResourceSpecificPermissionResponse,
     AccessReviewCreate, AccessReviewUpdate, AccessReviewResponse, AccessReviewScope,
@@ -62,16 +69,272 @@ logger = logging.getLogger(__name__)
 
 # ============ ROLE MANAGEMENT ENDPOINTS ============
 
-@router.get("/roles", response_model=List[str])
+@router.get("/roles", response_model=List[CustomRoleResponse])
 async def list_roles(
     request: Request,
+    search: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """List all available roles in the system"""
-    # Get unique role names from RolePermission table
-    roles = db.query(RolePermission.role_name).distinct().all()
-    return [role.role_name for role in roles]
+    # Forward to the custom-roles endpoint for consistency
+    return await list_custom_roles(request, search, is_active, skip, limit, db, current_user)
+
+@router.get("/roles/", response_model=List[RoleResponse])
+async def list_roles_v1(
+    request: Request,
+    search: Optional[str] = Query(None, description="Search roles by name or description"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    skip: int = Query(0, ge=0, description="Number of roles to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of roles to return"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """List all roles in v1 format compatible with frontend expectations"""
+    # Debug: Log current user tenant
+    print(f"DEBUG: current_user tenant = {current_user['tenant']}")
+
+    # Get custom roles from the database
+    custom_roles = rbac_service.list_custom_roles(
+        tenant_id=current_user["tenant"],
+        db=db
+    )
+
+    # Debug: Log what RBAC service returned
+    print(f"DEBUG: RBAC returned {len(custom_roles)} roles:")
+    for role in custom_roles:
+        print(f"DEBUG:   - {role.name} (tenant: {role.tenant_id}, active: {role.is_active})")
+
+    # Transform CustomRoleResponse to RoleResponse format
+    roles_response = []
+    for role in custom_roles:
+        # Check if this is a system role (basic heuristic)
+        is_system = role.name in ['admin', 'editor', 'viewer', 'approver'] or role.created_by is None
+
+        role_response = RoleResponse(
+            name=role.name,
+            description=role.description,
+            permissions=role.permissions,
+            permission_templates=role.permission_templates,
+            inherited_roles=role.inherited_roles,
+            inheritance_type=role.inheritance_type,
+            conditions=role.conditions,
+            is_system=is_system,
+            is_active=role.is_active,
+            created_at=role.created_at.isoformat() if role.created_at else datetime.utcnow().isoformat()
+        )
+        roles_response.append(role_response)
+
+    return roles_response
+
+@router.post("/roles/", response_model=RoleResponse)
+async def create_role_v1(
+    request: Request,
+    role_data: CustomRoleCreate = Body(...),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new role in v1 format"""
+    # Use the existing create_custom_role function
+    created_role = await create_custom_role(request, role_data, db, current_user)
+
+    # Transform to RoleResponse format
+    is_system = created_role.name in ['admin', 'editor', 'viewer', 'approver'] or created_role.created_by is None
+
+    return RoleResponse(
+        name=created_role.name,
+        description=created_role.description,
+        permissions=created_role.permissions,
+        permission_templates=created_role.permission_templates,
+        inherited_roles=created_role.inherited_roles,
+        inheritance_type=created_role.inheritance_type,
+        conditions=created_role.conditions,
+        is_system=is_system,
+        is_active=created_role.is_active,
+        created_at=created_role.created_at.isoformat() if created_role.created_at else datetime.utcnow().isoformat()
+    )
+
+@router.get("/roles/templates/", response_model=List[PermissionTemplateResponse])
+async def get_permission_templates_v1(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get permission templates in v1 format"""
+    return await list_permission_templates(request, db, current_user)
+
+@router.get("/roles/available-permissions/", response_model=List[PermissionInfo])
+async def get_available_permissions_v1(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get available permissions in v1 format"""
+    # Get all unique permissions from multiple sources
+    permissions = set()
+
+    # Get permissions from custom roles
+    custom_roles = rbac_service.list_custom_roles(
+        tenant_id=current_user["tenant"],
+        skip=0,
+        limit=1000
+    )
+
+    for role in custom_roles:
+        for permission in role.permissions:
+            if permission:
+                permissions.add(permission)
+
+    # Get permissions from permission templates
+    templates = db.query(PermissionTemplate).filter(
+        PermissionTemplate.tenant_id == current_user["tenant"]
+    ).all()
+
+    for template in templates:
+        for perm in template.permissions:
+            if isinstance(perm, dict):
+                action = perm.get("action", "")
+                resource_type = perm.get("resource_type", "")
+                if action and resource_type:
+                    permissions.add(f"{action}_{resource_type}")
+            elif isinstance(perm, str):
+                permissions.add(perm)
+
+    # Get all unique permissions from RolePermission table (system-wide)
+    role_permissions = db.query(RolePermission).filter(
+        RolePermission.is_active == True
+    ).all()
+
+    for perm in role_permissions:
+        if perm.action:
+            permissions.add(perm.action)
+
+    # Add common system permissions that should be available
+    system_permissions = {
+        "read_policy", "write_policy", "delete_policy",
+        "read_template", "write_template", "delete_template",
+        "read_module", "write_module", "delete_module",
+        "read_prompt", "write_prompt", "delete_prompt",
+        "read_project", "write_project", "delete_project",
+        "read_role", "write_role", "delete_role",
+        "read_user", "write_user", "delete_user",
+        "read_approval", "write_approval", "delete_approval",
+        "read_eval", "write_eval", "delete_eval",
+        "read_alias", "write_alias", "delete_alias",
+        "view_role_hierarchy", "manage_role_hierarchy",
+        "assign_roles", "revoke_roles",
+        "manage_permissions", "manage_templates",
+        "system_admin", "tenant_admin", "user_admin"
+    }
+
+    # Add system permissions that aren't already in the set
+    permissions.update(system_permissions)
+
+    # Convert to PermissionInfo objects
+    permission_list = []
+    for perm in sorted(permissions):
+        # Generate a simple description based on the permission name
+        description = perm.replace("_", " ").title()
+        permission_list.append(PermissionInfo(name=perm, description=description))
+
+    return permission_list
+
+@router.put("/roles/{role_name}", response_model=RoleResponse)
+async def update_role_v1(
+    role_name: str,
+    request: Request,
+    role_data: CustomRoleUpdate = Body(...),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update a role in v1 format"""
+    # Use the existing update_custom_role function
+    updated_role = await update_custom_role(role_name, request, role_data, db, current_user)
+
+    # Transform to RoleResponse format
+    is_system = updated_role.name in ['admin', 'editor', 'viewer', 'approver'] or updated_role.created_by is None
+
+    return RoleResponse(
+        name=updated_role.name,
+        description=updated_role.description,
+        permissions=updated_role.permissions,
+        permission_templates=updated_role.permission_templates,
+        inherited_roles=updated_role.inherited_roles,
+        inheritance_type=updated_role.inheritance_type,
+        conditions=updated_role.conditions,
+        is_system=is_system,
+        is_active=updated_role.is_active,
+        created_at=updated_role.created_at.isoformat() if updated_role.created_at else datetime.utcnow().isoformat()
+    )
+
+@router.delete("/roles/{role_name}")
+async def delete_role_v1(
+    role_name: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a role in v1 format"""
+    # Use the existing delete_custom_role function
+    return await delete_custom_role(role_name, request, db, current_user)
+
+@router.post("/roles/{role_name}/templates/{template_id}")
+async def add_template_to_role(
+    role_name: str,
+    template_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Add a permission template to a role"""
+    # Get the role and template
+    role = rbac_service.get_custom_role(role_name, current_user["tenant"])
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+
+    template = db.query(PermissionTemplate).filter(
+        PermissionTemplate.id == template_id,
+        PermissionTemplate.tenant_id == current_user["tenant"]
+    ).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    # Add template to role's permission templates if not already present
+    if template_id not in role.permission_templates:
+        role.permission_templates.append(template_id)
+        # Merge permissions from template
+        for perm in template.permissions:
+            if isinstance(perm, dict):
+                permission_str = f"{perm.get('action', '*')}_{perm.get('resource_type', '*')}"
+                if permission_str not in role.permissions:
+                    role.permissions.append(permission_str)
+
+    db.commit()
+    return {"message": "Template added to role successfully"}
+
+@router.delete("/roles/{role_name}/templates/{template_id}")
+async def remove_template_from_role(
+    role_name: str,
+    template_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Remove a permission template from a role"""
+    # Get the role
+    role = rbac_service.get_custom_role(role_name, current_user["tenant"])
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+
+    # Remove template from role's permission templates
+    if template_id in role.permission_templates:
+        role.permission_templates.remove(template_id)
+
+    db.commit()
+    return {"message": "Template removed from role successfully"}
 
 # ============ CUSTOM ROLE MANAGEMENT ENDPOINTS ============
 
@@ -2020,7 +2283,7 @@ async def list_audit_logs(
 ):
     """List audit logs with comprehensive filtering"""
     # Admin users can see all audit logs, others are restricted to their tenant
-    if current_user.get("role") == "ADMIN":
+    if is_admin_user(current_user):
         query = db.query(AuditLog)
     else:
         query = db.query(AuditLog).filter(AuditLog.tenant_id == current_user["tenant"])
@@ -2069,7 +2332,7 @@ async def get_audit_log_stats(
 ):
     """Get audit log statistics and analytics"""
     # Admin users can see all audit logs, others are restricted to their tenant
-    if current_user.get("role") == "ADMIN":
+    if is_admin_user(current_user):
         query = db.query(AuditLog)
     else:
         query = db.query(AuditLog).filter(AuditLog.tenant_id == current_user["tenant"])
@@ -2167,7 +2430,7 @@ async def get_audit_log(
 ):
     """Get a specific audit log entry"""
     # Admin users can see all audit logs, others are restricted to their tenant
-    if current_user.get("role") == "ADMIN":
+    if is_admin_user(current_user):
         log = db.query(AuditLog).filter(AuditLog.id == log_id).first()
     else:
         log = db.query(AuditLog).filter(
@@ -2193,7 +2456,7 @@ async def export_audit_logs(
 
     # Start background export task
     # For admin users, pass empty tenant_id to export all logs
-    tenant_id_for_export = None if current_user.get("role") == "ADMIN" else current_user["tenant"]
+    tenant_id_for_export = None if is_admin_user(current_user) else current_user["tenant"]
     background_tasks.add_task(
         export_audit_logs_background,
         export_id,
@@ -2204,7 +2467,7 @@ async def export_audit_logs(
 
     # Get total record count
     # Admin users can see all audit logs, others are restricted to their tenant
-    if current_user.get("role") == "ADMIN":
+    if is_admin_user(current_user):
         query = db.query(AuditLog)
     else:
         query = db.query(AuditLog).filter(AuditLog.tenant_id == current_user["tenant"])
@@ -2960,7 +3223,7 @@ async def get_security_dashboard_metrics(
             start_date = end_date - timedelta(days=1)
 
         # Admin users can see all security data, others are restricted to their tenant
-        if current_user.get("role") == "ADMIN":
+        if is_admin_user(current_user):
             event_filter = True
             alert_filter = True
             incident_filter = True
@@ -3096,7 +3359,7 @@ async def get_security_events(
     """Get security events with filtering"""
     try:
         # Admin users can see all security events, others are restricted to their tenant
-        if current_user.get("role") == "ADMIN":
+        if is_admin_user(current_user):
             query = db.query(SecurityEvent)
         else:
             query = db.query(SecurityEvent).filter(SecurityEvent.tenant_id == current_user["tenant"])
@@ -3189,7 +3452,7 @@ async def get_security_alerts(
     """Get security alerts with filtering"""
     try:
         # Admin users can see all security alerts, others are restricted to their tenant
-        if current_user.get("role") == "ADMIN":
+        if is_admin_user(current_user):
             query = db.query(SecurityAlert)
         else:
             query = db.query(SecurityAlert).filter(SecurityAlert.tenant_id == current_user["tenant"])
@@ -3314,7 +3577,7 @@ async def get_security_incidents(
     """Get security incidents with filtering"""
     try:
         # Admin users can see all security incidents, others are restricted to their tenant
-        if current_user.get("role") == "ADMIN":
+        if is_admin_user(current_user):
             query = db.query(SecurityIncident)
         else:
             query = db.query(SecurityIncident).filter(SecurityIncident.tenant_id == current_user["tenant"])
@@ -3481,7 +3744,7 @@ async def get_anomaly_detection_rules(
     """Get anomaly detection rules for tenant"""
     try:
         # Admin users can see all anomaly detection rules, others are restricted to their tenant
-        if current_user.get("role") == "ADMIN":
+        if is_admin_user(current_user):
             rules = db.query(AnomalyDetectionRule).all()
         else:
             rules = db.query(AnomalyDetectionRule).filter(
@@ -3503,7 +3766,7 @@ async def get_anomaly_detection_results(
     """Get recent anomaly detection results for tenant"""
     try:
         # Admin users can see all anomaly detection results, others are restricted to their tenant
-        if current_user.get("role") == "ADMIN":
+        if is_admin_user(current_user):
             results = db.query(AnomalyDetectionResult).order_by(
                 AnomalyDetectionResult.created_at.desc()
             ).limit(limit).all()
@@ -3616,7 +3879,7 @@ async def get_threat_intelligence_feeds(
     """Get threat intelligence feeds for tenant"""
     try:
         # Admin users can see all threat intelligence feeds, others are restricted to their tenant
-        if current_user.get("role") == "ADMIN":
+        if is_admin_user(current_user):
             feeds = db.query(ThreatIntelligenceFeed).all()
         else:
             feeds = db.query(ThreatIntelligenceFeed).filter(

@@ -6,6 +6,11 @@ from datetime import datetime, timedelta
 import uuid
 from dataclasses import dataclass
 from collections import defaultdict
+from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
+
+from app.database import SessionLocal
+from app.models import CustomRole, UserRoleAssignment, PermissionTemplate as PermissionTemplateModel, RolePermission, User, UserRole as UserRoleEnum
 
 logger = structlog.get_logger()
 
@@ -149,8 +154,8 @@ class Permission(Enum):
     APPROVAL_BASED_ACCESS = "approval_based_access"
 
 @dataclass
-class CustomRole:
-    """Custom role definition"""
+class CustomRoleData:
+    """Custom role definition data class"""
     name: str
     description: Optional[str] = None
     permissions: Set[str] = None
@@ -360,13 +365,7 @@ class RBACService:
             ResourceType.SYSTEM: [ResourceType.PROJECT, ResourceType.MODULE, ResourceType.PROMPT, ResourceType.TEMPLATE, ResourceType.POLICY]
         }
 
-        # Custom roles storage (in-memory for now, would be database in production)
-        self.custom_roles: Dict[str, CustomRole] = {}
-
-        # Permission templates storage
-        self.permission_templates: Dict[str, PermissionTemplate] = {}
-
-        # Role inheritance relationships
+        # Role inheritance relationships (stored in database)
         self.role_inheritance: List[RoleInheritance] = []
 
         # Resource-specific permissions
@@ -385,6 +384,12 @@ class RBACService:
             "tenant_only": self._check_tenant_condition,
         }
 
+        # Permission templates storage (in-memory for templates, database for persistence)
+        self.permission_templates: Dict[str, PermissionTemplate] = {}
+
+        # Custom roles storage (in-memory cache, database for persistence)
+        self.custom_roles: Dict[str, CustomRoleData] = {}
+
         # Initialize system permission templates
         self._initialize_system_templates()
 
@@ -394,14 +399,24 @@ class RBACService:
         action: str,
         resource_type: str,
         resource_id: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
+        db: Optional[Session] = None
     ) -> bool:
         """
         Check if user can perform action on resource
         """
         try:
+            # Use provided session or create a new one
+            if db is None:
+                db = SessionLocal()
+                should_close_db = True
+            else:
+                should_close_db = False
+
             # Convert role strings to enums with case-insensitive matching
             user_role_enums = []
+            custom_role_names = []
+
             for role in user_roles:
                 try:
                     # Try direct conversion first
@@ -412,22 +427,36 @@ class RBACService:
                         normalized_role = role.lower() if role else role
                         user_role_enums.append(UserRole(normalized_role))
                     except ValueError:
-                        logger.warning("Invalid user role", role=role)
-                        continue
+                        # This is likely a custom role
+                        custom_role_names.append(role)
 
-            if not user_role_enums:
-                return False
-
-            # Check if any role has the required permission
+            # Check system role permissions
             for role in user_role_enums:
                 if self._role_has_permission(role, action):
                     # Check resource-specific permissions
                     if resource_id:
-                        return self._check_resource_permission(
+                        resource_allowed = self._check_resource_permission(
                             role, action, resource_type, resource_id, context
                         )
+                        if resource_allowed:
+                            if should_close_db:
+                                db.close()
+                            return True
+                    else:
+                        if should_close_db:
+                            db.close()
+                        return True
+
+            # Check custom role permissions
+            if custom_role_names:
+                custom_permissions = self._get_custom_role_permissions(custom_role_names, db)
+                if action in custom_permissions:
+                    if should_close_db:
+                        db.close()
                     return True
 
+            if should_close_db:
+                db.close()
             return False
 
         except Exception as e:
@@ -438,6 +467,40 @@ class RBACService:
         """Check if role has the specified permission"""
         role_permissions = self.role_permissions.get(role, set())
         return action in role_permissions
+
+    def _get_custom_role_permissions(self, custom_role_names: List[str], db: Session) -> Set[str]:
+        """Get all permissions from custom roles"""
+        permissions = set()
+
+        # Query custom roles and their permissions
+        custom_roles = db.query(CustomRole).filter(
+            CustomRole.name.in_(custom_role_names),
+            CustomRole.status == "ACTIVE"
+        ).all()
+
+        for role in custom_roles:
+            # Add direct permissions from the role
+            if role.permissions:
+                permissions.update(role.permissions)
+
+            # Add permissions from permission template
+            if role.permission_template_id:
+                template = db.query(PermissionTemplateModel).filter(
+                    PermissionTemplateModel.id == role.permission_template_id,
+                    PermissionTemplateModel.is_active == True
+                ).first()
+                if template and template.permissions:
+                    permissions.update([perm.get("action") for perm in template.permissions if perm.get("action")])
+
+            # Add permissions from role_permissions table
+            role_perms = db.query(RolePermission).filter(
+                RolePermission.role_name == role.name,
+                RolePermission.is_active == True
+            ).all()
+            for perm in role_perms:
+                permissions.add(perm.action)
+
+        return permissions
 
     def _check_resource_permission(
         self,
@@ -470,27 +533,47 @@ class RBACService:
 
         return False
 
-    def get_user_permissions(self, user_roles: List[str]) -> Set[str]:
+    def get_user_permissions(self, user_roles: List[str], db: Optional[Session] = None) -> Set[str]:
         """Get all permissions for a user based on their roles"""
         permissions = set()
 
-        for role_str in user_roles:
-            try:
-                # Try direct conversion first
-                role = UserRole(role_str)
-                role_permissions = self.role_permissions.get(role, set())
-                permissions.update(role_permissions)
-            except ValueError:
-                # Try case-insensitive matching
+        # Use provided session or create a new one
+        if db is None:
+            db = SessionLocal()
+            should_close_db = True
+        else:
+            should_close_db = False
+
+        try:
+            custom_role_names = []
+
+            for role_str in user_roles:
                 try:
-                    normalized_role = role_str.lower() if role_str else role_str
-                    role = UserRole(normalized_role)
+                    # Try direct conversion first
+                    role = UserRole(role_str)
                     role_permissions = self.role_permissions.get(role, set())
                     permissions.update(role_permissions)
                 except ValueError:
-                    continue
+                    # Try case-insensitive matching
+                    try:
+                        normalized_role = role_str.lower() if role_str else role_str
+                        role = UserRole(normalized_role)
+                        role_permissions = self.role_permissions.get(role, set())
+                        permissions.update(role_permissions)
+                    except ValueError:
+                        # This is likely a custom role
+                        custom_role_names.append(role_str)
 
-        return permissions
+            # Get custom role permissions
+            if custom_role_names:
+                custom_permissions = self._get_custom_role_permissions(custom_role_names, db)
+                permissions.update(custom_permissions)
+
+            return permissions
+
+        finally:
+            if should_close_db:
+                db.close()
 
     def get_accessible_resources(
         self,
@@ -583,14 +666,190 @@ class RBACService:
         self,
         user_id: str,
         resource_type: str,
-        resource_id: str
+        resource_id: str,
+        db: Optional[Session] = None
     ) -> List[UserRole]:
         """
         Get all roles a user has for a specific resource
         """
-        # This would query user_roles table
-        # For now, return empty list
-        return []
+        # Use provided session or create a new one
+        if db is None:
+            db = SessionLocal()
+            should_close_db = True
+        else:
+            should_close_db = False
+
+        try:
+            # Get user's system role
+            user = db.query(User).filter(User.id == user_id).first()
+            roles = []
+            if user and user.role:
+                try:
+                    roles.append(UserRole(user.role.value))
+                except ValueError:
+                    pass
+
+            # Get user's custom roles
+            user_assignments = db.query(UserRoleAssignment).filter(
+                UserRoleAssignment.user_id == user_id,
+                UserRoleAssignment.is_active == True
+            ).all()
+
+            for assignment in user_assignments:
+                roles.append(assignment.role_name)
+
+            return roles
+
+        finally:
+            if should_close_db:
+                db.close()
+
+    def assign_role_to_user(
+        self,
+        user_id: str,
+        role_name: str,
+        assigned_by: str,
+        tenant_id: str,
+        expires_at: Optional[datetime] = None,
+        db: Optional[Session] = None
+    ) -> Tuple[bool, str]:
+        """Assign a custom role to a user"""
+        # Use provided session or create a new one
+        if db is None:
+            db = SessionLocal()
+            should_close_db = True
+        else:
+            should_close_db = False
+
+        try:
+            # Check if the role exists
+            role = db.query(CustomRole).filter(
+                CustomRole.name == role_name,
+                CustomRole.tenant_id == tenant_id
+            ).first()
+            if not role:
+                if should_close_db:
+                    db.close()
+                return False, f"Role '{role_name}' not found"
+
+            # Check if assignment already exists
+            existing_assignment = db.query(UserRoleAssignment).filter(
+                UserRoleAssignment.user_id == user_id,
+                UserRoleAssignment.role_id == role.id,
+                UserRoleAssignment.is_active == True
+            ).first()
+
+            if existing_assignment:
+                if should_close_db:
+                    db.close()
+                return False, f"User already has role '{role_name}'"
+
+            # Create the assignment
+            assignment = UserRoleAssignment(
+                user_id=user_id,
+                role_id=role.id,
+                role_name=role_name,
+                assigned_by=assigned_by,
+                tenant_id=tenant_id,
+                expires_at=expires_at
+            )
+
+            db.add(assignment)
+            db.commit()
+
+            logger.info("Assigned role to user", user_id=user_id, role=role_name)
+            if should_close_db:
+                db.close()
+            return True, f"Role '{role_name}' assigned to user successfully"
+
+        except Exception as e:
+            logger.error(f"Failed to assign role to user: {str(e)}", user_id=user_id, role=role_name)
+            if should_close_db:
+                db.close()
+            return False, f"Failed to assign role: {str(e)}"
+
+    def remove_role_from_user(
+        self,
+        user_id: str,
+        role_name: str,
+        tenant_id: str,
+        db: Optional[Session] = None
+    ) -> Tuple[bool, str]:
+        """Remove a custom role from a user"""
+        # Use provided session or create a new one
+        if db is None:
+            db = SessionLocal()
+            should_close_db = True
+        else:
+            should_close_db = False
+
+        try:
+            # Find the assignment
+            assignment = db.query(UserRoleAssignment).join(CustomRole).filter(
+                UserRoleAssignment.user_id == user_id,
+                CustomRole.name == role_name,
+                CustomRole.tenant_id == tenant_id,
+                UserRoleAssignment.is_active == True
+            ).first()
+
+            if not assignment:
+                if should_close_db:
+                    db.close()
+                return False, f"User does not have role '{role_name}'"
+
+            # Deactivate the assignment
+            assignment.is_active = False
+            db.commit()
+
+            logger.info("Removed role from user", user_id=user_id, role=role_name)
+            if should_close_db:
+                db.close()
+            return True, f"Role '{role_name}' removed from user successfully"
+
+        except Exception as e:
+            logger.error(f"Failed to remove role from user: {str(e)}", user_id=user_id, role=role_name)
+            if should_close_db:
+                db.close()
+            return False, f"Failed to remove role: {str(e)}"
+
+    def get_user_roles(
+        self,
+        user_id: str,
+        include_system_role: bool = True,
+        db: Optional[Session] = None
+    ) -> List[str]:
+        """Get all roles for a user (both system and custom)"""
+        # Use provided session or create a new one
+        if db is None:
+            db = SessionLocal()
+            should_close_db = True
+        else:
+            should_close_db = False
+
+        try:
+            roles = []
+
+            # Get system role
+            if include_system_role:
+                user = db.query(User).filter(User.id == user_id).first()
+                if user and user.role:
+                    roles.append(user.role.value)
+
+            # Get custom roles
+            assignments = db.query(UserRoleAssignment).join(CustomRole).filter(
+                UserRoleAssignment.user_id == user_id,
+                UserRoleAssignment.is_active == True,
+                CustomRole.status == "ACTIVE"
+            ).all()
+
+            for assignment in assignments:
+                roles.append(assignment.role_name)
+
+            return roles
+
+        finally:
+            if should_close_db:
+                db.close()
 
     def check_permission_hierarchy(
         self,
@@ -691,36 +950,106 @@ class RBACService:
         inheritance_type: InheritanceType = InheritanceType.NONE,
         conditions: Optional[Dict[str, Any]] = None,
         created_by: str = None,
-        tenant_id: str = None
-    ) -> Tuple[bool, Union[CustomRole, str]]:
+        tenant_id: str = None,
+        db: Optional[Session] = None
+    ) -> Tuple[bool, Union[CustomRoleData, str]]:
         """Create a custom role with enhanced permissions"""
         try:
+            # Use provided session or create a new one
+            if db is None:
+                db = SessionLocal()
+                should_close_db = True
+            else:
+                should_close_db = False
+
             # Validate role name
             if not role_name or len(role_name.strip()) == 0:
+                if should_close_db:
+                    db.close()
                 return False, "Role name cannot be empty"
 
             # Check if role already exists
-            if role_name in self.custom_roles:
+            existing_role = db.query(CustomRole).filter(
+                CustomRole.name == role_name,
+                CustomRole.tenant_id == tenant_id
+            ).first()
+            if existing_role:
+                if should_close_db:
+                    db.close()
                 return False, f"Role '{role_name}' already exists"
 
             # Only prevent creating custom roles for the admin system role
             if role_name.upper() == UserRole.ADMIN.value:
+                if should_close_db:
+                    db.close()
                 return False, f"Cannot create custom role for admin system role"
 
             # Validate permissions
             valid_permissions = {p.value for p in Permission}
             invalid_permissions = set(permissions) - valid_permissions
             if invalid_permissions:
+                if should_close_db:
+                    db.close()
                 return False, f"Invalid permissions: {', '.join(invalid_permissions)}"
 
             # Validate permission templates
             if permission_templates:
                 invalid_templates = set(permission_templates) - set(self.permission_templates.keys())
                 if invalid_templates:
+                    if should_close_db:
+                        db.close()
                     return False, f"Invalid permission templates: {', '.join(invalid_templates)}"
 
-            # Create custom role
-            custom_role = CustomRole(
+            # Create custom role in database
+            db_role = CustomRole(
+                id=str(uuid.uuid4()),
+                name=role_name,
+                description=description,
+                permissions=permissions,
+                inherited_roles=inherited_roles or [],
+                tenant_id=tenant_id,
+                created_by=created_by
+            )
+
+            db.add(db_role)
+            db.commit()
+            db.refresh(db_role)
+
+            # Apply permission templates if specified
+            if permission_templates:
+                for template_id in permission_templates:
+                    template = self.permission_templates.get(template_id)
+                    if template:
+                        for perm_config in template.permissions:
+                            if perm_config.get("action"):
+                                # Add to role_permissions table
+                                role_permission = RolePermission(
+                                    role_name=role_name,
+                                    resource_type="*",
+                                    action=perm_config["action"],
+                                    tenant_id=tenant_id,
+                                    created_by=created_by
+                                )
+                                db.add(role_permission)
+
+            # Apply inherited roles
+            if inherited_roles:
+                for inherited_role in inherited_roles:
+                    inherited_permissions = self._get_inherited_permissions(inherited_role)
+                    for perm in inherited_permissions:
+                        role_permission = RolePermission(
+                            role_name=role_name,
+                            resource_type="*",
+                            action=perm,
+                            tenant_id=tenant_id,
+                            created_by=created_by
+                        )
+                        db.add(role_permission)
+
+            db.commit()
+
+            # Create custom role object for return
+            custom_role = CustomRoleData(
                 name=role_name,
                 description=description,
                 permissions=set(permissions),
@@ -733,7 +1062,7 @@ class RBACService:
             )
 
             # Apply permission templates
-            for template_id in custom_role.permission_templates:
+            for template_id in getattr(custom_role, 'permission_templates', []):
                 template = self.permission_templates.get(template_id)
                 if template:
                     for perm_config in template.permissions:
@@ -741,37 +1070,72 @@ class RBACService:
                             custom_role.permissions.add(perm_config["action"])
 
             # Apply inherited roles
-            for inherited_role in custom_role.inherited_roles:
+            for inherited_role in getattr(custom_role, 'inherited_roles', []):
                 inherited_permissions = self._get_inherited_permissions(inherited_role)
                 custom_role.permissions.update(inherited_permissions)
 
-            # Store the role
-            self.custom_roles[role_name] = custom_role
             logger.info("Created custom role", role=role_name, permissions_count=len(custom_role.permissions))
 
+            if should_close_db:
+                db.close()
             return True, custom_role
 
         except Exception as e:
             logger.error(f"Failed to create custom role: {str(e)}", role=role_name)
+            if should_close_db:
+                db.close()
             return False, f"Failed to create custom role: {str(e)}"
 
     def update_custom_role(
         self,
         role_name: str,
+        tenant_id: Optional[str] = None,
         permissions: Optional[List[str]] = None,
         description: Optional[str] = None,
         permission_templates: Optional[List[str]] = None,
         inherited_roles: Optional[List[str]] = None,
         inheritance_type: Optional[InheritanceType] = None,
         conditions: Optional[Dict[str, Any]] = None,
+        is_active: Optional[bool] = None,
         updated_by: str = None
-    ) -> Tuple[bool, Union[CustomRole, str]]:
+    ) -> Tuple[bool, Union[CustomRoleData, str]]:
         """Update an existing custom role"""
+        db = SessionLocal()
+        should_close_db = True
+
         try:
-            if role_name not in self.custom_roles:
+            # Check if the role exists in database first
+            db_role = db.query(CustomRole).filter(
+                CustomRole.name == role_name
+            )
+            if tenant_id:
+                db_role = db_role.filter(CustomRole.tenant_id == tenant_id)
+
+            db_role = db_role.first()
+            if not db_role:
                 return False, f"Role '{role_name}' not found"
 
-            role = self.custom_roles[role_name]
+            # Clear any old cached objects that might be missing attributes
+            if role_name in self.custom_roles:
+                del self.custom_roles[role_name]
+
+            # Create fresh CustomRole object with all attributes
+            custom_role = CustomRoleData(
+                name=db_role.name,
+                description=db_role.description,
+                permissions=set(db_role.permissions or []),
+                permission_templates=[],
+                inherited_roles=db_role.inherited_roles or [],
+                inheritance_type="none",
+                conditions={},
+                is_active=db_role.status == "ACTIVE",
+                tenant_id=db_role.tenant_id,
+                created_by=db_role.created_by,
+                created_at=db_role.created_at,
+                updated_by=None,
+                updated_at=db_role.updated_at
+            )
+            self.custom_roles[role_name] = custom_role
 
             # Update permissions if provided
             if permissions is not None:
@@ -779,42 +1143,60 @@ class RBACService:
                 invalid_permissions = set(permissions) - valid_permissions
                 if invalid_permissions:
                     return False, f"Invalid permissions: {', '.join(invalid_permissions)}"
-                role.permissions = set(permissions)
+                custom_role.permissions = set(permissions)
 
             # Update other fields
             if description is not None:
-                role.description = description
+                custom_role.description = description
+                db_role.description = description
             if permission_templates is not None:
-                role.permission_templates = permission_templates
+                custom_role.permission_templates = permission_templates
+                db_role.permission_templates = permission_templates
             if inherited_roles is not None:
-                role.inherited_roles = inherited_roles
+                custom_role.inherited_roles = inherited_roles
+                db_role.inherited_roles = inherited_roles
             if inheritance_type is not None:
-                role.inheritance_type = inheritance_type
+                custom_role.inheritance_type = inheritance_type
+                db_role.inheritance_type = inheritance_type
             if conditions is not None:
-                role.conditions = conditions
+                custom_role.conditions = conditions
+                db_role.conditions = conditions
+            if is_active is not None:
+                custom_role.is_active = is_active
+                db_role.status = "ACTIVE" if is_active else "INACTIVE"
             if updated_by:
-                role.updated_by = updated_by
-                role.updated_at = datetime.utcnow()
+                custom_role.updated_by = updated_by
+                custom_role.updated_at = datetime.utcnow()
+                # updated_by column does not exist in database
+                db_role.updated_at = datetime.utcnow()
+
+            # Update database
+            if permissions is not None:
+                db_role.permissions = permissions
+            db.commit()
 
             # Re-apply templates and inheritance
-            role.permissions = set(permissions or [])
-            for template_id in role.permission_templates:
+            custom_role.permissions = set(permissions or db_role.permissions or [])
+            for template_id in getattr(custom_role, 'permission_templates', []):
                 template = self.permission_templates.get(template_id)
                 if template:
                     for perm_config in template.permissions:
                         if perm_config.get("action"):
-                            role.permissions.add(perm_config["action"])
+                            custom_role.permissions.add(perm_config["action"])
 
-            for inherited_role in role.inherited_roles:
+            for inherited_role in getattr(custom_role, 'inherited_roles', []):
                 inherited_permissions = self._get_inherited_permissions(inherited_role)
-                role.permissions.update(inherited_permissions)
+                custom_role.permissions.update(inherited_permissions)
 
             logger.info("Updated custom role", role=role_name)
-            return True, role
+            return True, custom_role
 
         except Exception as e:
             logger.error(f"Failed to update custom role: {str(e)}", role=role_name)
             return False, f"Failed to update custom role: {str(e)}"
+        finally:
+            if should_close_db:
+                db.close()
 
     def delete_custom_role(self, role_name: str, deleted_by: str = None) -> Tuple[bool, str]:
         """Delete a custom role"""
@@ -840,16 +1222,113 @@ class RBACService:
             logger.error(f"Failed to delete custom role: {str(e)}", role=role_name)
             return False, f"Failed to delete custom role: {str(e)}"
 
-    def get_custom_role(self, role_name: str) -> Optional[CustomRole]:
+    def get_custom_role(self, role_name: str, tenant_id: Optional[str] = None, db: Optional[Session] = None) -> Optional[CustomRoleData]:
         """Get a custom role by name"""
-        return self.custom_roles.get(role_name)
+        # Use provided session or create a new one
+        if db is None:
+            db = SessionLocal()
+            should_close_db = True
+        else:
+            should_close_db = False
 
-    def list_custom_roles(self, tenant_id: Optional[str] = None) -> List[CustomRole]:
+        try:
+            query = db.query(CustomRole).filter(CustomRole.name == role_name)
+            if tenant_id:
+                query = query.filter(CustomRole.tenant_id == tenant_id)
+
+            db_role = query.first()
+            if not db_role:
+                return None
+
+            # Convert to CustomRole object
+            custom_role = CustomRoleData(
+                name=db_role.name,
+                description=db_role.description,
+                permissions=set(db_role.permissions or []),
+                permission_templates=[],
+                inherited_roles=db_role.inherited_roles or [],
+                inheritance_type="none",
+                conditions={},
+                is_active=db_role.status == "ACTIVE",
+                created_at=db_role.created_at,
+                created_by=db_role.created_by,
+                updated_at=db_role.updated_at,
+                updated_by=None,
+                tenant_id=db_role.tenant_id
+            )
+
+            # Add role permissions from role_permissions table
+            role_perms = db.query(RolePermission).filter(
+                RolePermission.role_name == role_name,
+                RolePermission.is_active == True
+            ).all()
+            for perm in role_perms:
+                custom_role.permissions.add(perm.action)
+
+            return custom_role
+
+        finally:
+            if should_close_db:
+                db.close()
+
+    def list_custom_roles(self, tenant_id: Optional[str] = None, search: Optional[str] = None, is_active: Optional[bool] = None, skip: int = 0, limit: int = 100, db: Optional[Session] = None) -> List[CustomRoleData]:
         """List all custom roles, optionally filtered by tenant"""
-        roles = list(self.custom_roles.values())
-        if tenant_id:
-            roles = [role for role in roles if role.tenant_id == tenant_id]
-        return roles
+        # Use provided session or create a new one
+        if db is None:
+            db = SessionLocal()
+            should_close_db = True
+        else:
+            should_close_db = False
+
+        try:
+            query = db.query(CustomRole)
+            if tenant_id:
+                query = query.filter(CustomRole.tenant_id == tenant_id)
+            if search:
+                query = query.filter(or_(
+                    CustomRole.name.ilike(f"%{search}%"),
+                    CustomRole.description.ilike(f"%{search}%")
+                ))
+            if is_active is not None:
+                query = query.filter(CustomRole.status == "ACTIVE" if is_active else CustomRole.status != "ACTIVE")
+
+            db_roles = query.offset(skip).limit(limit).all()
+            roles = []
+
+            for db_role in db_roles:
+                # Convert to CustomRole object
+                custom_role = CustomRoleData(
+                    name=db_role.name,
+                    description=db_role.description,
+                    permissions=set(db_role.permissions or []),
+                    permission_templates=[],
+                    inherited_roles=db_role.inherited_roles or [],
+                    inheritance_type="none",
+                    conditions={},
+                    is_active=db_role.status.value == "ACTIVE" if hasattr(db_role.status, 'value') else str(db_role.status) == "ACTIVE",
+                    created_at=db_role.created_at,
+                    created_by=db_role.created_by,
+                    updated_at=db_role.updated_at,
+                    updated_by=None,
+                    tenant_id=db_role.tenant_id
+                )
+
+                # Add role permissions from role_permissions table
+                role_perms = db.query(RolePermission).filter(
+                    RolePermission.role_name == db_role.name,
+                    RolePermission.is_active == True
+                ).all()
+                for perm in role_perms:
+                    if perm.action:
+                        custom_role.permissions.add(perm.action)
+
+                roles.append(custom_role)
+
+            return roles
+
+        finally:
+            if should_close_db:
+                db.close()
 
     # ========== PERMISSION TEMPLATE MANAGEMENT ==========
 
@@ -1388,9 +1867,17 @@ class RBACService:
         resource_type: str,
         resource_id: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
-        tenant_id: Optional[str] = None
+        tenant_id: Optional[str] = None,
+        db: Optional[Session] = None
     ) -> Dict[str, Any]:
         """Enhanced permission checking with conditions and inheritance"""
+        # Use provided session or create a new one
+        if db is None:
+            db = SessionLocal()
+            should_close_db = True
+        else:
+            should_close_db = False
+
         result = {
             "allowed": False,
             "reason": "",
@@ -1403,6 +1890,7 @@ class RBACService:
             # Get all effective permissions including inheritance
             effective_permissions = set()
             inheritance_chain = []
+            custom_role_names = []
 
             for role_name in user_roles:
                 # Check system roles
@@ -1421,12 +1909,14 @@ class RBACService:
                         effective_permissions.update(role_permissions)
                         inheritance_chain.append(f"system:{normalized_role}")
                     except ValueError:
-                        pass
+                        # This is a custom role
+                        custom_role_names.append(role_name)
 
-                # Check custom roles
-                if role_name in self.custom_roles:
-                    custom_role = self.custom_roles[role_name]
-                    effective_permissions.update(custom_role.permissions)
+            # Get custom role permissions
+            if custom_role_names:
+                custom_permissions = self._get_custom_role_permissions(custom_role_names, db)
+                effective_permissions.update(custom_permissions)
+                for role_name in custom_role_names:
                     inheritance_chain.append(f"custom:{role_name}")
 
                     # Add inherited permissions
@@ -1487,6 +1977,10 @@ class RBACService:
             logger.error(f"Enhanced permission check failed: {str(e)}", action=action, resource_type=resource_type)
             result["reason"] = f"Permission check failed: {str(e)}"
             return result
+
+        finally:
+            if should_close_db:
+                db.close()
 
     # ========== CONDITION CHECKING HELPERS ==========
 

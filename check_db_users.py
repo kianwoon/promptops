@@ -1,52 +1,71 @@
 #!/usr/bin/env python3
 """
-Check if there are any users in the database
+Check existing users in the database
 """
+import asyncio
 import sys
-import os
-
-# Add the project root to Python path
-sys.path.insert(0, '/Users/kianwoonwong/Downloads/promptops')
-
 from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 from app.config import settings
+from app.models import User, UserRole
+from app.database import Base
 
-def check_users():
-    """Check users in the database"""
+async def check_users():
+    """Check existing users in the database"""
     try:
-        # Connect to the database
+        # Create database connection
         engine = create_engine(settings.database_url)
-
+        
+        # Check if users table exists and get user count
         with engine.connect() as conn:
-            # Check if users table exists and get count
+            # Get user count
             result = conn.execute(text("SELECT COUNT(*) FROM users"))
-            count = result.scalar()
-            print(f"📊 Total users in database: {count}")
-
-            if count > 0:
-                # Get user details
-                result = conn.execute(text("SELECT id, email, name, role FROM users LIMIT 10"))
-                users = result.fetchall()
-                print("👥 Users:")
-                for user in users:
-                    print(f"   ID: {user[0]}, Email: {user[1]}, Name: {user[2]}, Role: {user[3]}")
-
-                # Look for the specific user mentioned in the issue
-                result = conn.execute(text("SELECT * FROM users WHERE email = :email"), {"email": "wiserly@gmail.com"})
-                wiserly_user = result.fetchone()
-                if wiserly_user:
-                    print(f"✅ Found user wiserly@gmail.com: {dict(wiserly_user)}")
-                else:
-                    print("❌ User wiserly@gmail.com not found in database")
+            user_count = result.scalar()
+            print(f"📊 Total users in database: {user_count}")
+            
+            if user_count > 0:
+                # Get all users
+                result = conn.execute(text("""
+                    SELECT id, email, name, role, is_active, created_at 
+                    FROM users 
+                    ORDER BY created_at DESC 
+                    LIMIT 10
+                """))
+                
+                print("\n👥 Recent users:")
+                for row in result:
+                    print(f"   ID: {row.id}")
+                    print(f"   Email: {row.email}")
+                    print(f"   Name: {row.name}")
+                    print(f"   Role: {row.role}")
+                    print(f"   Active: {row.is_active}")
+                    print(f"   Created: {row.created_at}")
+                    print("   " + "-" * 40)
+                
+                # Check for admin users specifically
+                result = conn.execute(text("""
+                    SELECT COUNT(*) FROM users WHERE role = 'admin'
+                """))
+                admin_count = result.scalar()
+                print(f"🔐 Admin users: {admin_count}")
+                
+                if admin_count > 0:
+                    result = conn.execute(text("""
+                        SELECT id, email, name FROM users WHERE role = 'admin' LIMIT 5
+                    """))
+                    print("\n👑 Admin users:")
+                    for row in result:
+                        print(f"   {row.email} ({row.name}) - ID: {row.id}")
             else:
                 print("❌ No users found in database")
-
+                
+        return True
+        
     except Exception as e:
         print(f"❌ Error checking database: {e}")
         return False
 
-    return True
-
 if __name__ == "__main__":
     print("🔍 Checking database users...")
-    check_users()
+    success = asyncio.run(check_users())
+    sys.exit(0 if success else 1)

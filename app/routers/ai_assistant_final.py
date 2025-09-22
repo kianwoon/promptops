@@ -12,7 +12,7 @@ from datetime import datetime
 from app.database import get_db
 from app.services.ai_assistant_service_proper import AIAssistantService
 from app.models import User, UserRole, AuthProvider
-from app.auth import get_current_user_or_demo
+from app.auth import get_current_user
 from app.config import settings
 from app.schemas import (
     AIAssistantProviderCreate, AIAssistantProviderUpdate, AIAssistantProviderResponse,
@@ -81,7 +81,7 @@ def _is_admin_user(user: dict) -> bool:
 async def get_providers(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get all AI assistant providers for the current user"""
     try:
@@ -105,7 +105,7 @@ async def get_provider(
     provider_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific AI assistant provider"""
     try:
@@ -135,7 +135,7 @@ async def get_provider_for_edit(
     provider_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get a specific AI assistant provider with full API key for editing"""
     try:
@@ -165,7 +165,7 @@ async def create_provider(
     provider: AIAssistantProviderCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new AI assistant provider"""
     try:
@@ -189,7 +189,7 @@ async def update_provider(
     provider_update: AIAssistantProviderUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update an existing AI assistant provider"""
     try:
@@ -221,7 +221,7 @@ async def delete_provider(
     provider_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete an AI assistant provider (soft delete)"""
     try:
@@ -253,7 +253,7 @@ async def test_provider(
     test_request: AIAssistantProviderTestRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Test an AI assistant provider configuration"""
     try:
@@ -287,7 +287,7 @@ async def test_provider(
 async def get_system_prompts(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get all system prompts for the current user's providers"""
     try:
@@ -310,7 +310,7 @@ async def create_system_prompt(
     prompt: AIAssistantSystemPromptCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new system prompt"""
     try:
@@ -331,7 +331,7 @@ async def update_system_prompt(
     prompt_update: AIAssistantSystemPromptUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update an existing system prompt"""
     try:
@@ -355,7 +355,7 @@ async def delete_system_prompt(
     prompt_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete a system prompt"""
     try:
@@ -378,7 +378,7 @@ async def delete_system_prompt(
 async def get_default_provider(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get the user's default AI provider"""
     try:
@@ -399,7 +399,7 @@ async def set_default_provider(
     provider_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Set the user's default AI provider"""
     try:
@@ -425,7 +425,7 @@ async def set_default_provider(
 async def clear_default_provider(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Clear the user's default AI provider"""
     try:
@@ -456,7 +456,7 @@ async def generate_prompt(
     http_request: Request,
     request_data: dict,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Generate a prompt using AI assistant"""
     try:

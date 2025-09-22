@@ -1123,6 +1123,28 @@ class CustomRoleResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class RoleResponse(BaseModel):
+    name: str
+    description: Optional[str] = None
+    permissions: List[str]
+    permission_templates: Optional[List[str]] = None
+    inherited_roles: Optional[List[str]] = None
+    inheritance_type: Optional[str] = None
+    conditions: Optional[Dict[str, Any]] = None
+    is_system: bool
+    is_active: bool
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+class PermissionInfo(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 class PermissionTemplatePermission(BaseModel):
     resource_type: str = Field(..., min_length=1, max_length=50)
     action: str = Field(..., min_length=1, max_length=50)

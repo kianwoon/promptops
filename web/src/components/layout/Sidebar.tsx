@@ -15,7 +15,8 @@ import {
   Key,
   Bot,
   UserCog,
-  FileSignature
+  FileSignature,
+  User
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -53,21 +54,25 @@ export function Sidebar({ className }: SidebarProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
   const navigate = useNavigate()
   const { user, hasPermission, dbUser } = useAuth()
-  const [avatarError, setAvatarError] = React.useState(false)
 
+  // Use the same avatar resolution logic as Header component
   const resolvedAvatar = React.useMemo(() => {
+    // Always prioritize database avatar if available
     const databaseAvatar = typeof dbUser?.avatar === 'string' ? dbUser.avatar.trim() : ''
     if (databaseAvatar) {
       return databaseAvatar
     }
 
+    // Only fall back to auth user avatar if no database avatar
     const authAvatar = typeof user?.avatar === 'string' ? user.avatar.trim() : ''
-    return authAvatar || undefined
-  }, [dbUser?.avatar, user?.avatar])
 
-  React.useEffect(() => {
-    setAvatarError(false)
-  }, [resolvedAvatar])
+    // Don't use Google avatar if user is authenticated with GitHub
+    if (authAvatar && authAvatar.includes('googleusercontent.com') && dbUser?.provider === 'github') {
+      return undefined
+    }
+
+    return authAvatar || undefined
+  }, [dbUser?.avatar, user?.avatar, dbUser?.provider])
 
   React.useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
@@ -180,19 +185,22 @@ export function Sidebar({ className }: SidebarProps) {
             "flex items-center",
             !sidebarOpen && "justify-center"
           )}>
-            <Avatar className="h-8 w-8">
-              <AvatarImage
-                src={avatarError ? undefined : resolvedAvatar}
-                alt={user?.name}
-                onError={() => {
-                  console.log('Sidebar avatar image error:', resolvedAvatar)
-                  setAvatarError(true)
-                }}
-              />
-              <AvatarFallback className="text-xs">
-                {user?.name.split(' ').map(n => n[0]).join('') || 'U'}
-              </AvatarFallback>
-            </Avatar>
+            <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+              {resolvedAvatar ? (
+                <img
+                  src={resolvedAvatar}
+                  alt={user?.name}
+                  className="h-8 w-8 rounded-full object-cover"
+                  crossOrigin="anonymous"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    console.log('Sidebar avatar error:', resolvedAvatar)
+                  }}
+                />
+              ) : (
+                <User className="h-4 w-4 text-blue-600" />
+              )}
+            </div>
             {sidebarOpen && (
               <div className="ml-3 flex-1">
                 <p className="text-sm font-medium truncate">{dbUser?.name || user?.name}</p>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Avatar Debug Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .debug-panel { background: #f0f0f0; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        .error { color: red; }
+        .success { color: green; }
+        .avatar-preview { width: 40px; height: 40px; border-radius: 50%; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Avatar Debug Test</h1>
+
+    <div class="debug-panel">
+        <h3>Local Storage State:</h3>
+        <div id="localStorage"></div>
+    </div>
+
+    <div class="debug-panel">
+        <h3>Development Config:</h3>
+        <div id="devConfig"></div>
+    </div>
+
+    <div class="debug-panel">
+        <h3>Avatar Tests:</h3>
+        <div id="avatarTests"></div>
+    </div>
+
+    <script>
+        // Check localStorage
+        const localStorageDiv = document.getElementById('localStorage');
+        const localStorageItems = {
+            isAuthenticated: localStorage.getItem('isAuthenticated'),
+            user: localStorage.getItem('user'),
+            access_token: localStorage.getItem('access_token'),
+            dev_config: localStorage.getItem('dev_config'),
+            logout_manual: localStorage.getItem('logout_manual'),
+            dev_logout_disabled: localStorage.getItem('dev_logout_disabled'),
+            skip_dev_auth: localStorage.getItem('skip_dev_auth')
+        };
+
+        localStorageDiv.innerHTML = Object.entries(localStorageItems)
+            .map(([key, value]) => {
+                const displayValue = value ? (value.length > 100 ? value.substring(0, 100) + '...' : value) : 'null';
+                return `<div><strong>${key}:</strong> ${displayValue}</div>`;
+            })
+            .join('');
+
+        // Check if we can parse the user data
+        try {
+            const userData = localStorage.getItem('user');
+            if (userData) {
+                const user = JSON.parse(userData);
+                document.getElementById('avatarTests').innerHTML = `
+                    <h4>User Data:</h4>
+                    <div><strong>Name:</strong> ${user.name}</div>
+                    <div><strong>Email:</strong> ${user.email}</div>
+                    <div><strong>Avatar:</strong> ${user.avatar || 'null'}</div>
+                    <div><strong>Role:</strong> ${user.role}</div>
+                    <h4>Avatar Test:</h4>
+                    <div class="avatar-preview">
+                        ${user.avatar ? `<img src="${user.avatar}" alt="User Avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div style="display:none; width:40px; height:40px; border-radius:50%; background:#ccc; align-items:center; justify-content:center;">${user.name.split(' ').map(n => n[0]).join('')}</div>` : 'No avatar URL'}
+                    </div>
+                `;
+            }
+        } catch (e) {
+            document.getElementById('avatarTests').innerHTML = `<div class="error">Error parsing user data: ${e.message}</div>`;
+        }
+
+        // Test the development avatar URL directly
+        const testAvatar = 'https://ui-avatars.com/api/?name=Development+User&background=0D8ABC&color=fff&format=svg';
+        const img = new Image();
+        img.onload = function() {
+            document.getElementById('avatarTests').innerHTML += `
+                <h4>Development Avatar Test:</h4>
+                <div class="success">✅ Development avatar URL loads successfully</div>
+                <img src="${testAvatar}" alt="Development Avatar" class="avatar-preview">
+            `;
+        };
+        img.onerror = function() {
+            document.getElementById('avatarTests').innerHTML += `
+                <div class="error">❌ Development avatar URL failed to load</div>
+            `;
+        };
+        img.src = testAvatar;
+
+        // Check if we can access the development config
+        try {
+            const devConfig = localStorage.getItem('dev_config');
+            if (devConfig) {
+                const config = JSON.parse(devConfig);
+                document.getElementById('devConfig').innerHTML = Object.entries(config)
+                    .map(([key, value]) => {
+                        if (typeof value === 'object') {
+                            return `<div><strong>${key}:</strong> ${JSON.stringify(value)}</div>`;
+                        }
+                        return `<div><strong>${key}:</strong> ${value}</div>`;
+                    })
+                    .join('');
+            } else {
+                document.getElementById('devConfig').innerHTML = '<div class="error">No dev config found</div>';
+            }
+        } catch (e) {
+            document.getElementById('devConfig').innerHTML = `<div class="error">Error parsing dev config: ${e.message}</div>`;
+        }
+
+        // Check environment
+        document.getElementById('devConfig').innerHTML += `
+            <h4>Environment:</h4>
+            <div><strong>Location:</strong> ${window.location.href}</div>
+            <div><strong>User Agent:</strong> ${navigator.userAgent.substring(0, 100)}...</div>
+            <div><strong>Localhost:</strong> ${window.location.hostname === 'localhost' ? 'Yes' : 'No'}</div>
+        `;
+    </script>
+</body>
+</html>

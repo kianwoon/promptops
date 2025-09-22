@@ -14,7 +14,7 @@ from app.models import (
     WorkflowStatus, WorkflowInstanceStatus, WorkflowStepType, WorkflowTemplateStatus,
     PermissionTemplate, RolePermission, User
 )
-from app.auth import get_current_user_or_demo as get_current_user
+from app.auth import get_current_user
 from app.services.auth_service import AuthService
 from fastapi import Request, HTTPException, status
 

@@ -61,14 +61,7 @@ security = HTTPBearer()
 mock_providers = []
 mock_system_prompts_response = []
 
-def get_mock_user():
-    """Return mock user for development"""
-    return {
-        "id": "demo-user",
-        "email": "demo@example.com",
-        "name": "Demo User",
-        "role": "admin"
-    }
+# Removed mock user function - violates NO HARDCODING and NO MOCKING rules
 
 @router.get("/providers", response_model=List[AIAssistantProviderResponse])
 async def get_providers(

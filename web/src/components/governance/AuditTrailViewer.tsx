@@ -159,6 +159,7 @@ export function AuditTrailViewer({
       setLogs(result)
     } catch (error) {
       console.error('Error loading audit logs:', error)
+      // Don't show fallback data - let the user see the authentication error
     } finally {
       setLoading(false)
     }
@@ -174,6 +175,7 @@ export function AuditTrailViewer({
       setStats(result)
     } catch (error) {
       console.error('Error loading audit stats:', error)
+      // Don't show fallback data - let the user see the authentication error
     } finally {
       setStatsLoading(false)
     }

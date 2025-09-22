@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Chrome, User, LogOut, Settings } from 'lucide-react'
+import { Chrome, User, LogOut, Settings, Github, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -65,6 +65,34 @@ export function PublicLayout({ children, onSignInClick, onRegisterClick }: Publi
     { name: 'Pricing', href: '/#pricing' },
   ]
 
+  // Get provider info with fallback to dbUser (same logic as Header component)
+  const getProviderInfo = () => {
+    const provider = dbUser?.provider || user?.provider || 'local'
+    const providerId = dbUser?.providerId || user?.providerId
+
+    switch (provider) {
+      case 'google':
+        return {
+          icon: <Chrome className="h-4 w-4" />,
+          name: 'Google',
+          email: providerId ? `${providerId.substring(0, 3)}***@gmail.com` : user?.email
+        }
+      case 'github':
+        return {
+          icon: <Github className="h-4 w-4" />,
+          name: 'GitHub',
+          email: providerId ? `@${providerId.substring(0, 3)}***` : user?.email
+        }
+      default:
+        return {
+          icon: <Mail className="h-4 w-4" />,
+          name: 'Email',
+          email: user?.email
+        }
+    }
+  }
+
+  const providerInfo = getProviderInfo()
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register'
 
   return (
@@ -112,13 +140,23 @@ export function PublicLayout({ children, onSignInClick, onRegisterClick }: Publi
                         <User className="h-4 w-4 text-blue-600" />
                       )}
                     </div>
-                    <span className="hidden md:block">{user.name}</span>
+                    <div className="hidden md:block text-left">
+                      <div className="text-sm font-medium">{user.name}</div>
+                      <div className="flex items-center space-x-1 text-xs text-gray-500">
+                        {providerInfo.icon}
+                        <span>{providerInfo.name}</span>
+                      </div>
+                    </div>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="px-2 py-1.5 text-sm text-gray-700">
                     <div className="font-medium">{user.name}</div>
                     <div className="text-gray-500">{user.email}</div>
+                    <div className="flex items-center space-x-2 mt-1 text-xs text-gray-400">
+                      {providerInfo.icon}
+                      <span>Signed in with {providerInfo.name}</span>
+                    </div>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => window.location.href = '/profile'}>

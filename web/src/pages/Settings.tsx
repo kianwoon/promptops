@@ -12,7 +12,8 @@ import {
   Save,
   Mail,
   Phone,
-  Calendar
+  Calendar,
+  LogOut
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -32,7 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { formatDate } from '@/lib/utils'
 
 export function SettingsPage() {
-  const { user, updateUser, hasPermission } = useAuth()
+  const { user, updateUser, hasPermission, logout } = useAuth()
   const updateUserMutation = useUpdateUser()
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -492,7 +493,8 @@ export function SettingsPage() {
                 <Key className="w-4 h-4 mr-2" />
                 Change Password
               </Button>
-              <Button variant="destructive" className="w-full justify-start">
+              <Button variant="destructive" className="w-full justify-start" onClick={logout}>
+                <LogOut className="w-4 h-4 mr-2" />
                 Logout
               </Button>
             </CardContent>

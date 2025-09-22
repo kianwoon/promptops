@@ -3,22 +3,14 @@
 
 **MANDATORY BEFORE EVERY Task**:
 1. ✅ **Understand --> Think --> Plan --> Do**: Follow the critical thinking approach.
-2 ✅ **DO NOT TREAT THIS AS MOCK PROJECT**.
+2 ✅ **DO NOT TREAT THIS project and system as mock or development**.
 
 ## 🚨 Common Failures to Avoid
 ### 1. Superficial Pattern Matching
 ### 2. Guessing Instead of Searching
-**NEVER** proceed with <90% confidence - use Web Search instead
+**NEVER** proceed with <95% confidence - use Web Search instead
 
 ## 🔍 When to Use WebSearch
-### Required for:
-- Current API documentation (FastAPI, React, PostgreSQL versions)
-- Recent library syntax changes or deprecations
-- Latest best practices for libraries/frameworks
-- Error messages not in knowledge base
-- Performance optimization techniques
-- Security vulnerability fixes
-
 ### Web Search Confidence Threshold:
 - Use WebSearch when < 90% confident about ANY technical detail
 - When in doubt, search - better to be thorough than wrong
@@ -66,11 +58,14 @@
 - Graceful degradation required
 
 ## 🔄 MANDATORY COMMUNICATION PROTOCOL
-- Use say() for all major announcements
-- Use say() for all tasks that YOU working on
-- Report progress clearly with metrics
-- Explain what was done and why
-- Confirm system status after changes
+### YOU MUST update on progress, findings, solutions, task assigned!
+1. Take only the **first 400 characters** of your reply text (skip any code blocks or fenced code).
+2. Escape double quotes in that text.
+3. Pass that text into this Bash command to speak it aloud on the host machine:
+
+Bash(echo "{{first 400 characters of your reply without code blocks, with double quotes escaped}}" | /Users/kianwoonwong/Downloads/promptops/claude-say.sh)
+
+Do not wrap or escape this command in additional formatting. Just print your reply, then the Bash block exactly as shown.
 
 ## 🏗️ CODE QUALITY REQUIREMENTS
 - Follow existing naming conventions
@@ -87,8 +82,6 @@
 
 # 🔴 MUST YOU DO
 ## Before each task
-- Use say command to share your findings and respond
-- Use say command to inform the agent about the task they've been assigned
 - Read the ./claude.md file before start anything
 - Validate task requirements and scope
 
@@ -114,3 +107,9 @@ REDIS_URL=redis://localhost:6379
 - PostgreSQL is the main storage within the app
 - LocalStorage is just temporary cache
 - Redis for session management and caching 
+
+### Database Configuration
+DATABASE_URL=postgresql://promptops:promptops@localhost:5432/promptops
+
+### Redis Configuration
+REDIS_URL=redis://localhost:6379

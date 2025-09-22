@@ -53,18 +53,8 @@ async def get_current_user_or_demo(request: Request = None):
     except Exception as e:
         logger.error(f"🔐 Authentication system error: {e}")
 
-    # If JWT authentication fails, check for demo user in request state (development mode)
-    if request and hasattr(request.state, 'current_user') and request.state.current_user:
-        logger.info("🔐 Using request state demo user")
-        return request.state.current_user
-
-    # Ultimate fallback for development
-    logger.warning("🔐 Using ultimate fallback demo user - authentication failed completely")
-    return {
-        "user_id": "demo-user",
-        "tenant": "demo-tenant",
-        "tenant_id": "demo-tenant",
-        "roles": ["admin"]
-    }
+    # Authentication failed - return None instead of fallback demo user
+    logger.warning("🔐 Authentication failed - no fallback demo user")
+    return None
 
 __all__ = ['rbac_service', 'get_current_user', 'get_current_user_or_demo']

@@ -71,18 +71,33 @@
       "WebFetch(domain:localhost)",
       "Read(//Users/kianwoonwong/**)",
       "Bash(npx vite build:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(/Users/kianwoonwong/Downloads/promptops/claude-say.sh << TXT*)",
+      "Bash(say:*)",
+      "Bash(/Users/kianwoonwong/Downloads/promptops/claude-say.sh:*)",
+      "Bash(npm ls:*)",
+      "Bash(/Users/kianwoonwong/Downloads/promptops/web/src/lib/googleAuth.ts)",
+      "Read(//var/log/**)",
+      "Bash(\"name\": \"test_custom_role\",)",
+      "Bash(\"description\": \"Test custom role for validation\",)",
+      "Bash(\"permissions\": [\"create_project\", \"read_project\", \"update_project\"],)",
+      "Bash(\"permission_templates\": [],)",
+      "Bash(\"inherited_roles\": [],)",
+      "Bash(\"inheritance_type\": \"none\",)",
+      "Bash(\"conditions\": {})",
+      "Bash(pwdx:*)",
+      "Bash(env:*)"
     ],
     "deny": [],
     "ask": []
   },
   "hooks": {
-    "Notification": [
+    "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Project Memory: ./CLAUDE.md is present.' && if [ -f ./CLAUDE.md ]; then echo 'IMPORTANT: Read the CLAUDE.md file for project context.'; fi"
+            "command": "/Users/kianwoonwong/Downloads/promptops/claude-say.sh"
           }
         ]
       }
@@ -92,7 +107,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "say 'Task complete.'; echo 'Project Memory: ./CLAUDE.md is present for review.'"
+            "command": "/Users/kianwoonwong/Downloads/promptops/claude-say.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/kianwoonwong/Downloads/promptops/claude-say.sh"
           }
         ]
       }
@@ -102,21 +127,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "say 'Subtask complete.'"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo 'Claude Code ready'; say 'Claude ready';"
-          },
-          {
-            "type": "command",
-            "command": "echo 'ok'; if [ -f ./claude.md ]; then cat ./claude.md; elif [ -f ./CLAUDE.md ]; then cat ./CLAUDE.md; else echo 'No claude.md found'; fi"
+            "command": "say \"Subtask complete.\""
           }
         ]
       }
@@ -126,7 +137,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'ok'; if [ -f ./claude.md ]; then cat ./claude.md; elif [ -f ./CLAUDE.md ]; then cat ./CLAUDE.md; else echo 'No claude.md found'; fi"
+            "command": "bash -lc 'echo \"ok\"; if [ -f ./claude.md ]; then cat ./claude.md; elif [ -f ./CLAUDE.md ]; then cat ./CLAUDE.md; else echo \"No claude.md found\"; fi'"
+          },
+          {
+            "type": "command",
+            "command": "say \"ok\""
           }
         ]
       }

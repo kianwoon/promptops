@@ -7,7 +7,7 @@ import uuid
 from app.database import get_db
 from app.models import EvaluationRun, Template, AuditLog
 from app.schemas import EvaluationRunCreate, EvaluationRunResponse, EvaluationsListResponse
-from app.auth import get_current_user_or_demo, get_current_user
+from app.auth import get_current_user
 
 router = APIRouter()
 
@@ -18,7 +18,7 @@ async def get_evaluations(
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get evaluation runs with optional template filtering and pagination"""
 
@@ -48,7 +48,7 @@ async def run_evaluation(
     eval_data: EvaluationRunCreate,
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user_or_demo)
+    current_user: dict = Depends(get_current_user)
 ):
     """Run evaluation suite against template version"""
     

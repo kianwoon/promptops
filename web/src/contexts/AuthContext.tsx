@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react'
-import { generateGoogleAuthUrl, handleGoogleCallback, storeAuthTokens, getAccessToken, refreshToken, isAccessTokenValid } from '@/lib/googleAuth'
+import { generateGoogleAuthUrl, handleGoogleCallback, storeAuthTokens, clearAuthTokens, getAccessToken, refreshToken, isAccessTokenValid } from '@/lib/googleAuth'
 import { generateGithubAuthUrl, handleGithubCallback } from '@/lib/githubAuth'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 
@@ -215,6 +215,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
     refetch: refetchDbUser,
   } = useCurrentUser()
 
+  // Clean up old logout flags on initialization
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      const logoutTimestamp = localStorage.getItem('logout_timestamp')
+      if (logoutTimestamp && Date.now() - parseInt(logoutTimestamp) > 300000) {
+        // Clear logout flags older than 5 minutes
+        localStorage.removeItem('logout_manual')
+        localStorage.removeItem('dev_logout_disabled')
+        localStorage.removeItem('skip_dev_auth')
+        localStorage.removeItem('logout_timestamp')
+        console.log('Cleared old logout flags')
+      }
+    }
+  }, [])
+
   // Initialize auth state from localStorage and sync with database user
   useEffect(() => {
     const storedAuth = localStorage.getItem('isAuthenticated')
@@ -230,7 +245,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           const mergedUser = {
             ...localStorageUser,
             ...dbUser,
-            // Always prioritize database avatar over localStorage avatar
+            // Prioritize database avatar but fallback to localStorage if database avatar is null/empty
             avatar: dbUser.avatar || localStorageUser.avatar,
             // Preserve some fields that might not be in database response
             phone: dbUser.phone || localStorageUser.phone,
@@ -267,7 +282,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Token status monitoring
   useEffect(() => {
+    let hasInvalidToken = false
+    let lastErrorTime = 0
+
     const updateTokenStatus = () => {
+      // Skip validation if we already know token is invalid (prevent spam)
+      if (hasInvalidToken) {
+        return
+      }
+
+      // Throttle error logging to prevent spam (max once per minute)
+      const now = Date.now()
+      if (now - lastErrorTime < 60000) {
+        return
+      }
+
       const token = getAccessToken()
       if (!token) {
         dispatch({
@@ -278,7 +307,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       try {
-        const payload = token.split('.')[1]
+        // Check if token has proper JWT format (header.payload.signature)
+        const tokenParts = token.split('.')
+        if (tokenParts.length !== 3) {
+          throw new Error('Invalid token format: not a valid JWT')
+        }
+
+        // Check for development token signature
+        const signature = tokenParts[2]
+        const isDevelopmentToken = signature === 'dev-signature-not-for-production'
+
+        const payload = tokenParts[1]
         const decoded = JSON.parse(atob(payload))
         const currentTime = Math.floor(Date.now() / 1000)
         const timeUntilExpiry = Math.max(0, decoded.exp - currentTime)
@@ -287,13 +326,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
         dispatch({
           type: 'TOKEN_STATUS_UPDATE',
           payload: {
-            isValid: timeUntilExpiry > expirationBuffer,
+            isValid: isDevelopmentToken || timeUntilExpiry > expirationBuffer,
             isExpired: timeUntilExpiry <= 0,
-            timeUntilExpiry
+            timeUntilExpiry: isDevelopmentToken ? 3600 : timeUntilExpiry
           }
         })
       } catch (error) {
         console.error('Error updating token status:', error)
+        lastErrorTime = now
+
+        // For development tokens with signature 'dev-signature-not-for-production',
+        // treat as valid without clearing
+        if (token.includes('dev-signature-not-for-production')) {
+          dispatch({
+            type: 'TOKEN_STATUS_UPDATE',
+            payload: { isValid: true, isExpired: false, timeUntilExpiry: 3600 }
+          })
+          return
+        }
+
+        // For other invalid tokens, clear and mark as invalid
+        clearAuthTokens()
+        hasInvalidToken = true
         dispatch({
           type: 'TOKEN_STATUS_UPDATE',
           payload: { isValid: false, isExpired: true, timeUntilExpiry: 0 }
@@ -665,13 +719,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Dispatch logout action
     dispatch({ type: 'LOGOUT' })
 
-    // In development, prevent auto-reauthentication by adding a flag
+    // In development, prevent auto-reauthentication with persistent flags
     if (import.meta.env.DEV) {
+      // Set multiple flags to prevent any auto-auth systems from reactivating
       localStorage.setItem('logout_manual', 'true')
+      localStorage.setItem('dev_logout_disabled', 'true')
+      localStorage.setItem('skip_dev_auth', 'true')
+      localStorage.setItem('logout_timestamp', Date.now().toString())
+
+      // Also clear any dev config that might trigger auto-auth
+      localStorage.removeItem('dev_config')
     }
 
-    // Redirect to login page
-    window.location.href = '/login'
+    // Force immediate redirect to prevent race conditions
+    window.location.replace('/login')
   }
 
   const updateUser = (userData: Partial<User>): void => {

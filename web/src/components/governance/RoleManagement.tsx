@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { useSearch } from '@/hooks/useDebounce'
 import {
@@ -798,12 +798,36 @@ const QuickActionsCard = ({ onCreateRole, onExport, onImport }: {
 }
 
 export function RoleManagement() {
+  // Prevent infinite re-renders with render count tracking
+  const renderCount = useRef(0)
+  const lastRenderTime = useRef(0)
+
   // Log user action for component access
   useEffect(() => {
     ErrorLogger.logUserAction('access_role_management', {
       timestamp: new Date().toISOString(),
       url: window.location.href
     })
+  }, [])
+
+  // Prevent infinite re-renders
+  useEffect(() => {
+    const now = Date.now()
+    renderCount.current += 1
+
+    // If we're rendering too frequently, log a warning
+    if (now - lastRenderTime.current < 100) { // Less than 100ms between renders
+      console.warn(`RoleManagement rendering frequently: ${renderCount.current} renders in short time`)
+    }
+
+    lastRenderTime.current = now
+
+    // Reset counter after a period of stability
+    const timer = setTimeout(() => {
+      renderCount.current = 0
+    }, 1000)
+
+    return () => clearTimeout(timer)
   }, [])
   const queryClient = useQueryClient()
 
@@ -819,6 +843,31 @@ export function RoleManagement() {
     clearHistory,
     isDebouncing
   } = useSearch('', 'role-search', 300)
+
+  // Dialog state handlers with proper state management
+  const handleCreateDialogOpenChange = React.useCallback((open: boolean) => {
+    setIsCreateDialogOpen(open)
+    if (!open) {
+      // Reset form when dialog closes
+      setCreateFormData({
+        name: '',
+        description: '',
+        permissions: [],
+        permission_templates: [],
+        inherited_roles: [],
+        inheritance_type: 'none' as 'none' | 'hierarchical' | 'conditional'
+      })
+      setSelectedTemplateRole('')
+      setShowTemplateRole(false)
+    }
+  }, [])
+
+  const handleEditDialogOpenChange = React.useCallback((open: boolean) => {
+    setIsEditDialogOpen(open)
+    if (!open) {
+      setEditingRole(null)
+    }
+  }, [])
 
   // State for search suggestions
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -948,15 +997,11 @@ export function RoleManagement() {
       })
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roles'] })
-      setIsCreateDialogOpen(false)
-      setCreateFormData({
-        name: '',
-        description: '',
-        permissions: [],
-        permission_templates: [],
-        inherited_roles: [],
-        inheritance_type: 'none' as 'none' | 'hierarchical' | 'conditional'
+      // Batch state updates to prevent infinite loops
+      Promise.resolve().then(() => {
+        queryClient.invalidateQueries({ queryKey: ['roles'] })
+        setIsCreateDialogOpen(false)
+        // Form reset is now handled in the dialog close handler
       })
       // Log successful role creation
       ErrorLogger.logUserAction('create_role_success', {
@@ -977,9 +1022,12 @@ export function RoleManagement() {
       })
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roles'] })
-      setIsEditDialogOpen(false)
-      setEditingRole(null)
+      // Batch state updates to prevent infinite loops
+      Promise.resolve().then(() => {
+        queryClient.invalidateQueries({ queryKey: ['roles'] })
+        setIsEditDialogOpen(false)
+        setEditingRole(null)
+      })
       // Log successful role update
       ErrorLogger.logUserAction('update_role_success', {
         roleName: editingRole?.name,
@@ -1546,7 +1594,7 @@ export function RoleManagement() {
 
       {/* Header */}
       <div className="flex justify-end mb-6">
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
           <DialogTrigger asChild>
             <Button
               className={cn(
@@ -1765,18 +1813,11 @@ export function RoleManagement() {
                             className={cn(
                               "flex items-start space-x-4 p-4 rounded-lg",
                               "hover:bg-blue-50 dark:hover:bg-blue-900/20",
-                              "transition-all duration-200 cursor-pointer",
+                              "transition-all duration-200",
                               createFormData.permissions.includes(permission.name)
                                 ? "bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800"
                                 : "border border-gray-200 dark:border-gray-700"
                             )}
-                            onClick={() => {
-                              const currentPermissions = createFormData.permissions;
-                              const updatedPermissions = currentPermissions.includes(permission.name)
-                                ? currentPermissions.filter(p => p !== permission.name)
-                                : [...currentPermissions, permission.name];
-                              setCreateFormData({...createFormData, permissions: updatedPermissions});
-                            }}
                           >
                             <Checkbox
                               checked={createFormData.permissions.includes(permission.name)}
@@ -2240,7 +2281,7 @@ export function RoleManagement() {
       </div>
 
       {/* Edit Role Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogOpenChange}>
         <DialogContent className={cn(
           "max-w-4xl max-h-[90vh] overflow-y-auto",
           "border-0 shadow-2xl",

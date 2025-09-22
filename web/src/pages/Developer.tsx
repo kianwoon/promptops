@@ -3442,9 +3442,9 @@ credit_prompt = await client.create_prompt(
 
     Applicant Data:
     - Credit Score: {credit_score}
-    - Annual Income: ${annual_income}
+    - Annual Income: {annual_income}
     - Employment Status: {employment_status}
-    - Loan Amount: ${loan_amount}
+    - Loan Amount: {loan_amount}
 
     Provide:
     1. Risk assessment (Low/Medium/High)
@@ -3497,9 +3497,9 @@ credit_prompt = await client.create_prompt(
 
     Applicant Data:
     - Credit Score: {credit_score}
-    - Annual Income: ${annual_income}
+    - Annual Income: {annual_income}
     - Employment Status: {employment_status}
-    - Loan Amount: ${loan_amount}
+    - Loan Amount: {loan_amount}
 
     Provide:
     1. Risk assessment (Low/Medium/High)

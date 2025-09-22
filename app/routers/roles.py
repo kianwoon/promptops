@@ -6,13 +6,14 @@ from datetime import datetime
 import structlog
 
 from app.database import get_db
-from app.auth.rbac import rbac_service, get_rbac_service, Permission, UserRole, ResourceType
+from app.auth.rbac import rbac_service, get_rbac_service, Permission, UserRole, ResourceType, RBACService
 from app.schemas import UserResponse
 from app.auth import get_current_user
 from app.services.auth_service import AuthService
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.schemas import UserResponse
 from app.config import settings
+from sqlalchemy.orm import Session
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -28,7 +29,8 @@ async def list_roles(
     include_system: bool = Query(True),
     tenant_id: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
-    rbac: get_rbac_service = Depends()
+    db: Session = Depends(get_db),
+    rbac: RBACService = Depends(get_rbac_service)
 ):
     """List all roles (system and custom)"""
     try:
@@ -84,7 +86,10 @@ async def list_roles(
 
         # Add default non-system roles as custom roles if they don't exist
         default_non_system_roles = [UserRole.EDITOR, UserRole.APPROVER, UserRole.VIEWER]
-        existing_custom_role_names = {role.name for role in rbac_service.list_custom_roles(tenant_id)}
+        # Use current user's tenant for checking existing roles, not the query parameter
+        user_tenant_id = current_user.get("tenant")
+        existing_custom_roles = rbac.list_custom_roles(tenant_id=user_tenant_id, db=db)
+        existing_custom_role_names = {role.name for role in existing_custom_roles}
 
         for role in default_non_system_roles:
             if role.value not in existing_custom_role_names:
@@ -101,7 +106,7 @@ async def list_roles(
                     "created_at": datetime.utcnow(),
                     "updated_at": datetime.utcnow(),
                     "created_by": "system",
-                    "tenant_id": tenant_id
+                    "tenant_id": user_tenant_id
                 })
 
         # Add existing custom roles
@@ -110,10 +115,10 @@ async def list_roles(
                 "name": role.name,
                 "description": role.description,
                 "permissions": list(role.permissions),
-                "permission_templates": role.permission_templates,
-                "inherited_roles": role.inherited_roles,
+                "permission_templates": role.permission_templates or [],
+                "inherited_roles": role.inherited_roles or [],
                 "inheritance_type": getattr(role.inheritance_type, 'value', 'none'),
-                "conditions": role.conditions,
+                "conditions": role.conditions or {},
                 "is_system": False,
                 "is_active": role.is_active,
                 "created_at": role.created_at,
@@ -121,7 +126,7 @@ async def list_roles(
                 "created_by": role.created_by,
                 "tenant_id": role.tenant_id
             }
-            for role in rbac_service.list_custom_roles(tenant_id)
+            for role in rbac.list_custom_roles(tenant_id=user_tenant_id, db=db)
         ])
 
         all_roles = system_roles + custom_roles
@@ -143,7 +148,8 @@ async def create_role(
     request: Request,
     role_data: Dict[str, Any] = Body(...),
     current_user: dict = Depends(get_current_user),
-    rbac: get_rbac_service = Depends()
+    db: Session = Depends(get_db),
+    rbac: RBACService = Depends(get_rbac_service)
 ):
     """Create a new custom role"""
     try:
@@ -163,7 +169,8 @@ async def create_role(
             inheritance_type=role_data.get("inheritance_type"),
             conditions=role_data.get("conditions"),
             created_by=current_user["user_id"],
-            tenant_id=current_user.get("tenant")
+            tenant_id=current_user.get("tenant"),
+            db=db
         )
 
         if not success:
@@ -202,7 +209,8 @@ async def list_permission_templates(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: dict = Depends(get_current_user),
-    rbac: get_rbac_service = Depends()
+    db: Session = Depends(get_db),
+    rbac: RBACService = Depends(get_rbac_service)
 ):
     """List permission templates"""
     try:
@@ -242,7 +250,8 @@ async def create_permission_template(
     request: Request,
     template_data: Dict[str, Any] = Body(...),
     current_user: dict = Depends(get_current_user),
-    rbac: get_rbac_service = Depends()
+    db: Session = Depends(get_db),
+    rbac: RBACService = Depends(get_rbac_service)
 ):
     """Create a permission template"""
     try:
@@ -288,7 +297,7 @@ async def create_permission_template(
 async def get_available_permissions(
     request: Request,
     current_user: dict = Depends(get_current_user),
-    rbac: get_rbac_service = Depends()
+    rbac: RBACService = Depends(get_rbac_service)
 ):
     """Get all available permissions with descriptions"""
     try:
@@ -308,7 +317,8 @@ async def get_role(
     request: Request,
     role_name: str,
     current_user: dict = Depends(get_current_user),
-    rbac: get_rbac_service = Depends()
+    db: Session = Depends(get_db),
+    rbac: RBACService = Depends(get_rbac_service)
 ):
     """Get a specific role by name"""
     try:
@@ -332,16 +342,16 @@ async def get_role(
             pass
 
         # Check custom roles
-        custom_role = rbac_service.get_custom_role(role_name)
+        custom_role = rbac_service.get_custom_role(role_name, current_user.get("tenant"), db)
         if custom_role:
             return {
                 "name": custom_role.name,
                 "description": custom_role.description,
                 "permissions": list(custom_role.permissions),
-                "permission_templates": custom_role.permission_templates,
-                "inherited_roles": custom_role.inherited_roles,
+                "permission_templates": custom_role.permission_templates or [],
+                "inherited_roles": custom_role.inherited_roles or [],
                 "inheritance_type": getattr(custom_role.inheritance_type, 'value', 'none'),
-                "conditions": custom_role.conditions,
+                "conditions": custom_role.conditions or {},
                 "is_system": False,
                 "is_active": custom_role.is_active,
                 "created_at": custom_role.created_at,
@@ -385,7 +395,8 @@ async def update_role(
     role_name: str,
     role_data: Dict[str, Any] = Body(...),
     current_user: dict = Depends(get_current_user),
-    rbac: get_rbac_service = Depends()
+    db: Session = Depends(get_db),
+    rbac: RBACService = Depends(get_rbac_service)
 ):
     """Update an existing custom role"""
     try:
@@ -402,7 +413,9 @@ async def update_role(
             default_role = UserRole(role_name)
             if default_role in [UserRole.EDITOR, UserRole.APPROVER, UserRole.VIEWER]:
                 # Create the default role as a custom role if it doesn't exist
-                if role_name not in rbac_service.custom_roles:
+                existing_custom_roles = rbac_service.list_custom_roles(current_user.get("tenant"), db)
+                existing_role_names = {role.name for role in existing_custom_roles}
+                if role_name not in existing_role_names:
                     success, result = rbac_service.create_custom_role(
                         role_name=role_name,
                         permissions=role_data.get("permissions", list(rbac_service.role_permissions.get(default_role, set()))),
@@ -412,7 +425,8 @@ async def update_role(
                         inheritance_type=role_data.get("inheritance_type"),
                         conditions=role_data.get("conditions"),
                         created_by=current_user["user_id"],
-                        tenant_id=current_user.get("tenant")
+                        tenant_id=current_user.get("tenant"),
+                        db=db
                     )
 
                     if not success:
@@ -477,7 +491,8 @@ async def delete_role(
     request: Request,
     role_name: str,
     current_user: dict = Depends(get_current_user),
-    rbac: get_rbac_service = Depends()
+    db: Session = Depends(get_db),
+    rbac: RBACService = Depends(get_rbac_service)
 ):
     """Delete a custom role"""
     try:
@@ -494,7 +509,9 @@ async def delete_role(
             default_role = UserRole(role_name)
             if default_role in [UserRole.EDITOR, UserRole.APPROVER, UserRole.VIEWER]:
                 # Only allow deletion if it exists as a custom role
-                if role_name in rbac_service.custom_roles:
+                existing_custom_roles = rbac_service.list_custom_roles(current_user.get("tenant"), db)
+                existing_role_names = {role.name for role in existing_custom_roles}
+                if role_name in existing_role_names:
                     success, message = rbac_service.delete_custom_role(
                         role_name=role_name,
                         deleted_by=current_user["user_id"]
@@ -530,7 +547,8 @@ async def get_role_permissions(
     request: Request,
     role_name: str,
     current_user: dict = Depends(get_current_user),
-    rbac: get_rbac_service = Depends()
+    db: Session = Depends(get_db),
+    rbac: RBACService = Depends(get_rbac_service)
 ):
     """Get all permissions for a specific role"""
     try:
@@ -547,7 +565,7 @@ async def get_role_permissions(
             pass
 
         # Check custom roles
-        custom_role = rbac_service.get_custom_role(role_name)
+        custom_role = rbac_service.get_custom_role(role_name, current_user.get("tenant"), db)
         if custom_role:
             return list(custom_role.permissions)
 
@@ -573,7 +591,8 @@ async def assign_permissions_to_role(
     role_name: str,
     permissions_data: Dict[str, Any] = Body(...),
     current_user: dict = Depends(get_current_user),
-    rbac: get_rbac_service = Depends()
+    db: Session = Depends(get_db),
+    rbac: RBACService = Depends(get_rbac_service)
 ):
     """Assign permissions to a role"""
     try:
@@ -593,13 +612,16 @@ async def assign_permissions_to_role(
             default_role = UserRole(role_name)
             if default_role in [UserRole.EDITOR, UserRole.APPROVER, UserRole.VIEWER]:
                 # Create the default role as a custom role if it doesn't exist
-                if role_name not in rbac_service.custom_roles:
+                existing_custom_roles = rbac_service.list_custom_roles(current_user.get("tenant"), db)
+                existing_role_names = {role.name for role in existing_custom_roles}
+                if role_name not in existing_role_names:
                     success, result = rbac_service.create_custom_role(
                         role_name=role_name,
                         permissions=permissions_data["permissions"],
                         description=rbac_service.get_role_description(default_role),
                         created_by=current_user["user_id"],
-                        tenant_id=current_user.get("tenant")
+                        tenant_id=current_user.get("tenant"),
+                        db=db
                     )
 
                     if not success:
@@ -610,7 +632,9 @@ async def assign_permissions_to_role(
             pass
 
         # For existing custom roles, update the role
-        if role_name in rbac_service.custom_roles:
+        existing_custom_roles = rbac_service.list_custom_roles(current_user.get("tenant"), db)
+        existing_role_names = {role.name for role in existing_custom_roles}
+        if role_name in existing_role_names:
             success, result = rbac_service.update_custom_role(
                 role_name=role_name,
                 permissions=permissions_data["permissions"],
@@ -635,7 +659,8 @@ async def apply_permission_template_to_role(
     role_name: str,
     template_id: str,
     current_user: dict = Depends(get_current_user),
-    rbac: get_rbac_service = Depends()
+    db: Session = Depends(get_db),
+    rbac: RBACService = Depends(get_rbac_service)
 ):
     """Apply a permission template to a role"""
     try:

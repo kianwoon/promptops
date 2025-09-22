@@ -1133,15 +1133,10 @@ class AIAssistantService:
             )
 
             if include_all:
-                if tenant_id:
-                    query = query.join(User, User.id == AIAssistantProvider.user_id).filter(
-                        or_(
-                            User.organization == tenant_id,
-                            User.organization.is_(None),
-                            AIAssistantProvider.user_id == user_id
-                        )
-                    )
+                # Admin users can see all system prompts, no filtering needed
+                pass
             else:
+                # Regular users can only see system prompts from their own providers
                 query = query.filter(AIAssistantProvider.user_id == user_id)
 
             prompts = query.filter(

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avatar Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .error { color: red; }
+        .success { color: green; }
+        .avatar-test { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+        .avatar-test img { width: 50px; height: 50px; border-radius: 50%; }
+        pre { background: #f4f4f4; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Avatar Debug Test</h1>
+
+    <div class="section">
+        <h2>LocalStorage Contents</h2>
+        <div id="localStorageContent"></div>
+    </div>
+
+    <div class="section">
+        <h2>Avatar URL Testing</h2>
+        <div id="avatarTests"></div>
+    </div>
+
+    <div class="section">
+        <h2>API Endpoint Testing</h2>
+        <div id="apiTests"></div>
+    </div>
+
+    <script>
+        async function testAvatarUrl(url, name) {
+            return new Promise((resolve) => {
+                const testDiv = document.createElement('div');
+                testDiv.className = 'avatar-test';
+                testDiv.innerHTML = `<strong>${name}:</strong> `;
+
+                const img = document.createElement('img');
+                img.src = url;
+                img.onload = () => {
+                    testDiv.innerHTML += `<span class="success">✓ Loaded successfully</span>`;
+                    resolve({ url, name, success: true });
+                };
+                img.onerror = () => {
+                    testDiv.innerHTML += `<span class="error">✗ Failed to load</span>`;
+                    resolve({ url, name, success: false });
+                };
+
+                testDiv.appendChild(img);
+                document.getElementById('avatarTests').appendChild(testDiv);
+            });
+        }
+
+        async function testApiEndpoint(endpoint, name) {
+            try {
+                const token = localStorage.getItem('access_token');
+                const response = await fetch(endpoint, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                const testDiv = document.createElement('div');
+                testDiv.innerHTML = `
+                    <strong>${name}:</strong>
+                    ${response.ok ? '<span class="success">✓ Success</span>' : '<span class="error">✗ Failed</span>'}
+                    <br>Status: ${response.status}
+                    <br>Avatar: ${data.user?.avatar || data.avatar || 'None'}
+                `;
+
+                if (data.user?.avatar || data.avatar) {
+                    const avatarUrl = data.user?.avatar || data.avatar;
+                    await testAvatarUrl(avatarUrl, `${name} Avatar`);
+                }
+
+                document.getElementById('apiTests').appendChild(testDiv);
+                return { endpoint, name, success: response.ok, data };
+            } catch (error) {
+                const testDiv = document.createElement('div');
+                testDiv.innerHTML = `
+                    <strong>${name}:</strong> <span class="error">✗ Error: ${error.message}</span>
+                `;
+                document.getElementById('apiTests').appendChild(testDiv);
+                return { endpoint, name, success: false, error: error.message };
+            }
+        }
+
+        async function runTests() {
+            // Show localStorage contents
+            const localStorageDiv = document.getElementById('localStorageContent');
+            const storage = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.includes('user') || key.includes('auth') || key.includes('token')) {
+                    try {
+                        storage[key] = JSON.parse(localStorage.getItem(key));
+                    } catch {
+                        storage[key] = localStorage.getItem(key);
+                    }
+                }
+            }
+            localStorageDiv.innerHTML = `<pre>${JSON.stringify(storage, null, 2)}</pre>`;
+
+            // Test avatar URLs
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const authMeUser = {};
+
+            if (user.avatar) {
+                await testAvatarUrl(user.avatar, 'LocalStorage User Avatar');
+            }
+
+            // Test API endpoints
+            await testApiEndpoint('/api/v1/auth/me', 'Auth /me');
+
+            if (user.id) {
+                await testApiEndpoint(`/v1/users/${user.id}`, 'Database User Profile');
+            }
+
+            // Test some common avatar URL patterns
+            const testUrls = [
+                'https://lh3.googleusercontent.com/a-/test',
+                'https://avatars.githubusercontent.com/u/1',
+                'https://gravatar.com/avatar/test'
+            ];
+
+            for (const url of testUrls) {
+                await testAvatarUrl(url, `Test URL: ${url}`);
+            }
+        }
+
+        // Run tests when page loads
+        window.addEventListener('load', runTests);
+    </script>
+</body>
+</html>

@@ -46,6 +46,11 @@ class UserRole(enum.Enum):
     USER = "user"
     VIEWER = "viewer"
 
+class CustomRoleStatus(enum.Enum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    ARCHIVED = "ARCHIVED"
+
 class AuthProvider(enum.Enum):
     LOCAL = "local"
     GOOGLE = "google"
@@ -57,7 +62,7 @@ class User(Base):
     id = Column(String, primary_key=True)
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=False)
-    role = Column(Enum(UserRole), default=UserRole.VIEWER, nullable=False)
+    role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
     organization = Column(String, nullable=True)
     tenant_id = Column(String, nullable=True, index=True)  # Added tenant_id field
     phone = Column(String, nullable=True)
@@ -121,6 +126,10 @@ class User(Base):
 
     # System prompt relationships
     created_system_prompts = relationship("AIAssistantSystemPrompt", foreign_keys="AIAssistantSystemPrompt.created_by", back_populates="creator_user")
+
+    # Role relationships (for custom role system)
+    custom_roles = relationship("CustomRole", foreign_keys="CustomRole.created_by", back_populates="creator")
+    user_role_assignments = relationship("UserRoleAssignment", foreign_keys="UserRoleAssignment.user_id", back_populates="user")
 
 class Template(Base):
     __tablename__ = "templates"
@@ -1801,3 +1810,67 @@ class UserSegment(Base):
     # Relationships
     project = relationship("Project", backref="user_segments")
     creator = relationship("User", foreign_keys=[created_by], backref="created_user_segments")
+
+class CustomRole(Base):
+    """Custom role definitions with permissions"""
+    __tablename__ = "custom_roles"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    status = Column(Enum(CustomRoleStatus), default=CustomRoleStatus.ACTIVE, nullable=False)
+
+    # Role configuration
+    permissions = Column(JSON, nullable=False)  # Role permissions configuration
+    inherited_roles = Column(JSON, nullable=True)  # Roles this role inherits from
+    permission_template_id = Column(String, ForeignKey("permission_templates.id", ondelete="SET NULL"), nullable=True)
+
+    # Role metadata
+    color = Column(String, nullable=True)  # UI color for the role
+    icon = Column(String, nullable=True)  # UI icon for the role
+    is_system_role = Column(Boolean, default=False, nullable=False)  # Cannot be deleted if true
+
+    # Tenant and creator
+    tenant_id = Column(String, nullable=False, index=True)
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    creator = relationship("User", foreign_keys=[created_by], back_populates="custom_roles")
+    template = relationship("PermissionTemplate", foreign_keys=[permission_template_id])
+    user_assignments = relationship("UserRoleAssignment", back_populates="role")
+    role_permissions = relationship("RolePermission", foreign_keys="RolePermission.role_name", primaryjoin="CustomRole.name==RolePermission.role_name")
+
+    # Unique constraint for name+tenant
+    __table_args__ = (
+        UniqueConstraint('name', 'tenant_id', name='uq_custom_role_name_tenant'),
+    )
+
+class UserRoleAssignment(Base):
+    """Junction table for user-role assignments"""
+    __tablename__ = "user_role_assignments"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role_id = Column(String, ForeignKey("custom_roles.id", ondelete="CASCADE"), nullable=False, index=True)
+    role_name = Column(String, nullable=False)  # Denormalized for performance
+
+    # Assignment metadata
+    assigned_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=False)
+    assigned_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    # Context
+    tenant_id = Column(String, nullable=False, index=True)
+
+    # Relationships
+    user = relationship("User", foreign_keys="UserRoleAssignment.user_id", back_populates="user_role_assignments")
+    role = relationship("CustomRole", back_populates="user_assignments")
+    assigner = relationship("User", foreign_keys=[assigned_by])
+
+    # Unique constraint for user+role
+    __table_args__ = (
+        UniqueConstraint('user_id', 'role_id', name='uq_user_role_assignment'),
+    )

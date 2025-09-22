@@ -1,6 +1,5 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Bell, Search, User, Menu, LogOut, Settings } from 'lucide-react'
+import { Bell, Search, User, Menu, LogOut, Settings, Chrome, Github, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -12,14 +11,41 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 export function Header() {
   const [searchOpen, setSearchOpen] = React.useState(false)
-  const [avatarError, setAvatarError] = React.useState(false)
-  const navigate = useNavigate()
   const { user, logout, dbUser } = useAuth()
 
+  // Get provider info with fallback to dbUser
+  const getProviderInfo = () => {
+    const provider = dbUser?.provider || user?.provider || 'local'
+    const providerId = dbUser?.providerId || user?.providerId
+
+    switch (provider) {
+      case 'google':
+        return {
+          icon: <Chrome className="h-4 w-4" />,
+          name: 'Google',
+          email: providerId ? `${providerId.substring(0, 3)}***@gmail.com` : user?.email
+        }
+      case 'github':
+        return {
+          icon: <Github className="h-4 w-4" />,
+          name: 'GitHub',
+          email: providerId ? `@${providerId.substring(0, 3)}***` : user?.email
+        }
+      default:
+        return {
+          icon: <Mail className="h-4 w-4" />,
+          name: 'Email',
+          email: user?.email
+        }
+    }
+  }
+
+  const providerInfo = getProviderInfo()
+
+  // Use the same avatar resolution logic as PublicLayout component
   const resolvedAvatar = React.useMemo(() => {
     // Always prioritize database avatar if available
     const databaseAvatar = typeof dbUser?.avatar === 'string' ? dbUser.avatar.trim() : ''
@@ -38,33 +64,7 @@ export function Header() {
     return authAvatar || undefined
   }, [dbUser?.avatar, user?.avatar, dbUser?.provider])
 
-  // For debugging, let's try a direct img approach
-  const shouldUseDirectImg = resolvedAvatar && resolvedAvatar.includes('googleusercontent.com')
-
-  React.useEffect(() => {
-    setAvatarError(false)
-  }, [resolvedAvatar])
-
-  // Debug logging for avatar investigation
-  React.useEffect(() => {
-    if (import.meta.env?.DEV) {
-      console.log('🔍 Header Debug:', {
-        user,
-        dbUser,
-        resolvedAvatar,
-        avatarError,
-        hasUser: !!user,
-        hasDbUser: !!dbUser,
-        userAvatar: user?.avatar,
-        dbUserAvatar: dbUser?.avatar,
-        shouldUseDirectImg,
-        isGoogleAvatar: resolvedAvatar?.includes('googleusercontent.com'),
-        avatarSource: resolvedAvatar?.includes('githubusercontent.com') ? 'github' :
-                     resolvedAvatar?.includes('googleusercontent.com') ? 'google' : 'unknown'
-      })
-    }
-  }, [user, dbUser, resolvedAvatar, avatarError, shouldUseDirectImg])
-
+  
   return (
     <header className="bg-background border-b border-border h-16 flex items-center px-6">
       <div className="flex items-center justify-between w-full">
@@ -104,87 +104,61 @@ export function Header() {
           </Button>
 
           {/* User menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full p-0">
-                <div className="h-8 w-8 rounded-full overflow-hidden">
-                {shouldUseDirectImg && !avatarError ? (
-                  <img
-                    src={resolvedAvatar}
-                    alt={user?.name}
-                    className="h-full w-full object-cover"
-                    crossOrigin="anonymous"
-                    referrerPolicy="no-referrer"
-                    onError={() => {
-                      console.log('Direct img error:', resolvedAvatar)
-                      setAvatarError(true)
-                    }}
-                    onLoad={() => {
-                      console.log('Direct img loaded successfully:', resolvedAvatar)
-                    }}
-                  />
-                ) : (
-                  <Avatar className="h-full w-full">
-                    <AvatarImage
-                      src={avatarError ? undefined : resolvedAvatar}
-                      alt={user?.name}
-                      crossOrigin="anonymous"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        console.log('Header avatar image error:', resolvedAvatar)
-                        console.log('Error details:', e)
-                        setAvatarError(true)
-                      }}
-                      onLoad={() => {
-                        console.log('Header avatar loaded successfully:', resolvedAvatar)
-                      }}
-                    />
-                    <AvatarFallback className="text-xs bg-muted">
-                      {user?.name.split(' ').map(n => n[0]).join('') || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                )}
-              </div>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <div className="flex items-center justify-start gap-2 p-2">
-                <div className="flex flex-col space-y-1 leading-none">
-                  <p className="font-medium">{user?.name}</p>
-                  <p className="w-[200px] truncate text-sm text-muted-foreground">
-                    {user?.email}
-                  </p>
+          <div className="relative">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center space-x-2">
+                  <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                    {resolvedAvatar ? (
+                      <img
+                        src={resolvedAvatar}
+                        alt={user?.name}
+                        className="h-8 w-8 rounded-full object-cover"
+                        crossOrigin="anonymous"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          console.log('Header avatar error:', resolvedAvatar)
+                        }}
+                      />
+                    ) : (
+                      <User className="h-4 w-4 text-blue-600" />
+                    )}
+                  </div>
+                  <div className="hidden md:block text-left">
+                    <div className="text-sm font-medium">{user?.name}</div>
+                    <div className="flex items-center space-x-1 text-xs text-gray-500">
+                      {providerInfo.icon}
+                      <span>{providerInfo.name}</span>
+                    </div>
+                  </div>
+                </Button>
+              </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <div className="px-2 py-1.5 text-sm text-gray-700">
+                <div className="font-medium">{user?.name}</div>
+                <div className="text-gray-500">{user?.email}</div>
+                <div className="flex items-center space-x-2 mt-1 text-xs text-gray-400">
+                  {providerInfo.icon}
+                  <span>Signed in with {providerInfo.name}</span>
                 </div>
               </div>
               <DropdownMenuSeparator />
-              <div onClick={() => {
-                  console.log('Profile clicked, navigating to /profile');
-                  window.location.href = '/profile';
-                }} className="flex items-center w-full px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm">
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
-                </div>
-              <div className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50" onClick={() => window.location.href = '/settings'}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
-                </div>
+              <DropdownMenuItem onClick={() => window.location.href = '/profile'}>
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => window.location.href = '/settings'}>
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <button
-                  className="flex items-center w-full"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('Logout clicked');
-                    logout();
-                  }}
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </button>
+              <DropdownMenuItem onClick={logout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
 
           {/* Mobile menu */}
           <Button variant="ghost" size="icon" className="md:hidden">

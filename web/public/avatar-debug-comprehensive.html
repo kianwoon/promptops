@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive Avatar Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .error { color: #dc3545; background: #f8d7da; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .success { color: #28a745; background: #d4edda; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .warning { color: #ffc107; background: #fff3cd; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .avatar-test {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin: 15px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        .avatar-test img {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            border: 2px solid #ddd;
+        }
+        .avatar-test.fallback img {
+            display: none;
+        }
+        .avatar-test.fallback .fallback-content {
+            display: flex !important;
+        }
+        .fallback-content {
+            display: none;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: #6c757d;
+            color: white;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            overflow-x: auto;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-family: 'Courier New', monospace;
+        }
+        .api-test {
+            margin: 15px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Comprehensive Avatar Debugging Tool</h1>
+
+        <div class="grid">
+            <div class="section">
+                <h2>1. Authentication Status</h2>
+                <div id="authStatus">
+                    <div class="loading"></div> Checking authentication...
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>2. LocalStorage Contents</h2>
+                <div id="localStorageContent">
+                    <div class="loading"></div> Reading localStorage...
+                </div>
+            </div>
+
+            <div class="section full-width">
+                <h2>3. Avatar URL Testing</h2>
+                <div id="avatarTests">
+                    <div class="loading"></div> Testing avatar URLs...
+                </div>
+            </div>
+
+            <div class="section full-width">
+                <h2>4. API Endpoint Testing</h2>
+                <div id="apiTests">
+                    <button class="button" onclick="testAllEndpoints()">Test All API Endpoints</button>
+                    <div id="apiResults"></div>
+                </div>
+            </div>
+
+            <div class="section full-width">
+                <h2>5. Component Logic Simulation</h2>
+                <div id="componentLogic">
+                    <div class="loading"></div> Simulating component logic...
+                </div>
+            </div>
+
+            <div class="section full-width">
+                <h2>6. Network & CSP Analysis</h2>
+                <div id="networkAnalysis">
+                    <div class="loading"></div> Analyzing network and CSP...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function testAvatarUrl(url, name, options = {}) {
+            return new Promise((resolve) => {
+                const testDiv = document.createElement('div');
+                testDiv.className = 'avatar-test';
+                testDiv.innerHTML = `<strong>${name}:</strong><br>URL: <code>${url || 'null'}</code>`;
+
+                if (!url) {
+                    testDiv.innerHTML += '<br><span class="error">❌ No URL provided</span>';
+                    document.getElementById('avatarTests').appendChild(testDiv);
+                    resolve({ url, name, success: false, error: 'No URL' });
+                    return;
+                }
+
+                const img = document.createElement('img');
+                img.src = url;
+                img.style.crossOrigin = 'anonymous';
+
+                const fallbackDiv = document.createElement('div');
+                fallbackDiv.className = 'fallback-content';
+                fallbackDiv.textContent = options.fallback || 'U';
+
+                img.onload = () => {
+                    testDiv.innerHTML += `<br><span class="success">✅ Loaded successfully</span>`;
+                    testDiv.innerHTML += `<br>Dimensions: ${img.naturalWidth}x${img.naturalHeight}`;
+                    testDiv.appendChild(img);
+                    testDiv.appendChild(fallbackDiv);
+                    resolve({ url, name, success: true, dimensions: `${img.naturalWidth}x${img.naturalHeight}` });
+                };
+
+                img.onerror = (error) => {
+                    testDiv.classList.add('fallback');
+                    testDiv.innerHTML += `<br><span class="error">❌ Failed to load</span>`;
+                    testDiv.innerHTML += `<br>Error: ${error.type || 'Unknown error'}`;
+                    testDiv.appendChild(img);
+                    testDiv.appendChild(fallbackDiv);
+                    resolve({ url, name, success: false, error: error.type || 'Load error' });
+                };
+
+                // Test CORS
+                fetch(url, { mode: 'cors' })
+                    .then(response => {
+                        if (response.ok) {
+                            testDiv.innerHTML += `<br><span class="success">✅ CORS OK</span>`;
+                        } else {
+                            testDiv.innerHTML += `<br><span class="warning">⚠️ CORS issue: ${response.status}</span>`;
+                        }
+                    })
+                    .catch(corsError => {
+                        testDiv.innerHTML += `<br><span class="error">❌ CORS Error: ${corsError.message}</span>`;
+                    });
+
+                document.getElementById('avatarTests').appendChild(testDiv);
+            });
+        }
+
+        async function testApiEndpoint(endpoint, name, method = 'GET', body = null) {
+            try {
+                const token = localStorage.getItem('access_token');
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+
+                const response = await fetch(endpoint, {
+                    method,
+                    headers,
+                    body: body ? JSON.stringify(body) : null
+                });
+
+                const data = await response.json();
+                const testDiv = document.createElement('div');
+                testDiv.className = 'api-test';
+
+                const avatarUrl = data.user?.avatar || data.avatar;
+
+                testDiv.innerHTML = `
+                    <h4>${name}</h4>
+                    <strong>Endpoint:</strong> ${endpoint}<br>
+                    <strong>Method:</strong> ${method}<br>
+                    <strong>Status:</strong> ${response.ok ? '<span class="success">✅ Success</span>' : '<span class="error">❌ Failed</span>'}<br>
+                    <strong>Status Code:</strong> ${response.status}<br>
+                    <strong>Has Token:</strong> ${token ? 'Yes' : 'No'}<br>
+                    <strong>Avatar URL:</strong> ${avatarUrl || '<span class="error">None</span>'}<br>
+                    <strong>Response:</strong><br>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+
+                if (avatarUrl) {
+                    testDiv.innerHTML += '<div id="api-avatar-test-' + endpoint.replace(/[^a-zA-Z0-9]/g, '') + '"></div>';
+                    document.getElementById('apiResults').appendChild(testDiv);
+
+                    // Test the avatar URL from this endpoint
+                    await testAvatarUrl(avatarUrl, `${name} Avatar`, {
+                        fallback: name.charAt(0)
+                    });
+                } else {
+                    document.getElementById('apiResults').appendChild(testDiv);
+                }
+
+                return { endpoint, name, success: response.ok, data, avatarUrl };
+            } catch (error) {
+                const testDiv = document.createElement('div');
+                testDiv.className = 'api-test';
+                testDiv.innerHTML = `
+                    <h4>${name}</h4>
+                    <strong>Endpoint:</strong> ${endpoint}<br>
+                    <strong>Method:</strong> ${method}<br>
+                    <strong>Status:</strong> <span class="error">❌ Error</span><br>
+                    <strong>Error:</strong> ${error.message}<br>
+                `;
+                document.getElementById('apiResults').appendChild(testDiv);
+                return { endpoint, name, success: false, error: error.message };
+            }
+        }
+
+        async function testAllEndpoints() {
+            document.getElementById('apiResults').innerHTML = '<div class="loading"></div> Testing endpoints...';
+
+            const endpoints = [
+                { url: '/api/v1/auth/me', name: 'Auth /me' },
+                { url: '/api/v1/auth/health', name: 'Auth Health' }
+            ];
+
+            // Try to get user ID from localStorage for database test
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            if (user.id) {
+                endpoints.push({ url: `/v1/users/${user.id}`, name: 'Database User Profile' });
+            }
+
+            for (const endpoint of endpoints) {
+                await testApiEndpoint(endpoint.url, endpoint.name);
+            }
+        }
+
+        function checkAuthStatus() {
+            const token = localStorage.getItem('access_token');
+            const refreshToken = localStorage.getItem('refresh_token');
+            const isAuthenticated = localStorage.getItem('isAuthenticated');
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+            const authDiv = document.getElementById('authStatus');
+
+            let statusHtml = `
+                <strong>Access Token:</strong> ${token ? '✅ Present' : '❌ Missing'}<br>
+                <strong>Refresh Token:</strong> ${refreshToken ? '✅ Present' : '❌ Missing'}<br>
+                <strong>Is Authenticated:</strong> ${isAuthenticated === 'true' ? '✅ Yes' : '❌ No'}<br>
+                <strong>User in localStorage:</strong> ${user.id ? '✅ Yes' : '❌ No'}
+            `;
+
+            if (user.id) {
+                statusHtml += `
+                    <br><br><strong>User Details:</strong><br>
+                    ID: ${user.id}<br>
+                    Name: ${user.name || 'N/A'}<br>
+                    Email: ${user.email || 'N/A'}<br>
+                    Avatar: ${user.avatar || 'N/A'}<br>
+                    Provider: ${user.provider || 'N/A'}
+                `;
+            }
+
+            authDiv.innerHTML = statusHtml;
+        }
+
+        function checkLocalStorage() {
+            const storageDiv = document.getElementById('localStorageContent');
+            const storage = {};
+
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                try {
+                    storage[key] = JSON.parse(localStorage.getItem(key));
+                } catch {
+                    storage[key] = localStorage.getItem(key);
+                }
+            }
+
+            storageDiv.innerHTML = `<pre>${JSON.stringify(storage, null, 2)}</pre>`;
+        }
+
+        function simulateComponentLogic() {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const dbUser = user; // In real app, this would come from API
+
+            const logicDiv = document.getElementById('componentLogic');
+
+            // Simulate the resolvedAvatar logic from Header component
+            const databaseAvatar = typeof dbUser?.avatar === 'string' ? dbUser.avatar.trim() : '';
+            const authAvatar = typeof user?.avatar === 'string' ? user.avatar.trim() : '';
+
+            let resolvedAvatar;
+            if (databaseAvatar) {
+                resolvedAvatar = databaseAvatar;
+            } else {
+                // Don't use Google avatar if user is authenticated with GitHub
+                if (authAvatar && authAvatar.includes('googleusercontent.com') && dbUser?.provider === 'github') {
+                    resolvedAvatar = undefined;
+                } else {
+                    resolvedAvatar = authAvatar || undefined;
+                }
+            }
+
+            const fallbackInitials = user.name ? user.name.split(' ').map(n => n[0]).join('') : 'U';
+
+            let logicHtml = `
+                <h4>Component Logic Simulation</h4>
+                <strong>Database Avatar:</strong> ${databaseAvatar || 'None'}<br>
+                <strong>Auth User Avatar:</strong> ${authAvatar || 'None'}<br>
+                <strong>User Provider:</strong> ${dbUser?.provider || 'Unknown'}<br>
+                <strong>Resolved Avatar:</strong> ${resolvedAvatar || 'None'}<br>
+                <strong>Fallback Initials:</strong> ${fallbackInitials}<br>
+                <br>
+                <h4>Would show:</h4>
+                <div class="avatar-test">
+            `;
+
+            if (resolvedAvatar) {
+                logicHtml += `<img src="${resolvedAvatar}" alt="Avatar" onerror="this.parentElement.classList.add('fallback')">`;
+            }
+
+            logicHtml += `<div class="fallback-content">${fallbackInitials}</div></div>`;
+
+            logicDiv.innerHTML = logicHtml;
+        }
+
+        function analyzeNetworkAndCSP() {
+            const networkDiv = document.getElementById('networkAnalysis');
+
+            // Check for CSP headers
+            fetch(window.location.href)
+                .then(response => {
+                    const cspHeader = response.headers.get('Content-Security-Policy');
+                    const cspReportOnly = response.headers.get('Content-Security-Policy-Report-Only');
+
+                    let analysisHtml = `
+                        <h4>Content Security Policy Analysis</h4>
+                        <strong>CSP Header:</strong> ${cspHeader ? '<span class="warning">⚠️ Present</span>' : '<span class="success">✅ Not found</span>'}<br>
+                        <strong>CSP-Report-Only:</strong> ${cspReportOnly ? '<span class="warning">⚠️ Present</span>' : '<span class="success">✅ Not found</span>'}<br>
+                    `;
+
+                    if (cspHeader) {
+                        analysisHtml += `<br><strong>CSP Content:</strong><br><pre>${cspHeader}</pre>`;
+
+                        // Check if img-src allows external images
+                        if (cspHeader.includes('img-src')) {
+                            if (cspHeader.includes('*') || cspHeader.includes('data:') || cspHeader.includes('https:')) {
+                                analysisHtml += '<br><span class="success">✅ img-src appears to allow external images</span>';
+                            } else {
+                                analysisHtml += '<br><span class="error">❌ img-src may be too restrictive</span>';
+                            }
+                        } else {
+                            analysisHtml += '<br><span class="warning">⚠️ No img-src directive found (default-src may apply)</span>';
+                        }
+                    }
+
+                    analysisHtml += `
+                        <br><h4>Network Information</h4>
+                        <strong>Protocol:</strong> ${window.location.protocol}<br>
+                        <strong>Domain:</strong> ${window.location.hostname}<br>
+                        <strong>Port:</strong> ${window.location.port}<br>
+                        <strong>User Agent:</strong> ${navigator.userAgent.substring(0, 100)}...
+                    `;
+
+                    networkDiv.innerHTML = analysisHtml;
+                })
+                .catch(error => {
+                    networkDiv.innerHTML = `<div class="error">Error analyzing CSP: ${error.message}</div>`;
+                });
+        }
+
+        async function runAllTests() {
+            console.log('🔍 Starting comprehensive avatar debugging...');
+
+            // Run all tests
+            checkAuthStatus();
+            checkLocalStorage();
+            simulateComponentLogic();
+            analyzeNetworkAndCSP();
+
+            // Test avatar URLs from localStorage
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const avatarTests = [];
+
+            if (user.avatar) {
+                avatarTests.push(testAvatarUrl(user.avatar, 'LocalStorage User Avatar', {
+                    fallback: user.name ? user.name.split(' ').map(n => n[0]).join('') : 'U'
+                }));
+            }
+
+            // Test some known working avatar URLs for comparison
+            avatarTests.push(testAvatarUrl('https://avatars.githubusercontent.com/u/3683610?v=4', 'Test GitHub Avatar', { fallback: 'G' }));
+            avatarTests.push(testAvatarUrl('https://lh3.googleusercontent.com/a/ACg8ocJBixoWqdPiPFJn_H7L6w71JR9FOS-S4StOZwIM5FmYwrG08Yg3=s96-c', 'Test Google Avatar', { fallback: 'G' }));
+
+            await Promise.all(avatarTests);
+
+            console.log('✅ All tests completed!');
+        }
+
+        // Run tests when page loads
+        window.addEventListener('load', runAllTests);
+    </script>
+</body>
+</html>
