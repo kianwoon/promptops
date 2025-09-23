@@ -55,9 +55,9 @@ class StorageService:
                             if (metadata.get('export_id') == export_id and
                                 metadata.get('tenant_id') == tenant_id):
                                 # Add file URL
-                                file_path = metadata_path[:-13]  # Remove .metadata.json
+                                file_path = metadata_path.replace('.metadata.json', '')
                                 relative_path = os.path.relpath(file_path, self.storage_dir)
-                                metadata['file_url'] = f"/api/governance/storage/{relative_path}"
+                                metadata['file_url'] = f"/api/v1/governance/storage/{relative_path}"
                                 return metadata
                         except Exception as e:
                             logger.warning(f"Failed to read metadata {metadata_path}: {str(e)}")

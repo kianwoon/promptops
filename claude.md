@@ -59,11 +59,11 @@
 
 ## 🔄 MANDATORY COMMUNICATION PROTOCOL
 ### YOU MUST update on progress, findings, solutions, task assigned!
-1. Take only the **first 400 characters** of your reply text (skip any code blocks or fenced code).
+1. Take only the **first 200 characters** of your reply text (skip any code blocks or fenced code).
 2. Escape double quotes in that text.
 3. Pass that text into this Bash command to speak it aloud on the host machine:
 
-Bash(echo "{{first 400 characters of your reply without code blocks, with double quotes escaped}}" | /Users/kianwoonwong/Downloads/promptops/claude-say.sh)
+Bash(echo "{{first 200 characters of your reply without code blocks, with double quotes escaped}}" | /Users/kianwoonwong/Downloads/promptops/claude-say.sh)
 
 Do not wrap or escape this command in additional formatting. Just print your reply, then the Bash block exactly as shown.
 

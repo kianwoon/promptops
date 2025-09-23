@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body, Request, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, Body, Request, BackgroundTasks, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from typing import List, Optional, Dict, Any
@@ -59,6 +59,7 @@ from app.schemas import (
     SecurityMetricsCreate, SecurityMetricsResponse, SecurityDashboardMetrics,
     ThreatIntelligenceFeedCreate, ThreatIntelligenceFeedUpdate, ThreatIntelligenceFeedResponse,
     AnomalyDetectionRuleCreate, AnomalyDetectionRuleUpdate, AnomalyDetectionRuleResponse,
+    AnomalyDetectionRuleExport, AnomalyDetectionRuleExportResponse, AnomalyDetectionRuleImportRequest, AnomalyDetectionRuleImportResponse,
     SecurityEventFilter, SecurityAlertFilter, SecurityIncidentFilter,
     AnomalyDetectionRequest, AnomalyDetectionResponse,
     SecurityThreatIntelligenceRequest, SecurityThreatIntelligenceResponse, ThreatIndicatorResponse
@@ -66,6 +67,85 @@ from app.schemas import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# ============ ENUM CONVERSION HELPER FUNCTIONS ============
+
+def convert_string_to_security_severity(severity_str: Optional[str]) -> Optional[SecuritySeverity]:
+    """Convert string to SecuritySeverity enum with validation"""
+    if severity_str is None:
+        return None
+
+    severity_mapping = {
+        "low": SecuritySeverity.LOW,
+        "medium": SecuritySeverity.MEDIUM,
+        "high": SecuritySeverity.HIGH,
+        "critical": SecuritySeverity.CRITICAL
+    }
+
+    severity_lower = severity_str.lower()
+    if severity_lower not in severity_mapping:
+        valid_values = list(severity_mapping.keys())
+        logger.error(f"Invalid SecuritySeverity value: '{severity_str}'. Valid values: {valid_values}")
+        raise ValueError(f"Invalid alert_severity value: '{severity_str}'. Must be one of: {valid_values}")
+
+    return severity_mapping[severity_lower]
+
+def convert_string_to_sensitivity_level(sensitivity_str: Optional[str]) -> Optional[str]:
+    """Convert and validate sensitivity level string"""
+    if sensitivity_str is None:
+        return None
+
+    valid_sensitivities = ["low", "medium", "high"]
+    sensitivity_lower = sensitivity_str.lower()
+
+    if sensitivity_lower not in valid_sensitivities:
+        logger.error(f"Invalid sensitivity value: '{sensitivity_str}'. Valid values: {valid_sensitivities}")
+        raise ValueError(f"Invalid sensitivity value: '{sensitivity_str}'. Must be one of: {valid_sensitivities}")
+
+    return sensitivity_lower
+
+def convert_string_to_rule_type(rule_type_str: Optional[str]) -> Optional[str]:
+    """Convert and validate rule type string"""
+    if rule_type_str is None:
+        return None
+
+    valid_rule_types = ["statistical", "ml_model", "threshold", "pattern"]
+    rule_type_lower = rule_type_str.lower()
+
+    if rule_type_lower not in valid_rule_types:
+        logger.error(f"Invalid rule_type value: '{rule_type_str}'. Valid values: {valid_rule_types}")
+        raise ValueError(f"Invalid rule_type value: '{rule_type_str}'. Must be one of: {valid_rule_types}")
+
+    return rule_type_lower
+
+def convert_anomaly_rule_enums(update_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert string enum values to proper enum objects for anomaly detection rule updates"""
+    converted_data = update_data.copy()
+
+    try:
+        # Convert alert_severity string to SecuritySeverity enum
+        if "alert_severity" in converted_data and converted_data["alert_severity"] is not None:
+            converted_data["alert_severity"] = convert_string_to_security_severity(converted_data["alert_severity"])
+            logger.info(f"Converted alert_severity to enum: {converted_data['alert_severity']}")
+
+        # Convert sensitivity string to validated string
+        if "sensitivity" in converted_data and converted_data["sensitivity"] is not None:
+            converted_data["sensitivity"] = convert_string_to_sensitivity_level(converted_data["sensitivity"])
+            logger.info(f"Validated sensitivity: {converted_data['sensitivity']}")
+
+        # Convert rule_type string to validated string
+        if "rule_type" in converted_data and converted_data["rule_type"] is not None:
+            converted_data["rule_type"] = convert_string_to_rule_type(converted_data["rule_type"])
+            logger.info(f"Validated rule_type: {converted_data['rule_type']}")
+
+    except ValueError as e:
+        logger.error(f"Enum conversion failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error during enum conversion: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to process enum values: {str(e)}")
+
+    return converted_data
 
 # ============ ROLE MANAGEMENT ENDPOINTS ============
 
@@ -3188,6 +3268,84 @@ async def export_audit_logs_background(
         # Update export job status to failed (would require ExportJob model)
         raise
 
+async def export_anomaly_rules_background(
+    export_id: str,
+    rules: List[AnomalyDetectionRule],
+    tenant_id: str,
+    db: Session
+):
+    """Background task to export anomaly detection rules"""
+    try:
+        logger.info(f"Starting background export for {export_id}, tenant: {tenant_id}, rules: {len(rules)}")
+        from app.services.storage_service import storage_service
+        import json
+
+        # Format data for export
+        export_data = {
+            "metadata": {
+                "export_date": datetime.now(timezone.utc).isoformat(),
+                "tenant_id": tenant_id,
+                "version": "1.0",
+                "total_rules": len(rules)
+            },
+            "rules": []
+        }
+
+        # Convert each rule to export format
+        for rule in rules:
+            rule_data = {
+                "id": rule.id,
+                "name": rule.name,
+                "description": rule.description,
+                "rule_type": rule.rule_type.value if hasattr(rule.rule_type, 'value') else str(rule.rule_type),
+                "target_metric": rule.target_metric.value if hasattr(rule.target_metric, 'value') else str(rule.target_metric),
+                "detection_config": rule.detection_config,
+                "threshold_config": rule.threshold_config,
+                "sensitivity": rule.sensitivity.value if hasattr(rule.sensitivity, 'value') else str(rule.sensitivity),
+                "alert_on_detection": rule.alert_on_detection,
+                "alert_severity": rule.alert_severity.value if hasattr(rule.alert_severity, 'value') else str(rule.alert_severity),
+                "alert_message_template": rule.alert_message_template,
+                "is_active": rule.is_active,
+                "evaluation_frequency_minutes": rule.evaluation_frequency_minutes,
+                "scope_config": rule.scope_config,
+                "tenant_id": rule.tenant_id,
+                "created_by": rule.created_by,
+                "created_at": rule.created_at.isoformat(),
+                "updated_at": rule.updated_at.isoformat()
+            }
+            export_data["rules"].append(rule_data)
+
+        # Save to storage
+        file_content = json.dumps(export_data, indent=2)
+        content_type = "application/json"
+        file_extension = "json"
+
+        # Save to cloud storage
+        file_path = f"anomaly-rules/{export_id}.{file_extension}"
+        logger.info(f"Saving export to {file_path}")
+        storage_service.upload_file(
+            file_path=file_path,
+            content=file_content,
+            content_type=content_type,
+            metadata={
+                "export_id": export_id,
+                "tenant_id": tenant_id,
+                "total_rules": len(rules),
+                "format": "json",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+        )
+        logger.info(f"Export saved successfully for {export_id}")
+
+        # Update export job status (would require ExportJob model)
+        # For now, the status will be checked via storage service
+
+    except Exception as e:
+        # Log error and handle failure
+        logger.error(f"Anomaly rules export failed for {export_id}: {str(e)}")
+        # Update export job status to failed (would require ExportJob model)
+        raise
+
 # =====================
 # SECURITY MONITORING ENDPOINTS
 # =====================
@@ -3756,6 +3914,116 @@ async def get_anomaly_detection_rules(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get anomaly detection rules: {str(e)}")
 
+@router.post("/security/anomaly-rules", response_model=AnomalyDetectionRuleResponse)
+async def create_anomaly_detection_rule(
+    rule: AnomalyDetectionRuleCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create an anomaly detection rule"""
+    try:
+        # Validate tenant access
+        if rule.tenant_id != current_user["tenant"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Convert rule data to dict and handle enum conversions
+        rule_data = rule.model_dump()
+
+        # Convert string enum values to proper enum objects
+        rule_data = convert_anomaly_rule_enums(rule_data)
+
+        db_rule = AnomalyDetectionRule(
+            id=str(uuid.uuid4()),
+            name=rule_data["name"],
+            description=rule_data["description"],
+            rule_type=rule_data["rule_type"],
+            target_metric=rule_data["target_metric"],
+            detection_config=rule_data["detection_config"],
+            threshold_config=rule_data["threshold_config"],
+            sensitivity=rule_data["sensitivity"],
+            alert_on_detection=rule_data["alert_on_detection"],
+            alert_severity=rule_data["alert_severity"],
+            alert_message_template=rule_data["alert_message_template"],
+            is_active=rule_data["is_active"],
+            evaluation_frequency_minutes=rule_data["evaluation_frequency_minutes"],
+            scope_config=rule_data["scope_config"],
+            tenant_id=rule_data["tenant_id"],
+            created_by=current_user["user_id"]
+        )
+
+        db.add(db_rule)
+        db.commit()
+        db.refresh(db_rule)
+
+        return AnomalyDetectionRuleResponse.model_validate(db_rule)
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create anomaly detection rule: {str(e)}")
+
+@router.put("/security/anomaly-rules/{rule_id}", response_model=AnomalyDetectionRuleResponse)
+async def update_anomaly_detection_rule(
+    rule_id: str,
+    rule_update: AnomalyDetectionRuleUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update an anomaly detection rule"""
+    try:
+        # Get the existing rule
+        rule = db.query(AnomalyDetectionRule).filter(
+            AnomalyDetectionRule.id == rule_id
+        ).first()
+        if not rule:
+            raise HTTPException(status_code=404, detail="Anomaly detection rule not found")
+
+        # Validate tenant access
+        if rule.tenant_id != current_user["tenant"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Store current state for audit
+        before_state = {k: v for k, v in rule.__dict__.items() if not k.startswith('_')}
+
+        # Update only provided fields
+        update_data = rule_update.model_dump(exclude_unset=True)
+
+        # Convert string enum values to proper enum objects
+        update_data = convert_anomaly_rule_enums(update_data)
+
+        for field, value in update_data.items():
+            if hasattr(rule, field):
+                setattr(rule, field, value)
+
+        # Update timestamp
+        from datetime import datetime
+        rule.updated_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(rule)
+
+        # Log the action
+        audit_log = AuditLog(
+            actor=current_user["user_id"],
+            action="update_anomaly_detection_rule",
+            subject=f"anomaly_detection_rule:{rule_id}",
+            subject_type="anomaly_detection_rule",
+            subject_id=rule_id,
+            tenant_id=current_user["tenant"],
+            before_json=before_state,
+            after_json={k: v for k, v in rule.__dict__.items() if not k.startswith('_')},
+            result="success"
+        )
+        db.add(audit_log)
+        db.commit()
+
+        return AnomalyDetectionRuleResponse.model_validate(rule)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update anomaly detection rule: {str(e)}")
+
 @router.get("/security/anomaly-results", response_model=List[AnomalyDetectionResponse])
 async def get_anomaly_detection_results(
     tenant_id: str,
@@ -3779,6 +4047,340 @@ async def get_anomaly_detection_results(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get anomaly detection results: {str(e)}")
+
+@router.post("/security/anomaly-rules/export", response_model=AnomalyDetectionRuleExportResponse)
+async def export_anomaly_detection_rules(
+    request: Request,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Export anomaly detection rules for the current tenant"""
+    try:
+        export_id = str(uuid.uuid4())
+
+        # Get anomaly detection rules for the current tenant
+        # Admin users can see all rules, others are restricted to their tenant
+        if is_admin_user(current_user):
+            rules = db.query(AnomalyDetectionRule).all()
+            export_tenant_id = "all-tenants"
+        else:
+            rules = db.query(AnomalyDetectionRule).filter(
+                AnomalyDetectionRule.tenant_id == current_user["tenant"]
+            ).all()
+            export_tenant_id = current_user["tenant"]
+
+        # Start background export task
+        background_tasks.add_task(
+            export_anomaly_rules_background,
+            export_id,
+            rules,
+            export_tenant_id,
+            db
+        )
+
+        return AnomalyDetectionRuleExportResponse(
+            export_id=export_id,
+            status="processing",
+            total_rules=len(rules),
+            created_at=datetime.now(timezone.utc),
+            progress=0
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to export anomaly detection rules: {str(e)}")
+
+@router.get("/security/anomaly-rules/export/{export_id}/status", response_model=AnomalyDetectionRuleExportResponse)
+async def get_anomaly_rules_export_status(
+    export_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get the status of an anomaly detection rules export"""
+    try:
+        # Check if export exists in storage using the same pattern as audit log export
+        from app.services.storage_service import storage_service
+
+        # Determine the tenant_id to search for
+        # Admin users may have exported all tenants, so try both current tenant and "all-tenants"
+        tenant_id = current_user.get("tenant_id") or current_user.get("tenant")
+        logger.info(f"Checking export status for {export_id}, tenant: {tenant_id}")
+
+        try:
+            # Try to get export metadata for current tenant first
+            export_info = storage_service.get_export_metadata(export_id, tenant_id)
+
+            # If not found and user is admin, try "all-tenants"
+            if not export_info and is_admin_user(current_user):
+                export_info = storage_service.get_export_metadata(export_id, "all-tenants")
+
+            if export_info:
+                # Use the file_url from storage metadata
+                download_url = export_info.get("file_url", f"/api/v1/governance/storage/anomaly-rules/{export_id}.json")
+                logger.info(f"Export found: {export_id}, download_url: {download_url}")
+                return AnomalyDetectionRuleExportResponse(
+                    export_id=export_id,
+                    status="completed",
+                    total_rules=export_info.get("total_rules", 0),
+                    created_at=export_info.get("created_at", datetime.now(timezone.utc)),
+                    download_url=download_url,
+                    progress=100
+                )
+            else:
+                # Export still in progress or failed
+                logger.info(f"Export not found: {export_id}, tenant: {tenant_id}")
+                return AnomalyDetectionRuleExportResponse(
+                    export_id=export_id,
+                    status="processing",
+                    total_rules=0,
+                    created_at=datetime.now(timezone.utc),
+                    progress=50
+                )
+
+        except Exception as e:
+            # Fallback to in-progress status if service unavailable
+            logger.error(f"Storage service error for export {export_id}: {str(e)}")
+            return AnomalyDetectionRuleExportResponse(
+                export_id=export_id,
+                status="processing",
+                total_rules=0,
+                created_at=datetime.now(timezone.utc),
+                progress=25
+            )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get export status: {str(e)}")
+
+@router.get("/security/anomaly-rules/export/{export_id}/download")
+async def download_anomaly_rules_export(
+    export_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Download exported anomaly detection rules"""
+    try:
+        from app.services.storage_service import storage_service
+        from fastapi.responses import Response
+
+        # Try to find the file using the export metadata first
+        tenant_id = current_user["tenant"]
+        export_info = storage_service.get_export_metadata(export_id, tenant_id)
+
+        # If not found and user is admin, try "all-tenants"
+        if not export_info and is_admin_user(current_user):
+            export_info = storage_service.get_export_metadata(export_id, "all-tenants")
+
+        if not export_info:
+            raise HTTPException(status_code=404, detail="Export file not found")
+
+        # Extract the file path from the file_url or construct it
+        file_url = export_info.get("file_url", "")
+        if file_url.startswith("/api/governance/storage/"):
+            file_path = file_url.replace("/api/governance/storage/", "")
+        else:
+            # Fallback to default path structure
+            file_path = f"anomaly-rules/{export_id}.json"
+
+        # Get file content from storage using the correct method
+        file_content = storage_service.download_file(file_path)
+
+        if file_content is None:
+            raise HTTPException(status_code=404, detail="Export file not found")
+
+        # Return file with proper headers
+        return Response(
+            content=file_content,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f"attachment; filename=anomaly-rules-{export_id}.json"
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to download export: {str(e)}")
+
+@router.post("/security/anomaly-rules/import", response_model=AnomalyDetectionRuleImportResponse)
+async def import_anomaly_detection_rules(
+    file: UploadFile = File(...),
+    conflict_resolution: str = "skip",
+    dry_run: bool = False,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Import anomaly detection rules from a JSON file"""
+    try:
+        import json
+        from datetime import datetime
+
+        # Validate conflict resolution strategy
+        if conflict_resolution not in ["skip", "overwrite", "merge"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid conflict_resolution. Must be 'skip', 'overwrite', or 'merge'"
+            )
+
+        # Read and parse the uploaded file
+        content = await file.read()
+
+        try:
+            import_data = json.loads(content.decode('utf-8'))
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON file: {str(e)}")
+
+        # Validate import data structure
+        if not isinstance(import_data, dict) or "metadata" not in import_data or "rules" not in import_data:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid import format. Expected 'metadata' and 'rules' fields"
+            )
+
+        # Extract rules and metadata
+        metadata = import_data["metadata"]
+        rules_data = import_data["rules"]
+
+        if not isinstance(rules_data, list):
+            raise HTTPException(status_code=400, detail="Rules must be an array")
+
+        # Initialize import statistics
+        import_id = str(uuid.uuid4())
+        total_rules = len(rules_data)
+        imported_rules = 0
+        skipped_rules = 0
+        overwritten_rules = 0
+        errors = []
+        warnings = []
+
+        # Process each rule
+        for rule_data in rules_data:
+            try:
+                # Validate required fields
+                required_fields = ["name", "rule_type", "target_metric", "detection_config", "threshold_config"]
+                for field in required_fields:
+                    if field not in rule_data:
+                        errors.append(f"Rule missing required field: {field}")
+                        continue
+
+                if "name" not in rule_data:
+                    skipped_rules += 1
+                    continue
+
+                # Check if rule with same name exists
+                existing_rule = db.query(AnomalyDetectionRule).filter(
+                    AnomalyDetectionRule.tenant_id == current_user["tenant"],
+                    AnomalyDetectionRule.name == rule_data["name"]
+                ).first()
+
+                if existing_rule:
+                    if conflict_resolution == "skip":
+                        skipped_rules += 1
+                        warnings.append(f"Rule '{rule_data['name']}' already exists, skipping")
+                        continue
+                    elif conflict_resolution == "overwrite":
+                        # Update existing rule
+                        try:
+                            # Convert enum strings to proper enum objects
+                            rule_data = convert_anomaly_rule_enums(rule_data)
+
+                            # Update fields
+                            for field in ["description", "rule_type", "target_metric", "detection_config",
+                                       "threshold_config", "sensitivity", "alert_on_detection", "alert_severity",
+                                       "alert_message_template", "is_active", "evaluation_frequency_minutes",
+                                       "scope_config"]:
+                                if field in rule_data and rule_data[field] is not None:
+                                    setattr(existing_rule, field, rule_data[field])
+
+                            existing_rule.updated_at = datetime.now(timezone.utc)
+                            overwritten_rules += 1
+
+                            if not dry_run:
+                                db.commit()
+
+                        except Exception as e:
+                            errors.append(f"Failed to update rule '{rule_data['name']}': {str(e)}")
+                            continue
+                    elif conflict_resolution == "merge":
+                        # Merge with existing rule (preserve existing ID and creation metadata)
+                        try:
+                            rule_data = convert_anomaly_rule_enums(rule_data)
+
+                            # Only update specified fields, preserve others
+                            for field in ["description", "rule_type", "target_metric", "detection_config",
+                                       "threshold_config", "sensitivity", "alert_on_detection", "alert_severity",
+                                       "alert_message_template", "is_active", "evaluation_frequency_minutes",
+                                       "scope_config"]:
+                                if field in rule_data and rule_data[field] is not None:
+                                    setattr(existing_rule, field, rule_data[field])
+
+                            existing_rule.updated_at = datetime.now(timezone.utc)
+                            overwritten_rules += 1
+
+                            if not dry_run:
+                                db.commit()
+
+                        except Exception as e:
+                            errors.append(f"Failed to merge rule '{rule_data['name']}': {str(e)}")
+                            continue
+                else:
+                    # Create new rule
+                    try:
+                        rule_data = convert_anomaly_rule_enums(rule_data)
+
+                        # Set tenant ID to current user's tenant
+                        rule_data["tenant_id"] = current_user["tenant"]
+
+                        new_rule = AnomalyDetectionRule(
+                            id=str(uuid.uuid4()),
+                            name=rule_data["name"],
+                            description=rule_data.get("description"),
+                            rule_type=rule_data["rule_type"],
+                            target_metric=rule_data["target_metric"],
+                            detection_config=rule_data["detection_config"],
+                            threshold_config=rule_data["threshold_config"],
+                            sensitivity=rule_data.get("sensitivity"),
+                            alert_on_detection=rule_data.get("alert_on_detection", True),
+                            alert_severity=rule_data.get("alert_severity"),
+                            alert_message_template=rule_data.get("alert_message_template"),
+                            is_active=rule_data.get("is_active", True),
+                            evaluation_frequency_minutes=rule_data.get("evaluation_frequency_minutes", 5),
+                            scope_config=rule_data.get("scope_config"),
+                            tenant_id=rule_data["tenant_id"],
+                            created_by=current_user["user_id"]
+                        )
+
+                        imported_rules += 1
+
+                        if not dry_run:
+                            db.add(new_rule)
+                            db.commit()
+                            db.refresh(new_rule)
+
+                    except Exception as e:
+                        errors.append(f"Failed to create rule '{rule_data['name']}': {str(e)}")
+                        continue
+
+            except Exception as e:
+                errors.append(f"Error processing rule: {str(e)}")
+                continue
+
+        return AnomalyDetectionRuleImportResponse(
+            import_id=import_id,
+            status="completed" if not dry_run else "dry_run_completed",
+            total_rules=total_rules,
+            imported_rules=imported_rules,
+            skipped_rules=skipped_rules,
+            overwritten_rules=overwritten_rules,
+            errors=errors,
+            warnings=warnings,
+            created_at=datetime.now(timezone.utc),
+            progress=100
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to import anomaly detection rules: {str(e)}")
 
 @router.post("/security/threat-intelligence/check", response_model=SecurityThreatIntelligenceResponse)
 async def check_threat_intelligence(
@@ -3891,6 +4493,67 @@ async def get_threat_intelligence_feeds(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get threat intelligence feeds: {str(e)}")
 
+@router.put("/security/threat-intelligence/feeds/{feed_id}", response_model=ThreatIntelligenceFeedResponse)
+async def update_threat_intelligence_feed(
+    feed_id: str,
+    feed_update: ThreatIntelligenceFeedUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update a threat intelligence feed"""
+    try:
+        # Get the existing feed
+        feed = db.query(ThreatIntelligenceFeed).filter(
+            ThreatIntelligenceFeed.id == feed_id
+        ).first()
+
+        if not feed:
+            raise HTTPException(status_code=404, detail="Threat intelligence feed not found")
+
+        # Validate tenant access
+        if feed.tenant_id != current_user["tenant_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Store current state for audit
+        before_state = {k: v for k, v in feed.__dict__.items() if not k.startswith('_')}
+
+        # Update only provided fields
+        update_data = feed_update.model_dump(exclude_unset=True)
+
+        for field, value in update_data.items():
+            if hasattr(feed, field):
+                setattr(feed, field, value)
+
+        # Update timestamp
+        from datetime import datetime
+        feed.updated_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(feed)
+
+        # Log the action
+        audit_log = AuditLog(
+            actor=current_user["user_id"],
+            action="update_threat_intelligence_feed",
+            subject=f"threat_intelligence_feed:{feed_id}",
+            subject_type="threat_intelligence_feed",
+            subject_id=feed_id,
+            tenant_id=current_user["tenant_id"],
+            before_json=before_state,
+            after_json={k: v for k, v in feed.__dict__.items() if not k.startswith('_')},
+            result="success"
+        )
+        db.add(audit_log)
+        db.commit()
+
+        return ThreatIntelligenceFeedResponse.model_validate(feed)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update threat intelligence feed: {str(e)}")
+
 @router.get("/security/threat-intelligence/indicators", response_model=List[ThreatIndicatorResponse])
 async def get_threat_intelligence_indicators(
     limit: int = 100,
@@ -3976,3 +4639,52 @@ async def create_security_metrics(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create security metrics: {str(e)}")
 
+# ============ STORAGE ENDPOINT ============
+@router.get("/storage/{file_path:path}")
+async def serve_storage_file(
+    file_path: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """Serve files from storage (used for export downloads)"""
+    try:
+        from app.services.storage_service import storage_service
+        from fastapi.responses import Response
+
+        logger.info(f"Storage request for file: {file_path}")
+
+        # Security check - validate file path to prevent directory traversal
+        if ".." in file_path or file_path.startswith("/") or file_path.startswith("\\"):
+            raise HTTPException(status_code=400, detail="Invalid file path")
+
+        # Download file from storage
+        file_content = storage_service.download_file(file_path)
+        if file_content is None:
+            raise HTTPException(status_code=404, detail="File not found in storage")
+
+        # Determine content type based on file extension
+        if file_path.endswith(".json"):
+            media_type = "application/json"
+        elif file_path.endswith(".csv"):
+            media_type = "text/csv"
+        elif file_path.endswith(".xlsx"):
+            media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        else:
+            media_type = "application/octet-stream"
+
+        # Extract filename for Content-Disposition header
+        filename = file_path.split("/")[-1]
+
+        return Response(
+            content=file_content,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f"attachment; filename=\"{filename}\""
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to serve storage file {file_path}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to serve file: {str(e)}")

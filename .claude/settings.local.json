@@ -86,7 +86,8 @@
       "Bash(\"inheritance_type\": \"none\",)",
       "Bash(\"conditions\": {})",
       "Bash(pwdx:*)",
-      "Bash(env:*)"
+      "Bash(env:*)",
+      "Bash(head:*)"
     ],
     "deny": [],
     "ask": []
@@ -97,7 +98,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -lc 'echo \"ok\"; if [ -f ./claude.md ]; then cat ./claude.md; elif [ -f ./CLAUDE.md ]; then cat ./CLAUDE.md; else echo \"No claude.md found\"; fi'"
+            "command": "bash -lc 'if [ -f ./claude.md ]; then cat ./claude.md; elif [ -f ./CLAUDE.md ]; then cat ./CLAUDE.md; else echo \"No claude.md found\"; fi'"
           },         
           {
             "type": "command",
@@ -131,8 +132,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -lc 'echo \"ok\"; if [ -f ./claude.md ]; then cat ./claude.md; elif [ -f ./CLAUDE.md ]; then cat ./CLAUDE.md; else echo \"No claude.md found\"; fi'"
-          },
+            "command": "bash -lc 'if [ -f ./claude.md ]; then NEW=$(md5 -q ./claude.md); OLD=$(cat /tmp/claude_md.md5 2>/dev/null || true); echo \"[claude.md checksum] $NEW\" 1>&2; if [ \"$NEW\" != \"$OLD\" ]; then cat ./claude.md; echo \"$NEW\" > /tmp/claude_md.md5; else echo \"[claude.md unchanged]\" 1>&2; fi; else echo \"No claude.md found\"; fi'"
+          },   
           {
             "type": "command",
             "command": "say \"ok\""

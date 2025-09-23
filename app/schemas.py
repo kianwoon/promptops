@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
+from fastapi import UploadFile
 
 if TYPE_CHECKING:
     from app.schemas import UserResponse
@@ -1796,7 +1797,7 @@ class SecurityIncidentCreate(BaseModel):
     detection_method: Optional[str] = None
     classification: Optional[str] = None
     impact_score: Optional[str] = None
-    affected_systems: Optional[Dict[str, Any]] = None
+    affected_systems: Optional[List[Dict[str, Any]]] = None
     data_affected: Optional[Dict[str, Any]] = None
     business_impact: Optional[str] = None
     tenant_id: str
@@ -1809,18 +1810,18 @@ class SecurityIncidentUpdate(BaseModel):
     status: Optional[str] = None
     classification: Optional[str] = None
     impact_score: Optional[str] = None
-    affected_systems: Optional[Dict[str, Any]] = None
+    affected_systems: Optional[List[Dict[str, Any]]] = None
     data_affected: Optional[Dict[str, Any]] = None
     business_impact: Optional[str] = None
-    response_team: Optional[Dict[str, Any]] = None
-    containment_actions: Optional[Dict[str, Any]] = None
-    eradication_actions: Optional[Dict[str, Any]] = None
-    recovery_actions: Optional[Dict[str, Any]] = None
-    investigation_findings: Optional[Dict[str, Any]] = None
+    response_team: Optional[List[Dict[str, Any]]] = None
+    containment_actions: Optional[List[Dict[str, Any]]] = None
+    eradication_actions: Optional[List[Dict[str, Any]]] = None
+    recovery_actions: Optional[List[Dict[str, Any]]] = None
+    investigation_findings: Optional[List[Dict[str, Any]]] = None
     root_cause: Optional[str] = None
     lessons_learned: Optional[str] = None
     assigned_to: Optional[str] = None
-    compliance_impact: Optional[Dict[str, Any]] = None
+    compliance_impact: Optional[List[Dict[str, Any]]] = None
     report_required: Optional[bool] = None
     report_filed: Optional[bool] = None
     report_details: Optional[Dict[str, Any]] = None
@@ -1836,14 +1837,14 @@ class SecurityIncidentResponse(BaseModel):
     detection_method: Optional[str] = None
     classification: Optional[str] = None
     impact_score: Optional[str] = None
-    affected_systems: Optional[Dict[str, Any]] = None
+    affected_systems: Optional[List[Dict[str, Any]]] = None
     data_affected: Optional[Dict[str, Any]] = None
     business_impact: Optional[str] = None
-    response_team: Optional[Dict[str, Any]] = None
-    containment_actions: Optional[Dict[str, Any]] = None
-    eradication_actions: Optional[Dict[str, Any]] = None
-    recovery_actions: Optional[Dict[str, Any]] = None
-    investigation_findings: Optional[Dict[str, Any]] = None
+    response_team: Optional[List[Dict[str, Any]]] = None
+    containment_actions: Optional[List[Dict[str, Any]]] = None
+    eradication_actions: Optional[List[Dict[str, Any]]] = None
+    recovery_actions: Optional[List[Dict[str, Any]]] = None
+    investigation_findings: Optional[List[Dict[str, Any]]] = None
     root_cause: Optional[str] = None
     lessons_learned: Optional[str] = None
     detected_at: datetime
@@ -1855,7 +1856,7 @@ class SecurityIncidentResponse(BaseModel):
     assigned_to: Optional[str] = None
     related_alerts: Optional[List[str]] = None
     related_events: Optional[List[str]] = None
-    compliance_impact: Optional[Dict[str, Any]] = None
+    compliance_impact: Optional[List[Dict[str, Any]]] = None
     report_required: bool
     report_filed: bool
     report_details: Optional[Dict[str, Any]] = None
@@ -2050,6 +2051,63 @@ class SecurityDashboardMetrics(BaseModel):
     mean_time_to_resolve_minutes: Optional[int] = None
     unique_active_users: int
     suspicious_activities: int
+
+# ============ ANOMALY DETECTION RULES IMPORT/EXPORT SCHEMAS ============
+
+class AnomalyDetectionRuleExportData(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    rule_type: str
+    target_metric: str
+    detection_config: Dict[str, Any]
+    threshold_config: Dict[str, Any]
+    sensitivity: Optional[str] = None
+    alert_on_detection: bool
+    alert_severity: Optional[str] = None
+    alert_message_template: Optional[str] = None
+    is_active: bool
+    evaluation_frequency_minutes: int
+    scope_config: Optional[Dict[str, Any]] = None
+    tenant_id: str
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+class AnomalyDetectionRuleExportMetadata(BaseModel):
+    export_date: datetime
+    tenant_id: str
+    version: str = "1.0"
+    total_rules: int
+
+class AnomalyDetectionRuleExport(BaseModel):
+    metadata: AnomalyDetectionRuleExportMetadata
+    rules: List[AnomalyDetectionRuleExportData]
+
+class AnomalyDetectionRuleExportResponse(BaseModel):
+    export_id: str
+    status: str
+    total_rules: int
+    created_at: datetime
+    download_url: Optional[str] = None
+    progress: Optional[int] = None
+
+class AnomalyDetectionRuleImportRequest(BaseModel):
+    file: UploadFile
+    conflict_resolution: str = "skip"  # "skip", "overwrite", "merge"
+    dry_run: bool = False
+
+class AnomalyDetectionRuleImportResponse(BaseModel):
+    import_id: str
+    status: str
+    total_rules: int
+    imported_rules: int
+    skipped_rules: int
+    overwritten_rules: int
+    errors: List[str] = []
+    warnings: List[str] = []
+    created_at: datetime
+    progress: Optional[int] = None
 
 class SecurityEventFilter(BaseModel):
     start_date: Optional[datetime] = None

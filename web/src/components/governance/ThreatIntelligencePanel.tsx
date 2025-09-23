@@ -27,7 +27,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { makeAuthenticatedRequest } from '@/lib/googleAuth'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -76,6 +79,18 @@ export function ThreatIntelligencePanel() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [isAddFeedDialogOpen, setIsAddFeedDialogOpen] = useState(false)
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [editingFeed, setEditingFeed] = useState<ThreatIntelligenceFeed | null>(null)
+  const [newFeed, setNewFeed] = useState({
+    name: '',
+    description: '',
+    feed_type: '',
+    source_url: '',
+    update_frequency_minutes: 60,
+    is_active: true
+  })
   const { user } = useAuth()
 
   useEffect(() => {
@@ -102,6 +117,83 @@ export function ThreatIntelligencePanel() {
       console.error('Failed to load threat intelligence data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleAddFeed = async () => {
+    if (!newFeed.name || !newFeed.feed_type) {
+      alert('Name and feed type are required')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const tenantId = user?.organization || 'default-tenant'
+      const response = await makeAuthenticatedRequest<ThreatIntelligenceFeed>(
+        `/api/v1/governance/security/threat-intelligence/feeds?tenant_id=${encodeURIComponent(tenantId)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newFeed)
+        }
+      )
+
+      // Add the new feed to the list
+      setFeeds(prev => [...prev, response])
+
+      // Reset form and close dialog
+      setNewFeed({
+        name: '',
+        description: '',
+        feed_type: '',
+        source_url: '',
+        update_frequency_minutes: 60,
+        is_active: true
+      })
+      setIsAddFeedDialogOpen(false)
+    } catch (error) {
+      console.error('Failed to add feed:', error)
+      alert('Failed to add feed. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleOpenSettings = (feed: ThreatIntelligenceFeed) => {
+    setEditingFeed(feed)
+    setIsSettingsDialogOpen(true)
+  }
+
+  const handleUpdateFeed = async () => {
+    if (!editingFeed) return
+
+    setIsSubmitting(true)
+    try {
+      const tenantId = user?.organization || 'default-tenant'
+      const response = await makeAuthenticatedRequest<ThreatIntelligenceFeed>(
+        `/api/v1/governance/security/threat-intelligence/feeds/${editingFeed.id}?tenant_id=${encodeURIComponent(tenantId)}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(editingFeed)
+        }
+      )
+
+      // Update the feed in the list
+      setFeeds(prev => prev.map(feed => feed.id === editingFeed.id ? response : feed))
+
+      // Reset form and close dialog
+      setEditingFeed(null)
+      setIsSettingsDialogOpen(false)
+    } catch (error) {
+      console.error('Failed to update feed:', error)
+      alert('Failed to update feed. Please try again.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -301,7 +393,7 @@ export function ThreatIntelligencePanel() {
                     Manage external threat intelligence feeds and data sources
                   </CardDescription>
                 </div>
-                <Button>
+                <Button onClick={() => setIsAddFeedDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Feed
                 </Button>
@@ -339,7 +431,7 @@ export function ThreatIntelligencePanel() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => handleOpenSettings(feed)}>
                         <Settings className="h-4 w-4" />
                       </Button>
                       <Button variant="outline" size="sm">
@@ -625,6 +717,269 @@ export function ThreatIntelligencePanel() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Add Feed Dialog */}
+      <Dialog open={isAddFeedDialogOpen} onOpenChange={setIsAddFeedDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add Threat Intelligence Feed</DialogTitle>
+            <DialogDescription>
+              Configure a new threat intelligence feed to monitor for security threats.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="name" className="text-right">
+                Name *
+              </Label>
+              <Input
+                id="name"
+                value={newFeed.name}
+                onChange={(e) => setNewFeed(prev => ({ ...prev, name: e.target.value }))}
+                className="col-span-3"
+                placeholder="Enter feed name"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="description" className="text-right">
+                Description
+              </Label>
+              <Textarea
+                id="description"
+                value={newFeed.description}
+                onChange={(e) => setNewFeed(prev => ({ ...prev, description: e.target.value }))}
+                className="col-span-3"
+                placeholder="Enter feed description"
+                rows={2}
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="feed_type" className="text-right">
+                Feed Type *
+              </Label>
+              <Select
+                value={newFeed.feed_type}
+                onValueChange={(value) => setNewFeed(prev => ({ ...prev, feed_type: value }))}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select feed type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="csv">CSV</SelectItem>
+                  <SelectItem value="json">JSON</SelectItem>
+                  <SelectItem value="xml">XML</SelectItem>
+                  <SelectItem value="stix">STIX</SelectItem>
+                  <SelectItem value="taxii">TAXII</SelectItem>
+                  <SelectItem value="api">API</SelectItem>
+                  <SelectItem value="rss">RSS</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="source_url" className="text-right">
+                Source URL
+              </Label>
+              <Input
+                id="source_url"
+                value={newFeed.source_url}
+                onChange={(e) => setNewFeed(prev => ({ ...prev, source_url: e.target.value }))}
+                className="col-span-3"
+                placeholder="https://example.com/feed.json"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="update_frequency" className="text-right">
+                Update Frequency
+              </Label>
+              <Select
+                value={newFeed.update_frequency_minutes.toString()}
+                onValueChange={(value) => setNewFeed(prev => ({ ...prev, update_frequency_minutes: parseInt(value) }))}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">15 minutes</SelectItem>
+                  <SelectItem value="30">30 minutes</SelectItem>
+                  <SelectItem value="60">1 hour</SelectItem>
+                  <SelectItem value="120">2 hours</SelectItem>
+                  <SelectItem value="240">4 hours</SelectItem>
+                  <SelectItem value="360">6 hours</SelectItem>
+                  <SelectItem value="720">12 hours</SelectItem>
+                  <SelectItem value="1440">24 hours</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="is_active" className="text-right">
+                Active
+              </Label>
+              <Select
+                value={newFeed.is_active.toString()}
+                onValueChange={(value) => setNewFeed(prev => ({ ...prev, is_active: value === 'true' }))}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="true">Active</SelectItem>
+                  <SelectItem value="false">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddFeedDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddFeed} disabled={isSubmitting || !newFeed.name || !newFeed.feed_type}>
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                'Add Feed'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Settings Dialog */}
+      <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Configure Threat Intelligence Feed</DialogTitle>
+            <DialogDescription>
+              Update the configuration for this threat intelligence feed.
+            </DialogDescription>
+          </DialogHeader>
+          {editingFeed && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-name" className="text-right">
+                  Name *
+                </Label>
+                <Input
+                  id="edit-name"
+                  value={editingFeed.name}
+                  onChange={(e) => setEditingFeed(prev => prev ? { ...prev, name: e.target.value } : null)}
+                  className="col-span-3"
+                  placeholder="Enter feed name"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-description" className="text-right">
+                  Description
+                </Label>
+                <Textarea
+                  id="edit-description"
+                  value={editingFeed.description || ''}
+                  onChange={(e) => setEditingFeed(prev => prev ? { ...prev, description: e.target.value } : null)}
+                  className="col-span-3"
+                  placeholder="Enter feed description"
+                  rows={2}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-feed_type" className="text-right">
+                  Feed Type *
+                </Label>
+                <Select
+                  value={editingFeed.feed_type}
+                  onValueChange={(value) => setEditingFeed(prev => prev ? { ...prev, feed_type: value } : null)}
+                >
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select feed type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="csv">CSV</SelectItem>
+                    <SelectItem value="json">JSON</SelectItem>
+                    <SelectItem value="xml">XML</SelectItem>
+                    <SelectItem value="stix">STIX</SelectItem>
+                    <SelectItem value="taxii">TAXII</SelectItem>
+                    <SelectItem value="api">API</SelectItem>
+                    <SelectItem value="rss">RSS</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-source_url" className="text-right">
+                  Source URL
+                </Label>
+                <Input
+                  id="edit-source_url"
+                  value={editingFeed.source_url || ''}
+                  onChange={(e) => setEditingFeed(prev => prev ? { ...prev, source_url: e.target.value } : null)}
+                  className="col-span-3"
+                  placeholder="https://example.com/feed.json"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-update_frequency" className="text-right">
+                  Update Frequency
+                </Label>
+                <Select
+                  value={editingFeed.update_frequency_minutes.toString()}
+                  onValueChange={(value) => setEditingFeed(prev => prev ? { ...prev, update_frequency_minutes: parseInt(value) } : null)}
+                >
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15">15 minutes</SelectItem>
+                    <SelectItem value="30">30 minutes</SelectItem>
+                    <SelectItem value="60">1 hour</SelectItem>
+                    <SelectItem value="120">2 hours</SelectItem>
+                    <SelectItem value="240">4 hours</SelectItem>
+                    <SelectItem value="360">6 hours</SelectItem>
+                    <SelectItem value="720">12 hours</SelectItem>
+                    <SelectItem value="1440">24 hours</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-is_active" className="text-right">
+                  Active
+                </Label>
+                <Select
+                  value={editingFeed.is_active.toString()}
+                  onValueChange={(value) => setEditingFeed(prev => prev ? { ...prev, is_active: value === 'true' } : null)}
+                >
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">Active</SelectItem>
+                    <SelectItem value="false">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSettingsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateFeed}
+              disabled={isSubmitting || !editingFeed || !editingFeed.name || !editingFeed.feed_type}
+            >
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                'Update Feed'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
